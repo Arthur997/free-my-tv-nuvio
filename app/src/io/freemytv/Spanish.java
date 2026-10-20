@@ -126,6 +126,17 @@ final class Spanish {
             case "Today's top": return "Top del día";
             case "Original (3 an hour)": return "Original (3 por hora)";
             case "Performance mode": return "Modo rendimiento";
+            case "TMDB key": return "Clave de TMDB";
+            case "Set on the TV": return "Configurada en el TV";
+            case "None: OK to add one": return "Ninguna: OK para agregar";
+            case "From config.properties": return "De config.properties";
+            case "API Key or Read Access Token": return "API Key o Read Access Token";
+            case "Create one for free at themoviedb.org → Settings → API and paste it here. Tip: the Google TV app on a phone works as a keyboard (and pastes).":
+                return "Crea una gratis en themoviedb.org → Settings → API y pégala aquí. Consejo: la app Google TV del celular sirve de teclado (y pega).";
+            case "Save": return "Guardar";
+            case "Cancel": return "Cancelar";
+            case "Remove": return "Borrar";
+            case "No TMDB key: add one in More Settings → TMDB key.": return "Sin clave de TMDB: agrégala en Más ajustes → Clave de TMDB.";
             case "On (no glass)": return "Activado (sin vidrio)";
             case "The TV's own (Google photos)": return "La del TV (fotos de Google)";
             case "no ads, with the TV's own screensaver": return "sin anuncios, con el protector de pantalla del TV";

@@ -144,7 +144,7 @@ final class Recs {
     void removeListener(Listener l) { listeners.remove(l); }
 
     static boolean hasKey(Context c) {
-        return !Config.TMDB_KEY.trim().isEmpty();
+        return !Prefs.tmdbKey().isEmpty();
     }
 
     /** Last fetch, for the settings screen: {count, error, at}. Written by the home screen (another process). */
@@ -655,7 +655,7 @@ final class Recs {
     }
 
     private long sourceStamp() {
-        long stamp = Config.TMDB_KEY.hashCode() * 31L + REGION.hashCode();
+        long stamp = Prefs.tmdbKey().hashCode() * 31L + REGION.hashCode();
         for (String[] service : SERVICES) stamp = stamp * 31L + (installed(service[2]) ? service[2].hashCode() : 0);
         stamp = stamp * 31L + String.valueOf(nuvio()).hashCode();
         return stamp * 31L + (Prefs.topRecs() ? Prefs.topCount() : 0);   // the top, and its size, is another list
@@ -682,7 +682,7 @@ final class Recs {
     }
 
     private String readKey() {
-        String key = Config.TMDB_KEY.trim();
+        String key = Prefs.tmdbKey();
         return key.isEmpty() ? null : key;
     }
 

@@ -109,6 +109,22 @@ final class Prefs {
     static String latitude() { return cityIndex() < 0 ? Config.LATITUDE : CITIES[cityIndex()][1]; }
     static String longitude() { return cityIndex() < 0 ? Config.LONGITUDE : CITIES[cityIndex()][2]; }
 
+    // MARK: - TMDB key (typed on the TV, or config.properties)
+
+    /**
+     * The TMDB key: the one typed in More Settings, else config.properties'. Secret: only kept in the app's private
+     * settings, never logged or shown (the screen says only whether there is one).
+     */
+    static String tmdbKey() {
+        String typed = sp().getString("tmdbKey", "").trim();
+        return typed.isEmpty() ? Config.TMDB_KEY.trim() : typed;
+    }
+
+    /** Empty clears the typed key (config.properties' applies again). */
+    static void setTmdbKey(String key) { put("tmdbKey", key == null ? "" : key.trim()); }
+
+    static boolean typedTmdbKey() { return !sp().getString("tmdbKey", "").trim().isEmpty(); }
+
     // MARK: - Fork options (Free My TV > More Settings)
 
     /** The picks open in Nuvio (when installed); off: in the streaming app of each title. */

@@ -101,6 +101,43 @@ public class SettingsActivity extends Activity {
         preview.start();
     }
 
+    /**
+     * More Settings > TMDB key: a text field with the system keyboard (the Google TV app on a phone types into it, and
+     * can paste). The current key is never shown; saving an empty field goes back to config.properties' key.
+     */
+    void askTmdbKey() {
+        android.widget.EditText input = new android.widget.EditText(this);
+        input.setSingleLine(true);
+        input.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+        input.setHint(Ui.tr("API Key ou Read Access Token", "API Key or Read Access Token"));
+        android.widget.FrameLayout box = new android.widget.FrameLayout(this);
+        int pad = Math.round(24 * getResources().getDisplayMetrics().density);
+        box.setPadding(pad, 0, pad, 0);
+        box.addView(input);
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle(Ui.tr("Chave do TMDB", "TMDB key"))
+                .setMessage(Ui.tr("Crie uma de graça em themoviedb.org → Settings → API e cole aqui. Dica: o app Google TV no "
+                        + "celular serve de teclado (e cola).", "Create one for free at themoviedb.org → Settings → API and paste it "
+                        + "here. Tip: the Google TV app on a phone works as a keyboard (and pastes)."))
+                .setView(box)
+                .setPositiveButton(Ui.tr("Salvar", "Save"), (d, w) -> saveTmdbKey(input.getText().toString()))
+                .setNegativeButton(Ui.tr("Cancelar", "Cancel"), null);
+        if (Prefs.typedTmdbKey()) builder.setNeutralButton(Ui.tr("Apagar", "Remove"), (d, w) -> saveTmdbKey(""));
+        android.app.AlertDialog dialog = builder.create();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
+        }
+        dialog.show();
+        input.requestFocus();
+    }
+
+    /** Spaces and line breaks from a paste are dropped; the picks are fetched again with the new key. */
+    private void saveTmdbKey(String typed) {
+        Prefs.setTmdbKey(typed.replaceAll("\\s+", ""));
+        Recs.get(this).refreshIfStale();
+        view.invalidate();
+    }
+
     private void closePreview() {
         if (preview == null) return;
         preview.stop();
@@ -425,7 +462,7 @@ public class SettingsActivity extends Activity {
             String line;
             String error = recs.optString("error");
             int count = recs.optInt("count");
-            if (!hasKey) line = Ui.tr("Sem chave do TMDB: veja o README (config.properties).", "No TMDB key: see the README (config.properties).");
+            if (!hasKey) line = Ui.tr("Sem chave do TMDB: adicione em Mais Ajustes → Chave do TMDB.", "No TMDB key: add one in More Settings → TMDB key.");
             else if (!error.isEmpty()) line = Ui.tr("Erro: ", "Error: ") + error + ".";
             else if (count > 0 && Prefs.topRecs()) line = Ui.tr("Ligadas · Top do dia, " + count + " títulos.",
                     "On · Today's top, " + count + " titles.");
@@ -664,14 +701,22 @@ public class SettingsActivity extends Activity {
         }
 
         /** More Settings: the picks (where they open, which list, how many), prices, the weather's city, the shelf, the top. */
-        private static final int MORE_TOP_COUNT = 2;
+        private static final int MORE_TOP_COUNT = 2, MORE_TMDB_KEY = 9;
+
+        /** Whether there is a key and where it comes from; never the key itself. */
+        private String tmdbKeyState() {
+            if (Prefs.typedTmdbKey()) return Ui.tr("Configurada na TV", "Set on the TV");
+            return Prefs.tmdbKey().isEmpty() ? Ui.tr("Nenhuma: OK para inserir", "None: OK to add one")
+                    : Ui.tr("Do config.properties", "From config.properties");
+        }
 
         private String[] moreLabels() {
             return new String[] {Ui.tr("Abrir recomendações em", "Open picks in"),
                     Ui.tr("Recomendações", "Picks"), Ui.tr("Títulos no Top", "Titles in the top"),
                     Ui.tr("Atualizar cotações", "Refresh prices"), Ui.tr("Cidade do clima", "Weather city"),
                     Ui.tr("Capa dos apps na prateleira", "Shelf app art"), Ui.tr("Topo do Para você", "Top of For You"),
-                    Ui.tr("Tela de descanso", "Screensaver"), Ui.tr("Modo desempenho", "Performance mode")};
+                    Ui.tr("Tela de descanso", "Screensaver"), Ui.tr("Modo desempenho", "Performance mode"),
+                    Ui.tr("Chave do TMDB", "TMDB key")};
         }
 
         private String[] moreValues() {
@@ -685,7 +730,8 @@ public class SettingsActivity extends Activity {
                     Prefs.originalArt() ? Ui.tr("Original do app", "The app's own") : Ui.tr("Logo", "Logo"),
                     Prefs.topClock() ? Ui.tr("Relógio e clima", "Clock and weather") : Ui.tr("Cotações", "Prices"),
                     Prefs.ownScreensaver() ? "Free My TV" : Ui.tr("Da TV (fotos do Google)", "The TV's own (Google photos)"),
-                    Prefs.performance() ? Ui.tr("Ligado (sem vidro)", "On (no glass)") : Ui.tr("Desligado", "Off")};
+                    Prefs.performance() ? Ui.tr("Ligado (sem vidro)", "On (no glass)") : Ui.tr("Desligado", "Off"),
+                    tmdbKeyState()};
         }
 
         /** Changes the focused More Settings row one step (the city goes through the list, then back to the default). */
@@ -718,7 +764,8 @@ public class SettingsActivity extends Activity {
                     HomeMode.requestScreensaver(getContext(), own);   // the TV's setting changes in the main process
                     break;
                 }
-                default: Prefs.setPerformance(!Prefs.performance()); break;
+                case 8: Prefs.setPerformance(!Prefs.performance()); break;
+                default: return;   // the TMDB key: OK opens the text field (activate)
             }
             HomeData.get(getContext()).settingsChanged();
         }
@@ -975,6 +1022,9 @@ public class SettingsActivity extends Activity {
                 return;
             } else if (screen == REMOTE_KEYS) {
                 openPicker(focus + 1);
+            } else if (screen == MORE && focus == MORE_TMDB_KEY) {
+                activity.askTmdbKey();
+                return;
             } else if (screen == HOME_SETTINGS || screen == MORE) {
                 adjust(1);
                 invalidate();

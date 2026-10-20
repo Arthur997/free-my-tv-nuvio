@@ -24,6 +24,8 @@ before you do it, and let them do the taps on the TV.
 4. **The TMDB key is theirs and secret.** Ask them to create one (free: themoviedb.org → Settings → API) and paste it
    after `tmdb_key=` in `config.properties` themselves. Don't ask for it in the chat, never print it, never commit
    it. If they paste it in the chat anyway, put it only in `config.properties`.
+   Or they skip that and type it on the TV after installing: *Free My TV* → *More Settings* → *TMDB key* (the Google
+   TV app on a phone types and pastes into it). The one typed on the TV wins over `config.properties`'.
    Without a key everything works except the picks and the screensaver photos.
 5. **Build:** `./build.sh` → `FreeMyTV.apk`. Keep `freemytv.keystore`: updates must be signed with the same key.
 6. **Install:** `adb connect <IP>:5555`. The TV asks *Allow USB debugging?*: tell them to accept and tick *Always
