@@ -154,7 +154,20 @@ final class Backdrop {
         }
         Bitmap out = Bitmap.createScaledBitmap(b, w, h, true);
         if (b != full && b != out) b.recycle();
-        return gpu(out);
+        return gpu(opaque(out));
+    }
+
+    private static final Paint DITHER = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
+
+    /**
+     * A photo has no transparency: 16 bits a pixel (RGB_565) hold it in half the memory. Dithered on the way down, so the
+     * sky's soft gradients don't turn into bands.
+     */
+    private static Bitmap opaque(Bitmap b) {
+        Bitmap o = Bitmap.createBitmap(b.getWidth(), b.getHeight(), Bitmap.Config.RGB_565);
+        new Canvas(o).drawBitmap(b, 0, 0, DITHER);
+        b.recycle();
+        return o;
     }
 
     /** Copies it to GPU memory (cheap to draw; the process doesn't keep the pixels). */

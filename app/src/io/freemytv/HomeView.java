@@ -2215,9 +2215,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             }
         }
         cardCounter = all.size() > 3 ? (cardOffset + 1) + "–" + (cardOffset + list.size()) + Ui.tr(" de ", " of ") + all.size() : "";
-        for (Recs.Pick p : recs.wanted()) recs.backdrop(p);   // all three tabs preloaded: switching tabs is instant
-        // The top: the next three too, so moving on shows them right away.
-        for (int i = cardOffset + 3; i < Math.min(all.size(), cardOffset + 6); i++) recs.backdrop(all.get(i));
+        // On demand: the three on screen and the next three of this tab only (another tab loads when it's opened), so
+        // moving on shows them right away; the rest of the list costs nothing until it comes up.
+        for (int i = cardOffset; i < Math.min(all.size(), cardOffset + 6); i++) recs.backdrop(all.get(i));
         Backdrop b = cards.isEmpty() ? null : recs.backdrop(cards.get(0));
         if (cards.isEmpty() || b != null) showBackdrop(b);
         heroDirty = true;

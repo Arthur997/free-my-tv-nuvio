@@ -9,6 +9,7 @@ import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -111,7 +112,9 @@ final class Recs {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final List<Listener> listeners = new ArrayList<>();
-    private final Map<String, Backdrop> images = new LinkedHashMap<>();   // this hour's, built and ready to draw
+    // Built and ready to draw, least recently drawn first: the three on screen and the next three stay.
+    private final Map<String, Backdrop> images = new LinkedHashMap<>(16, 0.75f, true);
+    private static final int READY_LIGHT = 6, READY_GLASS = 4;
     private final java.util.Set<String> pending = new java.util.HashSet<>();
     private volatile List<Pick> picks = new ArrayList<>();
     private volatile int period = -1;
@@ -242,17 +245,26 @@ final class Recs {
         synchronized (images) {
             Backdrop b = images.get(key);
             if (b != null) return b;
+            Long failed = failedAtByKey.get(key);
+            // A card asks on every frame: one that just failed (no internet) waits a minute before trying again.
+            if (failed != null && SystemClock.uptimeMillis() - failed < 60_000L) return null;
             if (!pending.add(key)) return null;
         }
         io.execute(() -> {
+            boolean ok = false;
             try {
-                loadImage(p);
+                ok = loadImage(p);
             } finally {
-                synchronized (images) { pending.remove(key); }
+                synchronized (images) {
+                    pending.remove(key);
+                    if (ok) failedAtByKey.remove(key); else failedAtByKey.put(key, SystemClock.uptimeMillis());
+                }
             }
         });
         return null;
     }
+
+    private final Map<String, Long> failedAtByKey = new HashMap<>();
 
     private boolean hasImage(Pick p) {
         return p.backdrop != null && imageFile(p).exists();
@@ -273,22 +285,23 @@ final class Recs {
         int p = period(now);
         boolean stale = newKey || p != period || now - listAt > LIST_EVERY || now < listAt || picks.isEmpty()
                 || !listLanguage.equals(Ui.language);
+        // Photos come on demand (backdrop(): the cards on screen and the next three); so do the top's details.
+        boolean lazy = lazyDetails();
         boolean missing = false;
-        for (Pick pick : wanted()) missing |= !pick.detailed || !hasImage(pick);
+        if (!lazy) for (Pick pick : wanted()) missing |= !pick.detailed;
         if (!stale && !missing) return;
         keyStamp = stamp;
         fetching = true;
         io.execute(() -> {
             try {
                 if (stale) fetchList(p);
-                // One failing title doesn't stop the others; whatever has no app on the TV is not downloaded.
+                // One failing title doesn't stop the others.
                 int failures = 0, tried = 0;
                 String last = "";
-                for (Pick pick : wanted()) {
+                for (Pick pick : lazy ? new ArrayList<Pick>() : wanted()) {
                     tried++;
                     try {
                         if (!pick.detailed) fetchDetails(pick);
-                        if (pick.pkg != null) download(pick);
                     } catch (Exception e) {
                         failures++;
                         last = e.getMessage() == null ? e.toString() : e.getMessage();
@@ -467,6 +480,7 @@ final class Recs {
      */
     private void fetchTop(int p) throws Exception {
         int want = Prefs.topCount();
+        boolean lazy = lazyDetails();
         List<Pick> movies = new ArrayList<>(), shows = new ArrayList<>();
         for (String kind : new String[] {"movie", "tv"}) {
             List<Pick> out = kind.equals("movie") ? movies : shows;
@@ -476,6 +490,10 @@ final class Recs {
                 for (int i = 0; i < hot.length(); i++) add(candidates, hot.getJSONObject(i), kind);
                 for (Pick pick : candidates) {
                     if (out.size() >= want) break;
+                    if (lazy) {
+                        out.add(pick);   // Nuvio opens anything: details when its card comes up
+                        continue;
+                    }
                     try {
                         fetchDetails(pick);
                     } catch (Exception e) {
@@ -492,6 +510,14 @@ final class Recs {
         period = p;
         listAt = System.currentTimeMillis();
         listLanguage = Ui.language;
+    }
+
+    /**
+     * The top with Nuvio: no need to know where each title streams before showing it, so its details (and photo) are
+     * fetched only when its card is on screen or next. Without Nuvio the details decide what makes the list.
+     */
+    private boolean lazyDetails() {
+        return Prefs.topRecs() && nuvio() != null;
     }
 
     /** Language of titles and genres; the services come from the region. */
@@ -683,9 +709,22 @@ final class Recs {
     }
 
     /** Reads the original (≥ 1920 wide) and builds the backdrop (Backdrop: cards plus frosted and glass versions). */
-    private void loadImage(Pick p) {
+    /** Details (if missing) and the photo, built for the screen; false = it failed (try again later). */
+    private boolean loadImage(Pick p) {
+        if (!p.detailed) {
+            // The top's details come with its photo (lazyDetails): genre, runtime, the IMDb id Nuvio opens.
+            try {
+                fetchDetails(p);
+                save();
+            } catch (Exception e) {
+                AppLog.w("recommendation details: " + e.getMessage());
+                return false;
+            }
+            notifyListeners();
+            if (p.pkg == null) return true;   // nothing can open it: it leaves the list, no photo needed
+        }
         synchronized (images) {
-            if (images.containsKey(p.backdrop)) return;
+            if (images.containsKey(p.backdrop)) return true;
         }
         File f = imageFile(p);
         try {
@@ -701,16 +740,28 @@ final class Recs {
             AppLog.w("backdrop \u201c" + p.title + "\u201d: " + bounds.outWidth + "×" + bounds.outHeight);
             boolean forLight = light;
             Backdrop backdrop = Backdrop.make(b, forLight);
-            if (forLight != light) return;   // the design changed midway: this one is stale
+            if (forLight != light) return true;   // the design changed midway: this one is stale
             synchronized (images) {
                 images.put(p.backdrop, backdrop);
-                while (images.size() > (forLight ? 10 : 4)) images.remove(images.keySet().iterator().next());
+                while (images.size() > (forLight ? READY_LIGHT : READY_GLASS)) images.remove(images.keySet().iterator().next());
             }
             notifyListeners();
+            return true;
         } catch (IOException | RuntimeException | OutOfMemoryError e) {
             //noinspection ResultOfMethodCallIgnored
             f.delete();
             AppLog.w("recommendation image: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * The system is short of memory (onTrimMemory): drop the photos built for the screen, keeping only the `keep` drawn
+     * most recently (they come back from disk when asked for again).
+     */
+    void trim(int keep) {
+        synchronized (images) {
+            while (images.size() > keep) images.remove(images.keySet().iterator().next());
         }
     }
 

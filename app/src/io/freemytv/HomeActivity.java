@@ -67,6 +67,16 @@ public class HomeActivity extends Activity {
         super.onDestroy();
     }
 
+    /**
+     * Android asks for memory back (a TV has little): in another app (YouTube, Nuvio) the photos built for the cards go,
+     * except the three on screen when it's only that we're hidden; they come back from disk when needed.
+     */
+    @Override public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level >= TRIM_MEMORY_BACKGROUND) Recs.get(this).trim(0);
+        else if (level >= TRIM_MEMORY_RUNNING_LOW) Recs.get(this).trim(3);   // also when we are just hidden
+    }
+
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         if (RemoteKeys.onKey(this, event)) return true;
         if (home != null && home.onKey(event)) return true;
