@@ -47,7 +47,7 @@ final class HomeData {
     private static String weatherUrl() {
         return "https://api.open-meteo.com/v1/forecast?latitude=" + Prefs.latitude() + "&longitude=" + Prefs.longitude() + WEATHER_QUERY;
     }
-    private static final long PRICES_EVERY = 10_000L, WEATHER_EVERY = 30 * 60_000L;
+    private static final long WEATHER_EVERY = 30 * 60_000L;   // prices: Prefs.PRICES_EVERY
     interface Listener { void onData(); }
 
     static int coinCount() {
@@ -151,7 +151,8 @@ final class HomeData {
     void refreshIfStale() {
         long now = System.currentTimeMillis();
         // A negative age (the TV's clock went back) counts as stale: otherwise the data would freeze.
-        if (!fetchingPrices && coinCount() > 0 && (now - pricesAt > PRICES_EVERY || now < pricesAt)) {
+        long pricesEvery = Prefs.PRICES_EVERY[Prefs.pricesEveryIndex()];
+        if (!fetchingPrices && coinCount() > 0 && (now - pricesAt > pricesEvery || now < pricesAt)) {
             fetchingPrices = true;
             io.execute(() -> {
                 try {

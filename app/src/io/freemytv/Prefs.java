@@ -69,11 +69,66 @@ final class Prefs {
 
     static void setTheme(String v) { put("theme", v); }
 
-    // MARK: - City (from config.properties)
+    private static void put(String key, int value) {
+        sp().edit().putInt(key, value).apply();
+        version++;
+    }
 
-    static String city() { return Config.CITY.trim(); }
-    static String latitude() { return Config.LATITUDE; }
-    static String longitude() { return Config.LONGITUDE; }
+    // MARK: - City (config.properties, or one picked on the TV)
+
+    /** Name, latitude, longitude: the Brazilian state capitals. */
+    static final String[][] CITIES = {
+        {"Aracaju", "-10.9472", "-37.0731"}, {"Belém", "-1.4558", "-48.4902"},
+        {"Belo Horizonte", "-19.9167", "-43.9345"}, {"Boa Vista", "2.8235", "-60.6758"},
+        {"Brasília", "-15.7939", "-47.8828"}, {"Campo Grande", "-20.4697", "-54.6201"},
+        {"Cuiabá", "-15.6014", "-56.0979"}, {"Curitiba", "-25.4284", "-49.2733"},
+        {"Florianópolis", "-27.5954", "-48.5480"}, {"Fortaleza", "-3.7319", "-38.5267"},
+        {"Goiânia", "-16.6869", "-49.2648"}, {"João Pessoa", "-7.1195", "-34.8450"},
+        {"Macapá", "0.0349", "-51.0694"}, {"Maceió", "-9.6658", "-35.7353"},
+        {"Manaus", "-3.1190", "-60.0217"}, {"Natal", "-5.7945", "-35.2110"},
+        {"Palmas", "-10.2491", "-48.3243"}, {"Porto Alegre", "-30.0346", "-51.2177"},
+        {"Porto Velho", "-8.7612", "-63.9004"}, {"Recife", "-8.0476", "-34.8770"},
+        {"Rio Branco", "-9.9754", "-67.8249"}, {"Rio de Janeiro", "-22.9068", "-43.1729"},
+        {"Salvador", "-12.9777", "-38.5016"}, {"São Luís", "-2.5307", "-44.3068"},
+        {"São Paulo", "-23.5505", "-46.6333"}, {"Teresina", "-5.0892", "-42.8019"},
+        {"Vitória", "-20.3155", "-40.3128"},
+    };
+
+    /** Index in CITIES, or -1: the city from config.properties. */
+    static int cityIndex() {
+        int i = sp().getInt("city", -1);
+        return i >= 0 && i < CITIES.length ? i : -1;
+    }
+
+    static void setCityIndex(int i) { put("city", i); }
+
+    static String city() { return cityIndex() < 0 ? Config.CITY.trim() : CITIES[cityIndex()][0]; }
+    static String latitude() { return cityIndex() < 0 ? Config.LATITUDE : CITIES[cityIndex()][1]; }
+    static String longitude() { return cityIndex() < 0 ? Config.LONGITUDE : CITIES[cityIndex()][2]; }
+
+    // MARK: - Fork options (Free My TV > More Settings)
+
+    /** The picks open in Nuvio (when installed); off: in the streaming app of each title. */
+    static boolean recsInNuvio() { return sp().getBoolean("recsNuvio", true); }
+    static void setRecsInNuvio(boolean on) { put("recsNuvio", on); }
+
+    /** How often prices are fetched while the home screen is on: live (~15 s, the screen's tick), 1 or 5 min. */
+    static final long[] PRICES_EVERY = {10_000L, 60_000L, 5 * 60_000L};
+
+    static int pricesEveryIndex() {
+        int i = sp().getInt("pricesEvery", 0);
+        return i >= 0 && i < PRICES_EVERY.length ? i : 0;
+    }
+
+    static void setPricesEveryIndex(int i) { put("pricesEvery", i); }
+
+    /** The shelf shows each app's own TV banner instead of its logo lifted onto a brand-colored card. */
+    static boolean originalArt() { return sp().getBoolean("originalArt", false); }
+    static void setOriginalArt(boolean on) { put("originalArt", on); }
+
+    /** The top right of "For You" (light design): the clock and the weather; off: the prices. */
+    static boolean topClock() { return sp().getBoolean("topClock", true); }
+    static void setTopClock(boolean on) { put("topClock", on); }
 
     // MARK: - Widgets and coins
 

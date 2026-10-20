@@ -132,10 +132,11 @@ final class HomeApps {
             Item it = new Item();
             it.kind = APP;
             it.pkg = pkg;
-            if (d == null) {
-                // An app picked in Settings > Shelf that isn't in SHELF: its own name and TV art.
+            if (d == null || Prefs.originalArt()) {
+                // An app picked in Settings > Shelf that isn't in SHELF (or More Settings asks for the original art):
+                // its own TV banner.
                 it.key = pkg;
-                it.label = ri != null ? String.valueOf(ri.loadLabel(pm)) : pkg;
+                it.label = d != null ? d[1] : ri != null ? String.valueOf(ri.loadLabel(pm)) : pkg;
                 it.tile = appTile(c, null, pkg, 0);
             } else {
                 it.key = d[0];
@@ -351,7 +352,8 @@ final class HomeApps {
             items.add(it);
         }
         Collections.sort(items, (a, b) -> a.label.toLowerCase(Locale.ROOT).compareTo(b.label.toLowerCase(Locale.ROOT)));
-        items.add(special(c, SETTINGS, "freemytv-settings", "Free My TV", "sparkles"));
+        // First, so it's easy to find: the gear at the top right opens the TV's settings instead.
+        items.add(0, special(c, SETTINGS, "freemytv-settings", Ui.tr("Ajustes do Free My TV", "Free My TV Settings"), "sparkles"));
         return items;
     }
 

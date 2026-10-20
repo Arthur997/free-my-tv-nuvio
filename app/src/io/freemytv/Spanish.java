@@ -105,7 +105,29 @@ final class Spanish {
             case "OK picks, Back cancels.": return "OK elige, Atrás cancela.";
             case "Disney and Globoplay: the TV itself controls those buttons.": return "Disney y Globoplay: el propio TV controla esos botones.";
             case "These are the TCL remote's buttons: on this TV, the buttons work as they always did.": return "Estos son los botones del control de TCL: en este TV, los botones funcionan como siempre.";
+            // Fork: More Settings, the stock screensaver, the euro.
+            case "More Settings": return "Más ajustes";
+            case "Open picks in": return "Abrir recomendaciones en";
+            case "Each title's app": return "La app de cada título";
+            case "Refresh prices": return "Actualizar cotizaciones";
+            case "Live": return "En tiempo real";
+            case "Weather city": return "Ciudad del clima";
+            case " (default)": return " (predeterminada)";
+            case "Shelf app art": return "Imagen de las apps en el estante";
+            case "The app's own": return "La original de la app";
+            case "Logo": return "Logo";
+            case "Top of For You": return "Arriba de Para ti";
+            case "Clock and weather": return "Reloj y clima";
+            case "Prices": return "Cotizaciones";
+            case "Rates": return "Cotizaciones";
+            case "Free My TV Settings": return "Ajustes de Free My TV";
+            case "no ads, with the TV's own screensaver": return "sin anuncios, con el protector de pantalla del TV";
+            case "No ads, with the TV's own screensaver": return "Sin anuncios, con el protector de pantalla del TV";
             default:
+                if (english.startsWith("Free My TV is on: new home screen, ")) {
+                    return "Free My TV está activo: nueva pantalla de inicio, "
+                            + english.substring("Free My TV is on: new home screen, ".length()).replace(" apps turned off.", " apps desactivadas.");
+                }
                 if (english.startsWith("Free My TV is on: new home screen and screensaver, ")) {
                     return "Free My TV está activo: nueva pantalla de inicio y protector, "
                             + english.substring("Free My TV is on: new home screen and screensaver, ".length()).replace(" apps turned off.", " apps desactivadas.");

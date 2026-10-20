@@ -414,7 +414,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lightButtons.clear();
         lightButtons.add(HomeApps.action(HomeApps.LIVE_TV, "live", Ui.tr("TV aberta", "Live TV"), "live_tv"));
         lightButtons.add(HomeApps.action(HomeApps.INPUTS, "inputs", Ui.tr("Entradas HDMI", "HDMI Inputs"), "hdmi"));
-        lightButtons.add(HomeApps.action(HomeApps.SETTINGS, "settings", Ui.tr("Configurações", "Settings"), "settings"));
+        // The gear opens the TV's settings; Free My TV's own are first in More Apps.
+        lightButtons.add(HomeApps.action(HomeApps.ANDROID_SETTINGS, "settings", Ui.tr("Ajustes da TV", "TV Settings"), "settings"));
     }
 
     private static String[] tabs() {
@@ -601,6 +602,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (updateClock()) {
             layoutStatus();
             status.invalidate();
+            if (Prefs.topClock()) heroLayer.invalidate();   // the clock at the top right
             if (hero != null && hero.clock) {
                 refreshHero(false);
                 heroLayer.invalidate();
@@ -944,11 +946,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     // MARK: - Corner capsule: time and weather (when the hero shows a recommendation) and icon-only buttons
 
-    /** Live TV, the inputs with a device on, All Apps and Settings. */
+    /** Live TV, the inputs with a device on, All Apps and the TV's settings (Free My TV's are in All Apps). */
     private static List<HomeApps.Item> statusList(Context c) {
         List<HomeApps.Item> list = new ArrayList<>();
         list.addAll(HomeApps.shortcuts(c));
-        list.add(HomeApps.settings());
+        list.add(HomeApps.action(HomeApps.ANDROID_SETTINGS, "tv-settings", Ui.tr("Ajustes da TV", "TV Settings"), "settings"));
         return list;
     }
 
@@ -2255,7 +2257,62 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         for (int i = 0; i < 3; i++) if (cardFocus[i].value > 0.02f && (top < 0 || cardFocus[i].value > cardFocus[top].value)) top = i;
         for (int i = 0; i < 3; i++) if (i != top) drawLightCard(c, i);
         if (top >= 0) drawLightCard(c, top);
-        if (HomeData.coinCount() > 0) drawQuotes(c);
+        if (Prefs.topClock()) drawTopClock(c);
+        else if (HomeData.coinCount() > 0) drawQuotes(c);
+    }
+
+    /** Brasília's time, whatever zone the TV is set to. */
+    private final java.text.SimpleDateFormat brasilia = brasiliaFormat();
+    private long topMinute = -1, topWeatherAt = -1;
+    private String topTime = "", topTemp = "", topSymbol = "";
+    private float topTimeW, topTempW;
+
+    private static java.text.SimpleDateFormat brasiliaFormat() {
+        java.text.SimpleDateFormat f = new java.text.SimpleDateFormat("HH:mm", java.util.Locale.US);
+        f.setTimeZone(java.util.TimeZone.getTimeZone("America/Sao_Paulo"));
+        return f;
+    }
+
+    /**
+     * The clock (24 h, Brasília) and the weather now (symbol + temperature), where the prices were and in their style:
+     * a quiet line at the right end of the tab bar. Text is formatted and measured once a minute (or per forecast).
+     */
+    private void drawTopClock(Canvas c) {
+        float right = platterRect.isEmpty() ? CONTENT_R * k : platterRect.right - SHELF_PAD * k;
+        applyTone();
+        Paint text = lQuote;
+        float fade = 1;   // the corner buttons' names show in this row: fade out while one has focus
+        for (int i = 3; i < 6; i++) fade = Math.min(fade, 1 - Ui.clamp(topFocus[i].value));
+        if (fade <= 0.01f) return;
+        long now = System.currentTimeMillis();
+        if (now / 60_000 != topMinute) {
+            topMinute = now / 60_000;
+            topTime = brasilia.format(new java.util.Date(now));
+            topTimeW = text.measureText(topTime);
+        }
+        HomeData.Weather wx = data.weather;
+        boolean showWeather = Prefs.weather() && !Double.isNaN(wx.temp);
+        if (data.weatherAt != topWeatherAt) {
+            topWeatherAt = data.weatherAt;
+            topTemp = HomeData.degrees(wx.temp);
+            topTempW = text.measureText(topTemp);
+            topSymbol = Symbols.weather(wx.code, wx.isDay);
+        }
+        float base = (L_TABBAR_TOP + L_TABBAR_H / 2) * k + Ui.halfCap(text);
+        float cap = Ui.cap(text), gap = 6 * k, spacing = 24 * k, size = cap * 1.4f;
+        float symbolW = showWeather ? Symbols.width(getContext(), topSymbol, size) : 0;
+        float total = topTimeW + (showWeather ? spacing + symbolW + gap + topTempW : 0);
+        int textColor = text.getColor();
+        text.setColor(Ui.alpha(textColor, fade));
+        float x = right - total;
+        c.drawText(topTime, x, base, text);
+        if (showWeather) {
+            x += topTimeW + spacing;
+            Symbols.draw(getContext(), c, topSymbol, x + symbolW / 2, base - cap / 2, size,
+                    Ui.alpha(tone(0xB38E8E93, 0x8CFFFFFF), fade));
+            c.drawText(topTemp, x + symbolW + gap, base, text);
+        }
+        text.setColor(textColor);
     }
 
     /**

@@ -215,8 +215,9 @@ final class Recs {
         return HomeApps.title(p.pkg, "nuvio://" + path + p.imdb, serviceName(p));
     }
 
-    /** The installed Nuvio that opens nuvio:// links, or null. */
+    /** The installed Nuvio that opens nuvio:// links, or null (also when More Settings says to use the streaming apps). */
     private String nuvio() {
+        if (!Prefs.recsInNuvio()) return null;
         PackageManager pm = context.getPackageManager();
         for (String pkg : NUVIO) {
             Intent probe = new Intent(Intent.ACTION_VIEW, Uri.parse("nuvio://movie/tt0000001")).setPackage(pkg);
