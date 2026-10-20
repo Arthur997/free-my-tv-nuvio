@@ -36,6 +36,11 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="content" android:host="android.media.tv" />
         </intent>
+        <!-- Nuvio: the picks open there when it's installed (Recs). -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="nuvio" />
+        </intent>
     </queries>
 
     <uses-feature android:name="android.software.leanback" android:required="false" />

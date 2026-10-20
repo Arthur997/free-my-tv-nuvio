@@ -24,38 +24,33 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Crypto prices (Binance, every 5 min) and weather/sunrise/sunset for your location (Open-Meteo, every 30 min), cached
- * so the screen opens with numbers. Only fetched while the home screen or the screensaver is visible (the screen asks).
- * Neither source needs a key. Location and currency come from config.properties.
+ * Dollar, euro and bitcoin in reais (Binance, live: every time the screen asks, ~15 s) and weather/sunrise/sunset for
+ * your location (Open-Meteo, every 30 min), cached so the screen opens with numbers. Only fetched while the home screen
+ * or the screensaver is visible (the screen asks). Neither source needs a key. Location comes from config.properties.
  */
 final class HomeData {
-    static final String[] COINS = {"BTC", "ETH", "SOL", "USDT"};
-    static final String[] COIN_NAMES = {"Bitcoin", "Ethereum", "Solana", "Dollar"};
-    private static final String CURRENCY = Config.CURRENCY.trim().toUpperCase(Locale.ROOT);
-    /** Binance quotes dollars as USDT. */
-    private static final String QUOTE = CURRENCY.equals("USD") ? "USDT" : CURRENCY;
+    static final String[] COINS = {"USD", "EUR", "BTC"};
+    /**
+     * Binance has no euro/real pair, and quotes the dollar as USDT (a token that follows it within cents): the euro is
+     * EUR/USDT × USDT/BRL.
+     */
+    private static final String PRICES_URL = "https://api.binance.com/api/v3/ticker/24hr?type=MINI&symbols="
+            + "%5B%22USDTBRL%22,%22EURUSDT%22,%22BTCBRL%22%5D";
     private static final String WEATHER_URL = "https://api.open-meteo.com/v1/forecast?latitude=" + Config.LATITUDE
             + "&longitude=" + Config.LONGITUDE
             + "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset"
             + "&hourly=temperature_2m,weather_code,is_day&timezone=auto&forecast_days=2";
-    private static final long PRICES_EVERY = 5 * 60_000L, WEATHER_EVERY = 30 * 60_000L;
+    private static final long PRICES_EVERY = 10_000L, WEATHER_EVERY = 30 * 60_000L;
     private static final Locale PT = new Locale("pt", "BR");
 
     interface Listener { void onData(); }
 
-    /** BTC, ETH and SOL; in Brazilian reais also the dollar (USDT/BRL), which Binance doesn't list for most currencies. */
     static int coinCount() {
-        return CURRENCY.equals("BRL") ? COINS.length : 3;
+        return COINS.length;
     }
 
     static String coinName(int i) {
-        return i == 3 ? Ui.tr("Dólar", "Dollar") : COIN_NAMES[i];
-    }
-
-    private static String pricesUrl() {
-        StringBuilder symbols = new StringBuilder();
-        for (int i = 0; i < coinCount(); i++) symbols.append(i == 0 ? "" : ",").append("%22").append(COINS[i]).append(QUOTE).append("%22");
-        return "https://api.binance.com/api/v3/ticker/24hr?type=MINI&symbols=%5B" + symbols + "%5D";
+        return i == 0 ? Ui.tr("Dólar", "Dollar") : i == 1 ? "Euro" : "Bitcoin";
     }
 
     static final class Weather {
@@ -77,9 +72,9 @@ final class HomeData {
         return instance;
     }
 
-    final double[] prices = {Double.NaN, Double.NaN, Double.NaN, Double.NaN};
+    final double[] prices = {Double.NaN, Double.NaN, Double.NaN};
     /** 24 h change (%), in the same order. */
-    final double[] changes = {Double.NaN, Double.NaN, Double.NaN, Double.NaN};
+    final double[] changes = {Double.NaN, Double.NaN, Double.NaN};
     volatile long pricesAt, weatherAt;
     volatile Weather weather = new Weather();
 
@@ -112,7 +107,7 @@ final class HomeData {
             fetchingPrices = true;
             io.execute(() -> {
                 try {
-                    String body = get(pricesUrl());
+                    String body = get(PRICES_URL);
                     parsePrices(body);
                     pricesAt = System.currentTimeMillis();
                     cache.edit().putString("prices", body).putLong("pricesAt", pricesAt).apply();
@@ -148,21 +143,28 @@ final class HomeData {
 
     private void parsePrices(String body) throws Exception {
         JSONArray list = new JSONArray(body);
-        String quote = QUOTE;
+        double[] last = {Double.NaN, Double.NaN, Double.NaN}, open = {Double.NaN, Double.NaN, Double.NaN};
+        String[] symbols = {"USDTBRL", "EURUSDT", "BTCBRL"};
         int found = 0;
         for (int i = 0; i < list.length(); i++) {
             JSONObject o = list.getJSONObject(i);
-            String symbol = o.getString("symbol");
-            for (int k = 0; k < COINS.length; k++) {
-                if (!symbol.equals(COINS[k] + quote)) continue;
-                found++;
-                double last = Double.parseDouble(o.optString("lastPrice", o.optString("price", "NaN")));
-                double open = Double.parseDouble(o.optString("openPrice", "NaN"));
-                prices[k] = last;
-                changes[k] = open > 0 ? (last - open) / open * 100 : Double.NaN;
-            }
+            int k = java.util.Arrays.asList(symbols).indexOf(o.getString("symbol"));
+            if (k < 0) continue;
+            found++;
+            last[k] = Double.parseDouble(o.optString("lastPrice", "NaN"));
+            open[k] = Double.parseDouble(o.optString("openPrice", "NaN"));
         }
-        if (found == 0) pricesAt = 0;   // cached in another currency (config changed): fetch again
+        if (found < symbols.length) {
+            pricesAt = 0;   // an older cache (other coins): fetch again
+            return;
+        }
+        // The euro in reais: euro→dollar times dollar→real, 24 h ago and now.
+        last[1] *= last[0];
+        open[1] *= open[0];
+        for (int k = 0; k < COINS.length; k++) {
+            prices[k] = last[k];
+            changes[k] = open[k] > 0 ? (last[k] - open[k]) / open[k] * 100 : Double.NaN;
+        }
     }
 
     private static Weather parseWeather(String body) throws Exception {
@@ -256,9 +258,9 @@ final class HomeData {
         return String.format(locale(), "%.2f", v);
     }
 
-    /** $108,234 · $185.20 · R$ 581.234 · R$ 5,61 (cents only below a thousand), in the configured currency. */
+    /** R$ 581.234 · R$ 5,61 (cents only below a thousand). */
     static String brl(double v) {
-        String symbol = currencySymbol();
+        String symbol = "R$ ";
         if (Double.isNaN(v)) return symbol + "—";
         return v >= 1000 ? String.format(locale(), symbol + "%,.0f", v) : String.format(locale(), symbol + "%.2f", v);
     }
@@ -288,17 +290,6 @@ final class HomeData {
         if (code >= 71 && code <= 77 || code == 85 || code == 86) return "Neve";
         if (code >= 95) return "Tempestade";
         return "Chuva";
-    }
-
-    private static String currencySymbol() {
-        switch (CURRENCY) {
-            case "USD": return "$";
-            case "BRL": return "R$ ";
-            case "EUR": return "€";
-            case "GBP": return "£";
-            case "JPY": return "¥";
-            default: return CURRENCY + " ";
-        }
     }
 
     /** Celsius or Fahrenheit (config.properties "temperature": C, F, or auto = Fahrenheit in the US). */

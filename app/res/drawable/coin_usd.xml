@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dollar sign, flat and in one color (the color comes from the code), in the coins' 32-unit frame. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="32"
+    android:viewportHeight="32">
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round"
+        android:pathData="M 21 11.5 C 20 9.5 18 9 16 9 C 13 9 11 10.5 11 12.5 C 11 17 21 15 21 19.5 C 21 21.5 19 23 16 23 C 14 23 12 22.5 11 20.5 M 16 6.5 V 25.5" />
+</vector>

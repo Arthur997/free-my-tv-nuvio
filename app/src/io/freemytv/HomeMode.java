@@ -23,7 +23,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Original ⇄ Free My TV. "free": our home screen and screensaver, and the apps in the lists below turned off
+ * Original ⇄ Free My TV. "free": our home screen (the TV's own screensaver stays), and the apps in the lists below turned off
  * (pm disable-user: still installed, back with one button). "original": everything as it came from the factory.
  *
  * It all goes through the TV's own ADB (Adb, 127.0.0.1:5555), which you allow once on the TV. The switches run as
@@ -46,7 +46,7 @@ final class HomeMode {
 
     /**
      * Turned off in Free My TV mode, when the TV has them. Google extras first, then TV-maker extras (TCL here; add
-     * your brand's, see the README). The TV's own home screen and screensaver are added at switch time.
+     * your brand's, see the README). The TV's own home screen is added at switch time.
      */
     static final String[] DEBLOAT = {
         "com.google.android.play.games", "com.google.android.youtube.tvmusic",        // Play Games, YouTube Music
@@ -129,9 +129,9 @@ final class HomeMode {
             busy(c, Ui.tr("Trocando o Início e a tela de descanso…", "Switching the home screen and screensaver…"));
             check(adb.shell("cmd package set-home-activity " + HOME_ACTIVITY), "Success",
                     Ui.tr("o Android não aceitou o novo Início", "Android didn't accept the new home screen"));
-            adb.shell("settings put secure screensaver_components " + DREAM);
-            List<String> targets = targets(home, dream);
+            List<String> targets = targets(home);
             Set<String> disabled = new HashSet<>(stringList(state(c), "disabled"));
+            keepStockScreensaver(adb, dream, disabled);
             Set<String> present = packages(adb, "");
             int done = 0;
             for (String pkg : targets) {
@@ -147,8 +147,8 @@ final class HomeMode {
             s.put("mode", FREE).put("since", System.currentTimeMillis()).put("homeReverted", false)
                     .put("disabled", new JSONArray(sorted(disabled)));
             save(c, s);
-            notice(c, Ui.tr("Free My TV ligado: Início e tela de descanso novos, " + disabled.size() + " apps desligados.",
-                    "Free My TV is on: new home screen and screensaver, " + disabled.size() + " apps turned off."));
+            notice(c, Ui.tr("Free My TV ligado: Início novo, " + disabled.size() + " apps desligados.",
+                    "Free My TV is on: new home screen, " + disabled.size() + " apps turned off."));
             busy(c, Ui.tr("Medindo o Free My TV…", "Measuring Free My TV…"));
             measureHomeTime(c, adb, FREE);
             done(c, null);
@@ -165,7 +165,7 @@ final class HomeMode {
             busy(c, Ui.tr("Religando os apps…", "Turning the apps back on…"));
             String home = originalHome(s);
             Set<String> toEnable = new HashSet<>(stringList(s, "disabled"));
-            for (String pkg : targets(home, s.optString("originalDream", ""))) {
+            for (String pkg : targets(home)) {
                 if (!Arrays.asList(DEBLOAT).contains(pkg) && !Arrays.asList(ASSISTANT).contains(pkg)) toEnable.add(pkg);
             }
             Set<String> present = packages(adb, "");
@@ -262,7 +262,7 @@ final class HomeMode {
                 boolean reverted = s.optBoolean("homeReverted");
                 String home = originalHome(s);
                 Set<String> wanted = new HashSet<>(stringList(s, "disabled"));
-                for (String pkg : targets(home, s.optString("originalDream", ""))) {
+                for (String pkg : targets(home)) {
                     if (!reverted || !(pkg.equals(packageOf(home)) || pkg.equals(GOOGLE_SETUP))) wanted.add(pkg);
                 }
                 Set<String> disabled = new HashSet<>(stringList(s, "disabled"));
@@ -281,10 +281,7 @@ final class HomeMode {
                     adb.shell("cmd package set-home-activity " + HOME_ACTIVITY);
                     fixed.add(Ui.tr("o Início", "the home screen"));
                 }
-                if (!adb.shell("settings get secure screensaver_components").contains(DREAM)) {
-                    adb.shell("settings put secure screensaver_components " + DREAM);
-                    fixed.add(Ui.tr("a tela de descanso", "the screensaver"));
-                }
+                keepStockScreensaver(adb, s.optString("originalDream", ""), disabled);
                 JSONObject latest = state(app);
                 latest.put("disabled", new JSONArray(sorted(disabled)));
                 save(app, latest);
@@ -301,14 +298,27 @@ final class HomeMode {
         }
     }
 
-    /** What to turn off: the TV's own home screen and screensaver, Google TV's recovery home, and the lists above. */
-    private static List<String> targets(String home, String dream) {
+    /**
+     * The TV's own screensaver stays (TCL's Google photos one): ours is taken off the setting, and the stock one is
+     * turned back on if an earlier switch turned it off.
+     */
+    private static void keepStockScreensaver(Adb adb, String dream, Set<String> disabled) throws IOException {
+        if (adb.shell("settings get secure screensaver_components").contains(DREAM)) {
+            adb.shell("settings delete secure screensaver_components");
+        }
+        String dreamPkg = packageOf(dream);
+        if (dreamPkg != null && !dreamPkg.equals(PKG) && disabled.contains(dreamPkg)
+                && adb.shell("pm enable " + dreamPkg).contains("new state: enabled")) {
+            disabled.remove(dreamPkg);
+        }
+    }
+
+    /** What to turn off: the TV's own home screen, Google TV's recovery home, and the lists above. */
+    private static List<String> targets(String home) {
         List<String> out = new ArrayList<>();
         String homePkg = packageOf(home);
         if (homePkg != null && !homePkg.equals(PKG)) out.add(homePkg);
         out.add(GOOGLE_SETUP);
-        String dreamPkg = packageOf(dream);
-        if (dreamPkg != null && !dreamPkg.equals(PKG) && !dreamPkg.equals(homePkg)) out.add(dreamPkg);
         out.addAll(Arrays.asList(DEBLOAT));
         if (Config.DISABLE_ASSISTANT) out.addAll(Arrays.asList(ASSISTANT));
         return out;

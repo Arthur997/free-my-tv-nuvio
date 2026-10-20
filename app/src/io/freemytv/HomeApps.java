@@ -24,6 +24,7 @@ import android.graphics.drawable.Drawable;
 import android.media.tv.TvContract;
 import android.media.tv.TvInputInfo;
 import android.media.tv.TvInputManager;
+import android.net.Uri;
 import android.provider.Settings;
 import android.util.DisplayMetrics;
 import android.view.View;
@@ -63,6 +64,7 @@ final class HomeApps {
     static final class Item {
         int kind;
         String key, label, pkg, inputId, number;
+        String uri;         // a title inside the app (Nuvio), instead of the app's home
         String symbol;      // icon for the shortcuts and special cards
         Bitmap tile;        // 16:9 card (apps and specials)
         Bitmap logo;        // colored logo with no background (shelf); null = use the card
@@ -79,17 +81,10 @@ final class HomeApps {
      * (YouTube); empty = the art's colors as they are. Last, a visual size tweak for the logo. Edit freely.
      */
     private static final String[][] SHELF = {
-        {"netflix", "Netflix", "com.netflix.ninja", "E50914", "", "1"},
         {"youtube", "YouTube", "com.google.android.youtube.tv", "FF0033", "play", "1"},
-        {"prime", "Prime Video", "com.amazon.amazonvideo.livingroom", "1A98FF", "tint", "0.96"},
-        {"disney", "Disney+", "com.disney.disneyplus", "1838C8", "", "1"},
-        {"max", "Max", "com.wbd.stream", "6C3BE0", "", "1.32"},
-        {"appletv", "Apple TV", "com.apple.atve.androidtv.appletv", "B8BCC6", "", "1.1"},
-        {"hulu", "Hulu", "com.hulu.livingroomplus", "1CE783", "", "1"},
-        {"paramount", "Paramount+", "com.cbs.ott", "0064FF", "", "1"},
-        {"peacock", "Peacock", "com.peacocktv.peacockandroid", "6E55DC", "", "1"},
-        {"globoplay", "Globoplay", "com.globo.globotv", "FF5A1F", "tint", "1"},
-        {"spotify", "Spotify", "com.spotify.tv.android", "1DB954", "", "1"},
+        {"nuvio-legacy", "Nuvio Legacy", "space.nuvio.nativelegacy", "7C4DFF", "", "1"},
+        {"turbotv", "Turbo TV", "com.brt.ttv", "1E88E5", "", "1"},
+        {"tv-settings", "Configurações", "com.android.tv.settings", "8A8F98", "", "1"},
     };
     private static final int MAX_SHELF = 8;
     /** Live TV apps of some brands (the antenna's channels open through the standard Android request first). */
@@ -178,6 +173,13 @@ final class HomeApps {
         it.key = pkg;
         it.pkg = pkg;
         it.label = label;
+        return it;
+    }
+
+    /** A title inside an app (a recommendation opened straight in Nuvio). */
+    static Item title(String pkg, String uri, String label) {
+        Item it = app(pkg, label);
+        it.uri = uri;
         return it;
     }
 
@@ -278,6 +280,12 @@ final class HomeApps {
         Intent intent;
         switch (it.kind) {
             case APP:
+                if (it.uri != null) {
+                    // A fresh task: an already open Nuvio would otherwise just come back where it was.
+                    intent = new Intent(Intent.ACTION_VIEW, Uri.parse(it.uri)).setPackage(it.pkg)
+                            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                    break;
+                }
                 intent = launchIntent(a.getPackageManager(), it.pkg);
                 if (intent != null) intent.addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
                 break;
