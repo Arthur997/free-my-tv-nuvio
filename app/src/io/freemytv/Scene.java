@@ -39,6 +39,7 @@ final class Scene {
 
     Scene() {
         try {
+            if (Ui.LITE) throw new UnsupportedOperationException("performance mode");   // the flat look, on purpose
             aurora = new RuntimeShader(Shaders.AURORA);
             glass = new RuntimeShader(Shaders.GLASS);
             liquid = new RuntimeShader(Shaders.LIQUID);

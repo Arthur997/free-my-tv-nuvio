@@ -125,6 +125,9 @@ final class Spanish {
             case "Titles in the top": return "Títulos en el top";
             case "Today's top": return "Top del día";
             case "Original (3 an hour)": return "Original (3 por hora)";
+            case "Performance mode": return "Modo rendimiento";
+            case "On (no glass)": return "Activado (sin vidrio)";
+            case "The TV's own (Google photos)": return "La del TV (fotos de Google)";
             case "no ads, with the TV's own screensaver": return "sin anuncios, con el protector de pantalla del TV";
             case "No ads, with the TV's own screensaver": return "Sin anuncios, con el protector de pantalla del TV";
             default:

@@ -26,7 +26,7 @@ final class Shadows {
 
     /** Draws `shape` (radius `r`) with `paint`, whose BlurMaskFilter was made with radius `blur`. */
     void draw(Canvas c, RectF shape, float r, float blur, Paint paint) {
-        if (!Ui.LEGACY) {
+        if (!Ui.LITE) {
             c.drawRoundRect(shape, r, r, paint);
             return;
         }

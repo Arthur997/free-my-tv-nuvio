@@ -27,6 +27,8 @@ final class Ui {
 
     /** Android 9 to 11: older TVs and boxes, whose GPUs need the cheaper drawing paths (Shadows, rounded images). */
     static final boolean LEGACY = Build.VERSION.SDK_INT < 31;
+    /** The light drawing paths: Android 9 to 11 always, or More Settings > Performance mode. */
+    static volatile boolean LITE = LEGACY;
     static final Locale PT = new Locale("pt", "BR");
     /** English, Portuguese or Spanish, from the settings or, with "auto", the TV's own language. */
     static volatile String language = language();

@@ -22,14 +22,17 @@ final class Prefs {
     static volatile int version;
 
     private static Context app;
+    private static SharedPreferences prefs;   // kept: the screens read settings while they draw
 
     static void init(Context c) {
         app = c.getApplicationContext();
+        prefs = app.getSharedPreferences("settings", Context.MODE_PRIVATE);
         Ui.applyLanguage();   // the language picked on the TV, now that it can be read
+        Ui.LITE = Ui.LEGACY || performance();
     }
 
     private static SharedPreferences sp() {
-        return app.getSharedPreferences("settings", Context.MODE_PRIVATE);
+        return prefs;
     }
 
     private static void put(String key, String value) {
@@ -133,8 +136,22 @@ final class Prefs {
     static void setPricesEveryIndex(int i) { put("pricesEvery", i); }
 
     /** The shelf shows each app's own TV banner instead of its logo lifted onto a brand-colored card. */
-    static boolean originalArt() { return sp().getBoolean("originalArt", false); }
+    static boolean originalArt() { return sp().getBoolean("originalArt", true); }
     static void setOriginalArt(boolean on) { put("originalArt", on); }
+
+    /** Free My TV's own screensaver in Free My TV mode (off: the TV's own, TCL's Google photos). */
+    static boolean ownScreensaver() { return sp().getBoolean("ownScreensaver", false); }
+    static void setOwnScreensaver(boolean on) { put("ownScreensaver", on); }
+
+    /**
+     * Performance mode: the light drawing paths of Android 9 to 11 (cached shadows, images rounded by a shader) and the
+     * flat look instead of the glass shaders (Ui.LITE).
+     */
+    static boolean performance() { return sp().getBoolean("performance", false); }
+    static void setPerformance(boolean on) {
+        Ui.LITE = Ui.LEGACY || on;   // the home screen is rebuilt when settings change: it takes effect right away
+        put("performance", on);
+    }
 
     /** The top right of "For You" (light design): the clock and the weather; off: the prices. */
     static boolean topClock() { return sp().getBoolean("topClock", true); }

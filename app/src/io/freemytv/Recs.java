@@ -54,7 +54,14 @@ final class Recs {
     interface Listener { void onRecs(); }
 
     private static final String API = "https://api.themoviedb.org/3";
-    private static final String IMAGES = "https://image.tmdb.org/t/p/original";
+    private static final String IMAGES = "https://image.tmdb.org/t/p/";
+    /**
+     * The cards are at most 1092 px wide: 1280 is plenty and ~5x lighter than the original (up to 3840). Free My TV's
+     * own screensaver shows the photo full screen, so with it on the originals come down.
+     */
+    private static String imageSize() {
+        return Prefs.ownScreensaver() ? "original" : "w1280";
+    }
     private static final long LIST_EVERY = 6 * 3600_000L;
     /** Bump when what is saved for each title changes (the saved list is discarded and fetched again). */
     private static final int CACHE_VERSION = 4;
@@ -661,7 +668,7 @@ final class Recs {
         //noinspection ResultOfMethodCallIgnored
         f.getParentFile().mkdirs();
         File part = new File(f.getPath() + ".part");
-        HttpURLConnection c = (HttpURLConnection) new URL(IMAGES + p.backdrop).openConnection();
+        HttpURLConnection c = (HttpURLConnection) new URL(IMAGES + imageSize() + p.backdrop).openConnection();
         c.setConnectTimeout(8000);
         c.setReadTimeout(20000);
         try (InputStream in = c.getInputStream(); FileOutputStream out = new FileOutputStream(part)) {

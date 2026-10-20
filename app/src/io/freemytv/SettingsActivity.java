@@ -670,7 +670,8 @@ public class SettingsActivity extends Activity {
             return new String[] {Ui.tr("Abrir recomendações em", "Open picks in"),
                     Ui.tr("Recomendações", "Picks"), Ui.tr("Títulos no Top", "Titles in the top"),
                     Ui.tr("Atualizar cotações", "Refresh prices"), Ui.tr("Cidade do clima", "Weather city"),
-                    Ui.tr("Capa dos apps na prateleira", "Shelf app art"), Ui.tr("Topo do Para você", "Top of For You")};
+                    Ui.tr("Capa dos apps na prateleira", "Shelf app art"), Ui.tr("Topo do Para você", "Top of For You"),
+                    Ui.tr("Tela de descanso", "Screensaver"), Ui.tr("Modo desempenho", "Performance mode")};
         }
 
         private String[] moreValues() {
@@ -682,7 +683,9 @@ public class SettingsActivity extends Activity {
                     every[Prefs.pricesEveryIndex()],
                     city < 0 ? Prefs.city() + Ui.tr(" (padrão)", " (default)") : Prefs.CITIES[city][0],
                     Prefs.originalArt() ? Ui.tr("Original do app", "The app's own") : Ui.tr("Logo", "Logo"),
-                    Prefs.topClock() ? Ui.tr("Relógio e clima", "Clock and weather") : Ui.tr("Cotações", "Prices")};
+                    Prefs.topClock() ? Ui.tr("Relógio e clima", "Clock and weather") : Ui.tr("Cotações", "Prices"),
+                    Prefs.ownScreensaver() ? "Free My TV" : Ui.tr("Da TV (fotos do Google)", "The TV's own (Google photos)"),
+                    Prefs.performance() ? Ui.tr("Ligado (sem vidro)", "On (no glass)") : Ui.tr("Desligado", "Off")};
         }
 
         /** Changes the focused More Settings row one step (the city goes through the list, then back to the default). */
@@ -708,7 +711,14 @@ public class SettingsActivity extends Activity {
                     break;
                 }
                 case 5: Prefs.setOriginalArt(!Prefs.originalArt()); break;
-                default: Prefs.setTopClock(!Prefs.topClock()); break;
+                case 6: Prefs.setTopClock(!Prefs.topClock()); break;
+                case 7: {
+                    boolean own = !Prefs.ownScreensaver();
+                    Prefs.setOwnScreensaver(own);
+                    HomeMode.requestScreensaver(getContext(), own);   // the TV's setting changes in the main process
+                    break;
+                }
+                default: Prefs.setPerformance(!Prefs.performance()); break;
             }
             HomeData.get(getContext()).settingsChanged();
         }

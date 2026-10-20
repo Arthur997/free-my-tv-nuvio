@@ -210,7 +210,7 @@ final class HomeMode {
                     Ui.tr("o Android não aceitou o novo Início", "Android didn't accept the new home screen"));
             List<String> targets = targets(home, setupHome);
             Set<String> disabled = new HashSet<>(stringList(state(c), "disabled"));
-            keepStockScreensaver(adb, dream, disabled);
+            applyScreensaver(adb, s.optBoolean("ownDream"), dream, disabled);
             Set<String> present = packages(adb, "");
             int done = 0;
             for (String pkg : targets) {
@@ -373,7 +373,7 @@ final class HomeMode {
                     adb.shell("cmd package set-home-activity " + HOME_ACTIVITY);
                     fixed.add(Ui.tr("o Início", "the home screen"));
                 }
-                keepStockScreensaver(adb, s.optString("originalDream", ""), disabled);
+                applyScreensaver(adb, s.optBoolean("ownDream"), s.optString("originalDream", ""), disabled);
                 JSONObject latest = state(app);
                 latest.put("disabled", new JSONArray(sorted(disabled)));
                 save(app, latest);
@@ -388,6 +388,36 @@ final class HomeMode {
                 notice(app, Ui.tr("A TV foi atualizada; o Free My TV continua igual.", "The TV was updated; Free My TV is still on."));
             }
         }
+    }
+
+    /** More Settings > Screensaver: `own` = Free My TV's in Free My TV mode; otherwise the TV's own stays. */
+    static void requestScreensaver(Context c, boolean own) {
+        ModeJob.schedule(c, ModeJob.DREAM, own ? "own" : "stock", 0);
+    }
+
+    static void screensaverNow(Context app, boolean own) {
+        synchronized (RUN) {
+            JSONObject s = state(app);
+            try {
+                s.put("ownDream", own);
+                save(app, s);
+            } catch (JSONException ignored) {}
+            if (!FREE.equals(s.optString("mode"))) return;   // Original: the TV's own, as always
+            try (Adb adb = Adb.connect(app, 10_000, null)) {
+                Set<String> disabled = new HashSet<>(stringList(s, "disabled"));
+                applyScreensaver(adb, own, s.optString("originalDream", ""), disabled);
+                JSONObject latest = state(app);
+                latest.put("disabled", new JSONArray(sorted(disabled)));
+                save(app, latest);
+            } catch (Exception e) {
+                AppLog.w("screensaver: " + e.getMessage());
+            }
+        }
+    }
+
+    private static void applyScreensaver(Adb adb, boolean own, String dream, Set<String> disabled) throws IOException {
+        if (own) adb.shell("settings put secure screensaver_components " + DREAM);
+        else keepStockScreensaver(adb, dream, disabled);
     }
 
     /**
