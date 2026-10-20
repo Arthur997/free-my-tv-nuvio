@@ -145,8 +145,8 @@ final class Prefs {
     static final long[] PRICES_EVERY = {10_000L, 60_000L, 5 * 60_000L};
 
     static int pricesEveryIndex() {
-        int i = sp().getInt("pricesEvery", 0);
-        return i >= 0 && i < PRICES_EVERY.length ? i : 0;
+        int i = sp().getInt("pricesEvery", 2);   // 5 min until changed
+        return i >= 0 && i < PRICES_EVERY.length ? i : 2;
     }
 
     static void setPricesEveryIndex(int i) { put("pricesEvery", i); }

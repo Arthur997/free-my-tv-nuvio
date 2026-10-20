@@ -2328,7 +2328,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      * a quiet line at the right end of the tab bar. Text is formatted and measured once a minute (or per forecast).
      */
     private void drawTopClock(Canvas c) {
-        float right = platterRect.isEmpty() ? CONTENT_R * k : platterRect.right - SHELF_PAD * k;
+        float right = CONTENT_R * k;   // the right margin, under the corner buttons (the shelf may be narrow)
         applyTone();
         Paint text = lQuote;
         float fade = 1;   // the corner buttons' names show in this row: fade out while one has focus

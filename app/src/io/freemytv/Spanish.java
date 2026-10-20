@@ -126,6 +126,8 @@ final class Spanish {
             case "Today's top": return "Top del día";
             case "Original (3 an hour)": return "Original (3 por hora)";
             case "Performance mode": return "Modo rendimiento";
+            case "OK opens the list of apps.": return "OK abre la lista de apps.";
+            case "OK opens the choices; ← and → change it right away.": return "OK abre las opciones; ← y → lo cambian al instante.";
             case "TMDB key": return "Clave de TMDB";
             case "Set on the TV": return "Configurada en el TV";
             case "None: OK to add one": return "Ninguna: OK para agregar";
