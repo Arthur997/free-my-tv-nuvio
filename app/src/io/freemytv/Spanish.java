@@ -121,6 +121,10 @@ final class Spanish {
             case "Prices": return "Cotizaciones";
             case "Rates": return "Cotizaciones";
             case "Free My TV Settings": return "Ajustes de Free My TV";
+            case "Picks": return "Recomendaciones";
+            case "Titles in the top": return "Títulos en el top";
+            case "Today's top": return "Top del día";
+            case "Original (3 an hour)": return "Original (3 por hora)";
             case "no ads, with the TV's own screensaver": return "sin anuncios, con el protector de pantalla del TV";
             case "No ads, with the TV's own screensaver": return "Sin anuncios, con el protector de pantalla del TV";
             default:
@@ -131,6 +135,9 @@ final class Spanish {
                 if (english.startsWith("Free My TV is on: new home screen and screensaver, ")) {
                     return "Free My TV está activo: nueva pantalla de inicio y protector, "
                             + english.substring("Free My TV is on: new home screen and screensaver, ".length()).replace(" apps turned off.", " apps desactivadas.");
+                }
+                if (english.startsWith("On · Today's top, ")) {
+                    return "Activas · Top del día, " + english.substring("On · Today's top, ".length()).replace(" titles.", " títulos.");
                 }
                 if (english.startsWith("On · ")) {
                     return "Activas · " + english.substring(5).replace(" titles from the TV's apps, 3 new ones every hour.",

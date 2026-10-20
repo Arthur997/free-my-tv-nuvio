@@ -112,6 +112,16 @@ final class Prefs {
     static boolean recsInNuvio() { return sp().getBoolean("recsNuvio", true); }
     static void setRecsInNuvio(boolean on) { put("recsNuvio", on); }
 
+    /** Picks: off = the original (3 per tab, new ones every hour); on = today's top titles, browsable with → and ←. */
+    static boolean topRecs() { return sp().getBoolean("topRecs", false); }
+    static void setTopRecs(boolean on) { put("topRecs", on); }
+
+    static final int TOP_MIN = 5, TOP_MAX = 20;
+
+    /** How many titles per tab in the top (Explore mixes movies and shows). */
+    static int topCount() { return Math.max(TOP_MIN, Math.min(TOP_MAX, sp().getInt("topCount", 10))); }
+    static void setTopCount(int n) { put("topCount", Math.max(TOP_MIN, Math.min(TOP_MAX, n))); }
+
     /** How often prices are fetched while the home screen is on: live (~15 s, the screen's tick), 1 or 5 min. */
     static final long[] PRICES_EVERY = {10_000L, 60_000L, 5 * 60_000L};
 

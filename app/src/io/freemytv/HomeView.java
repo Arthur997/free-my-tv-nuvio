@@ -130,7 +130,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     // At the top: tabs (0 to 2) and icon-only buttons (3 to 5); the three cards
     private int tab, topIndex, cardIndex;
-    private List<Recs.Pick> cards = new ArrayList<>();
+    private List<Recs.Pick> cards = new ArrayList<>();      // the ones on screen (up to 3)
+    // The tab's whole list (the top can have up to 20) and where the three on screen start in it; "4–6 of 10".
+    private List<Recs.Pick> allCards = new ArrayList<>();
+    private int cardOffset;
+    private String cardCounter = "";
     private final Spring[] topFocus = new Spring[6];
     private final RectF[] topRects = new RectF[6];
     private final Spring[] cardFocus = new Spring[3];
@@ -2162,9 +2166,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         heroDirty = statusDirty = true;
     }
 
-    /** The three cards of the current tab (Explore, Movies, Shows) and the background taken from the first one. */
+    /**
+     * The three cards on screen for the current tab (Explore, Movies, Shows), from cardOffset in the tab's list, and the
+     * background taken from the first one.
+     */
     private void updateCards() {
-        List<Recs.Pick> list = recs.now(TAB_KIND[tab]);
+        List<Recs.Pick> all = recs.now(TAB_KIND[tab]);
+        if (!samePicks(all, allCards)) allCards = all;
+        cardOffset = Math.max(0, Math.min(cardOffset, all.size() - 3));
+        List<Recs.Pick> list = new ArrayList<>(all.subList(cardOffset, Math.min(all.size(), cardOffset + 3)));
         if (!samePicks(list, cards)) {
             cards = list;
             cardIndex = Math.min(cardIndex, Math.max(0, list.size() - 1));
@@ -2173,7 +2183,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 retarget(false);
             }
         }
+        cardCounter = all.size() > 3 ? (cardOffset + 1) + "–" + (cardOffset + list.size()) + Ui.tr(" de ", " of ") + all.size() : "";
         for (Recs.Pick p : recs.wanted()) recs.backdrop(p);   // all three tabs preloaded: switching tabs is instant
+        // The top: the next three too, so moving on shows them right away.
+        for (int i = cardOffset + 3; i < Math.min(all.size(), cardOffset + 6); i++) recs.backdrop(all.get(i));
         Backdrop b = cards.isEmpty() ? null : recs.backdrop(cards.get(0));
         if (cards.isEmpty() || b != null) showBackdrop(b);
         heroDirty = true;
@@ -2183,6 +2196,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void selectTab(int index) {
         if (index == tab) return;
         tab = index;
+        cardOffset = 0;
         updateCards();
         heroDirty = true;
     }
@@ -2257,6 +2271,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         for (int i = 0; i < 3; i++) if (cardFocus[i].value > 0.02f && (top < 0 || cardFocus[i].value > cardFocus[top].value)) top = i;
         for (int i = 0; i < 3; i++) if (i != top) drawLightCard(c, i);
         if (top >= 0) drawLightCard(c, top);
+        if (!cardCounter.isEmpty()) {
+            // Under the last card, on the right: where the top's list is ("4–6 of 10").
+            float cw = lCardMeta.measureText(cardCounter);
+            c.drawText(cardCounter, cardRects[2].right - cw, cardRects[2].bottom + 80 * k, lCardMeta);
+        }
         if (Prefs.topClock()) drawTopClock(c);
         else if (HomeData.coinCount() > 0) drawQuotes(c);
     }
@@ -2411,9 +2430,18 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 break;
             case Z_CARDS:
                 if (dx != 0) {
-                    int next = Math.max(0, Math.min(cards.size() - 1, cardIndex + dx));
-                    if (next == cardIndex) return true;
-                    cardIndex = next;
+                    int next = cardIndex + dx;
+                    // Past the last (or first) card on screen, the top's list moves one title along.
+                    boolean slide = next >= cards.size() ? cardOffset + cards.size() < allCards.size()
+                            : next < 0 && cardOffset > 0;
+                    if (slide) {
+                        cardOffset += dx;
+                        updateCards();
+                    } else {
+                        next = Math.max(0, Math.min(cards.size() - 1, next));
+                        if (next == cardIndex) return true;
+                        cardIndex = next;
+                    }
                 } else if (dy < 0) {
                     zone = Z_TOP;
                     topIndex = tab;     // as on Apple TV: moving up to the tabs focuses the selected tab

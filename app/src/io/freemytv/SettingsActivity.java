@@ -427,6 +427,8 @@ public class SettingsActivity extends Activity {
             int count = recs.optInt("count");
             if (!hasKey) line = Ui.tr("Sem chave do TMDB: veja o README (config.properties).", "No TMDB key: see the README (config.properties).");
             else if (!error.isEmpty()) line = Ui.tr("Erro: ", "Error: ") + error + ".";
+            else if (count > 0 && Prefs.topRecs()) line = Ui.tr("Ligadas · Top do dia, " + count + " títulos.",
+                    "On · Today's top, " + count + " titles.");
             else if (count > 0) line = Ui.tr("Ligadas · " + count + " títulos nos apps da TV, 3 novos a cada hora.",
                     "On · " + count + " titles from the TV's apps, 3 new ones every hour.");
             else line = Ui.tr("Buscando os títulos…", "Fetching titles…");
@@ -661,9 +663,12 @@ public class SettingsActivity extends Activity {
             return screen == REMOTE_KEYS ? keyValues() : screen == MORE ? moreValues() : settingValues();
         }
 
-        // More Settings: where the picks open, how often prices refresh, the weather's city, the shelf's art, the top line.
+        /** More Settings: the picks (where they open, which list, how many), prices, the weather's city, the shelf, the top. */
+        private static final int MORE_TOP_COUNT = 2;
+
         private String[] moreLabels() {
             return new String[] {Ui.tr("Abrir recomendações em", "Open picks in"),
+                    Ui.tr("Recomendações", "Picks"), Ui.tr("Títulos no Top", "Titles in the top"),
                     Ui.tr("Atualizar cotações", "Refresh prices"), Ui.tr("Cidade do clima", "Weather city"),
                     Ui.tr("Capa dos apps na prateleira", "Shelf app art"), Ui.tr("Topo do Para você", "Top of For You")};
         }
@@ -672,6 +677,8 @@ public class SettingsActivity extends Activity {
             String[] every = {Ui.tr("Tempo real", "Live"), "1 min", "5 min"};
             int city = Prefs.cityIndex();
             return new String[] {Prefs.recsInNuvio() ? "Nuvio" : Ui.tr("App de cada título", "Each title's app"),
+                    Prefs.topRecs() ? Ui.tr("Top do dia", "Today's top") : Ui.tr("Original (3 por hora)", "Original (3 an hour)"),
+                    String.valueOf(Prefs.topCount()),
                     every[Prefs.pricesEveryIndex()],
                     city < 0 ? Prefs.city() + Ui.tr(" (padrão)", " (default)") : Prefs.CITIES[city][0],
                     Prefs.originalArt() ? Ui.tr("Original do app", "The app's own") : Ui.tr("Logo", "Logo"),
@@ -682,18 +689,25 @@ public class SettingsActivity extends Activity {
         private void adjustMore(int dir) {
             switch (focus) {
                 case 0: Prefs.setRecsInNuvio(!Prefs.recsInNuvio()); break;
-                case 1: {
+                case 1: Prefs.setTopRecs(!Prefs.topRecs()); break;
+                case MORE_TOP_COUNT: {
+                    if (!Prefs.topRecs()) return;   // only the top has a size
+                    int n = Prefs.TOP_MAX - Prefs.TOP_MIN + 1;
+                    Prefs.setTopCount(Prefs.TOP_MIN + (Prefs.topCount() - Prefs.TOP_MIN + dir + n) % n);
+                    break;
+                }
+                case 3: {
                     int n = Prefs.PRICES_EVERY.length;
                     Prefs.setPricesEveryIndex((Prefs.pricesEveryIndex() + dir + n) % n);
                     break;
                 }
-                case 2: {
+                case 4: {
                     int n = Prefs.CITIES.length + 1;   // -1 (the default) and every capital
                     int next = (Prefs.cityIndex() + 1 + dir + n) % n - 1;
                     Prefs.setCityIndex(next);
                     break;
                 }
-                case 3: Prefs.setOriginalArt(!Prefs.originalArt()); break;
+                case 5: Prefs.setOriginalArt(!Prefs.originalArt()); break;
                 default: Prefs.setTopClock(!Prefs.topClock()); break;
             }
             HomeData.get(getContext()).settingsChanged();
@@ -911,7 +925,8 @@ public class SettingsActivity extends Activity {
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + LIST_ROW_H * k);
                 float f = drawRowBackground(c, i);
                 rowLabel.setColor(blend(0xF2FFFFFF, INK, f));
-                boolean locked = screen == HOME_SETTINGS && i >= COIN_ROWS && !Prefs.quotes();
+                boolean locked = screen == HOME_SETTINGS && i >= COIN_ROWS && !Prefs.quotes()
+                        || screen == MORE && i == MORE_TOP_COUNT && !Prefs.topRecs();
                 rowValue.setColor(blend(locked ? 0x59FFFFFF : 0xB3FFFFFF, locked ? 0x591C1C1E : 0xB31C1C1E, f));
                 if (locked) rowLabel.setColor(blend(0x73FFFFFF, 0x731C1C1E, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);

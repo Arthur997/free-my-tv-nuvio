@@ -184,6 +184,8 @@ final class Recs {
                     && (!p.detailed || (p.pkg != null && have.computeIfAbsent(p.pkg, this::installed)))) list.add(p);   // app missing: skip
         }
         if (list.isEmpty()) return list;
+        // Top of the day (More Settings): in rank order, as many as asked for.
+        if (Prefs.topRecs()) return new ArrayList<>(list.subList(0, Math.min(Prefs.topCount(), list.size())));
         long hour = System.currentTimeMillis() / 3600_000L;
         // Three per hour, never two from the same franchise ("Law & Order" and "Law & Order: Special…").
         List<Pick> out = new ArrayList<>();
@@ -376,7 +378,9 @@ final class Recs {
         List<Pick> out = new ArrayList<>();
         java.util.Set<String> seen = new java.util.HashSet<>();
         for (String kind : new String[] {null, "movie", "tv"}) {
-            for (Pick p : now(kind)) if (seen.add(key(p))) out.add(p);
+            // The first three of each tab (all there is in the original): in the top, the rest load as you browse.
+            List<Pick> tab = now(kind);
+            for (int i = 0; i < Math.min(3, tab.size()); i++) if (seen.add(key(tab.get(i)))) out.add(tab.get(i));
         }
         return out;
     }
@@ -409,6 +413,10 @@ final class Recs {
             common += "&watch_region=" + REGION + "&with_watch_monetization_types=flatrate&with_watch_providers="
                     + URLEncoder.encode(ids.toString(), "UTF-8");
         }
+        if (Prefs.topRecs()) {
+            fetchTop(p);
+            return;
+        }
         // 1. Trending this week (TMDB goes by what people are watching and searching for right now), only what is
         //    on one of the TV's services: the details say where (and are then ready).
         List<Pick> hotMovies = new ArrayList<>(), hotShows = new ArrayList<>();
@@ -439,6 +447,39 @@ final class Recs {
         java.util.Set<String> seen = new java.util.HashSet<>();
         alternate(list, seen, hotMovies, hotShows, 24);
         alternate(list, seen, newMovies, newShows, 24);
+        if (list.isEmpty()) throw new IOException("TMDB returned no recommendations");
+        picks = list;
+        period = p;
+        listAt = System.currentTimeMillis();
+        listLanguage = Ui.language;
+    }
+
+    /**
+     * Top of the day: TMDB's most watched and searched today (trending/day), movies and shows, in rank order, up to
+     * Prefs.topCount() of each that Nuvio (or one of the TV's services) can open. Two pages: some don't make it.
+     */
+    private void fetchTop(int p) throws Exception {
+        int want = Prefs.topCount();
+        List<Pick> movies = new ArrayList<>(), shows = new ArrayList<>();
+        for (String kind : new String[] {"movie", "tv"}) {
+            List<Pick> out = kind.equals("movie") ? movies : shows;
+            for (int page = 1; page <= 2 && out.size() < want; page++) {
+                JSONArray hot = get("/trending/" + kind + "/day?language=" + lang() + "&page=" + page).getJSONArray("results");
+                List<Pick> candidates = new ArrayList<>();
+                for (int i = 0; i < hot.length(); i++) add(candidates, hot.getJSONObject(i), kind);
+                for (Pick pick : candidates) {
+                    if (out.size() >= want) break;
+                    try {
+                        fetchDetails(pick);
+                    } catch (Exception e) {
+                        continue;
+                    }
+                    if (pick.pkg != null) out.add(pick);
+                }
+            }
+        }
+        List<Pick> list = new ArrayList<>();
+        alternate(list, new java.util.HashSet<>(), movies, shows, 2 * want);
         if (list.isEmpty()) throw new IOException("TMDB returned no recommendations");
         picks = list;
         period = p;
@@ -583,7 +624,8 @@ final class Recs {
     private long sourceStamp() {
         long stamp = Config.TMDB_KEY.hashCode() * 31L + REGION.hashCode();
         for (String[] service : SERVICES) stamp = stamp * 31L + (installed(service[2]) ? service[2].hashCode() : 0);
-        return stamp * 31L + String.valueOf(nuvio()).hashCode();
+        stamp = stamp * 31L + String.valueOf(nuvio()).hashCode();
+        return stamp * 31L + (Prefs.topRecs() ? Prefs.topCount() : 0);   // the top, and its size, is another list
     }
 
     private JSONObject get(String path) throws IOException, org.json.JSONException {
@@ -667,9 +709,10 @@ final class Recs {
 
     private static void prune(File dir) {
         File[] files = dir.listFiles();
-        if (files == null || files.length <= 24) return;
+        int keep = Math.max(24, 2 * Prefs.topCount() + 12);   // the top browses up to 2 × topCount titles
+        if (files == null || files.length <= keep) return;
         Arrays.sort(files, (a, b) -> Long.compare(a.lastModified(), b.lastModified()));
-        for (int i = 0; i < files.length - 24; i++) {
+        for (int i = 0; i < files.length - keep; i++) {
             //noinspection ResultOfMethodCallIgnored
             files[i].delete();
         }
