@@ -90,7 +90,7 @@ final class Glyphs {
             case "BTC": return R.drawable.coin_btc;
             case "ETH": return R.drawable.coin_eth;
             case "SOL": return R.drawable.coin_sol;
-            case "USD": return R.drawable.coin_usd;
+            case "USDT": return R.drawable.coin_usd;   // the dollar, as a plain "$"
             case "EUR": return R.drawable.coin_eur;
             default: return R.drawable.coin_usdt;
         }

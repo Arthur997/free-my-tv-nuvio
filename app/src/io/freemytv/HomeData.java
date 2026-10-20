@@ -24,33 +24,76 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Dollar, euro and bitcoin in reais (Binance, live: every time the screen asks, ~15 s) and weather/sunrise/sunset for
- * your location (Open-Meteo, every 30 min), cached so the screen opens with numbers. Only fetched while the home screen
- * or the screensaver is visible (the screen asks). Neither source needs a key. Location comes from config.properties.
+ * Optional prices (Binance, live: every time the screen asks, ~15 s) and weather/sunrise/sunset (Open-Meteo, every
+ * 30 min), cached so the screen opens with numbers. Only fetched while the home screen or the screensaver is visible
+ * (the screen asks). Neither source needs a key. Location and currency come from config.properties.
  */
 final class HomeData {
-    static final String[] COINS = {"USD", "EUR", "BTC"};
-    /**
-     * Binance has no euro/real pair, and quotes the dollar as USDT (a token that follows it within cents): the euro is
-     * EUR/USDT × USDT/BRL.
-     */
-    private static final String PRICES_URL = "https://api.binance.com/api/v3/ticker/24hr?type=MINI&symbols="
-            + "%5B%22USDTBRL%22,%22EURUSDT%22,%22BTCBRL%22%5D";
-    private static final String WEATHER_URL = "https://api.open-meteo.com/v1/forecast?latitude=" + Config.LATITUDE
-            + "&longitude=" + Config.LONGITUDE
-            + "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset"
+    static final String[] COINS = {"BTC", "ETH", "SOL", "USDT", "EUR"};
+    static final String[] COIN_NAMES = {"Bitcoin", "Ethereum", "Solana", "Dollar", "Euro"};
+    static final int DOLLAR = 3, EURO = 4;
+    private static final String CURRENCY = Config.CURRENCY.trim().toUpperCase(Locale.ROOT);
+    /** Binance quotes dollars as USDT. */
+    private static final String QUOTE = CURRENCY.equals("USD") ? "USDT" : CURRENCY;
+    /** Binance has no euro/real pair: the euro is EUR/USDT × USDT/BRL. */
+    private static final String EURO_PAIR = "EURUSDT", DOLLAR_PAIR = "USDT" + QUOTE;
+    private static final String WEATHER_QUERY = "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset"
             + "&hourly=temperature_2m,weather_code,is_day&timezone=auto&forecast_days=2";
-    private static final long PRICES_EVERY = 10_000L, WEATHER_EVERY = 30 * 60_000L;
-    private static final Locale PT = new Locale("pt", "BR");
 
+    private static String weatherPlace() {
+        return Prefs.latitude() + "," + Prefs.longitude();
+    }
+
+    private static String weatherUrl() {
+        return "https://api.open-meteo.com/v1/forecast?latitude=" + Prefs.latitude() + "&longitude=" + Prefs.longitude() + WEATHER_QUERY;
+    }
+    private static final long PRICES_EVERY = 10_000L, WEATHER_EVERY = 30 * 60_000L;
     interface Listener { void onData(); }
 
     static int coinCount() {
-        return COINS.length;
+        return Prefs.quotes() ? active().length : 0;
+    }
+
+    private static volatile int[] activeCoins;
+    private static volatile int activeVersion = -1;
+
+    /** Indexes in COINS of the coins the user has on (and that Binance lists in this currency). */
+    static int[] active() {
+        int[] a = activeCoins;
+        if (a != null && activeVersion == Prefs.version) return a;
+        int n = 0;
+        int[] tmp = new int[COINS.length];
+        for (int i = 0; i < COINS.length; i++) if (Prefs.coin(i) && (i < 3 || CURRENCY.equals("BRL"))) tmp[n++] = i;
+        a = java.util.Arrays.copyOf(tmp, n);
+        activeCoins = a;
+        activeVersion = Prefs.version;
+        return a;
+    }
+
+    /** Settings changed (city, coins): fetch again now. */
+    void settingsChanged() {
+        pricesAt = 0;
+        weatherAt = 0;
     }
 
     static String coinName(int i) {
-        return i == 0 ? Ui.tr("Dólar", "Dollar") : i == 1 ? "Euro" : "Bitcoin";
+        return i == DOLLAR ? Ui.tr("Dólar", "Dollar") : COIN_NAMES[i];
+    }
+
+    /** The coin's pair on Binance (the euro's is in dollars, converted with the dollar's). */
+    private static String pair(int i) {
+        return i == EURO ? EURO_PAIR : COINS[i] + QUOTE;
+    }
+
+    private static String pricesUrl() {
+        java.util.Set<String> pairs = new java.util.LinkedHashSet<>();
+        for (int i : active()) {
+            pairs.add(pair(i));
+            if (i == EURO) pairs.add(DOLLAR_PAIR);
+        }
+        StringBuilder symbols = new StringBuilder();
+        for (String p : pairs) symbols.append(symbols.length() == 0 ? "" : ",").append("%22").append(p).append("%22");
+        return "https://api.binance.com/api/v3/ticker/24hr?type=MINI&symbols=%5B" + symbols + "%5D";
     }
 
     static final class Weather {
@@ -72,9 +115,9 @@ final class HomeData {
         return instance;
     }
 
-    final double[] prices = {Double.NaN, Double.NaN, Double.NaN};
+    final double[] prices = {Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN};
     /** 24 h change (%), in the same order. */
-    final double[] changes = {Double.NaN, Double.NaN, Double.NaN};
+    final double[] changes = {Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN};
     volatile long pricesAt, weatherAt;
     volatile Weather weather = new Weather();
 
@@ -87,12 +130,17 @@ final class HomeData {
     private HomeData(Context c) {
         cache = c.getSharedPreferences("homedata", Context.MODE_PRIVATE);
         try {
-            String p = cache.getString("prices", null);
-            if (p != null) parsePrices(p);
-            pricesAt = cache.getLong("pricesAt", 0);
+            if (Prefs.quotes()) {
+                String p = cache.getString("prices", null);
+                if (p != null) parsePrices(p);
+                pricesAt = cache.getLong("pricesAt", 0);
+            }
             String w = cache.getString("weather", null);
-            if (w != null) weather = parseWeather(w);
-            weatherAt = cache.getLong("weatherAt", 0);
+            // The cached forecast is for the city it was fetched for; another city means fetch again.
+            if (w != null && weatherPlace().equals(cache.getString("weatherPlace", ""))) {
+                weather = parseWeather(w);
+                weatherAt = cache.getLong("weatherAt", 0);
+            }
         } catch (Exception ignored) {}
     }
 
@@ -103,11 +151,11 @@ final class HomeData {
     void refreshIfStale() {
         long now = System.currentTimeMillis();
         // A negative age (the TV's clock went back) counts as stale: otherwise the data would freeze.
-        if (!fetchingPrices && (now - pricesAt > PRICES_EVERY || now < pricesAt)) {
+        if (!fetchingPrices && coinCount() > 0 && (now - pricesAt > PRICES_EVERY || now < pricesAt)) {
             fetchingPrices = true;
             io.execute(() -> {
                 try {
-                    String body = get(PRICES_URL);
+                    String body = get(pricesUrl());
                     parsePrices(body);
                     pricesAt = System.currentTimeMillis();
                     cache.edit().putString("prices", body).putLong("pricesAt", pricesAt).apply();
@@ -123,10 +171,10 @@ final class HomeData {
             fetchingWeather = true;
             io.execute(() -> {
                 try {
-                    String body = get(WEATHER_URL);
+                    String body = get(weatherUrl());
                     weather = parseWeather(body);
                     weatherAt = System.currentTimeMillis();
-                    cache.edit().putString("weather", body).putLong("weatherAt", weatherAt).apply();
+                    cache.edit().putString("weather", body).putLong("weatherAt", weatherAt).putString("weatherPlace", weatherPlace()).apply();
                     notifyListeners();
                 } catch (Exception e) {
                     AppLog.w("weather: " + e.getMessage());
@@ -143,28 +191,29 @@ final class HomeData {
 
     private void parsePrices(String body) throws Exception {
         JSONArray list = new JSONArray(body);
-        double[] last = {Double.NaN, Double.NaN, Double.NaN}, open = {Double.NaN, Double.NaN, Double.NaN};
-        String[] symbols = {"USDTBRL", "EURUSDT", "BTCBRL"};
-        int found = 0;
+        java.util.Map<String, double[]> bySymbol = new java.util.HashMap<>();   // pair → {last, open}
         for (int i = 0; i < list.length(); i++) {
             JSONObject o = list.getJSONObject(i);
-            int k = java.util.Arrays.asList(symbols).indexOf(o.getString("symbol"));
-            if (k < 0) continue;
-            found++;
-            last[k] = Double.parseDouble(o.optString("lastPrice", "NaN"));
-            open[k] = Double.parseDouble(o.optString("openPrice", "NaN"));
+            bySymbol.put(o.getString("symbol"), new double[] {Double.parseDouble(o.optString("lastPrice", "NaN")),
+                    Double.parseDouble(o.optString("openPrice", "NaN"))});
         }
-        if (found < symbols.length) {
-            pricesAt = 0;   // an older cache (other coins): fetch again
-            return;
-        }
-        // The euro in reais: euro→dollar times dollar→real, 24 h ago and now.
-        last[1] *= last[0];
-        open[1] *= open[0];
+        int found = 0;
+        double[] dollar = bySymbol.get(DOLLAR_PAIR);
         for (int k = 0; k < COINS.length; k++) {
-            prices[k] = last[k];
-            changes[k] = open[k] > 0 ? (last[k] - open[k]) / open[k] * 100 : Double.NaN;
+            double[] q = bySymbol.get(pair(k));
+            if (q == null) continue;
+            double last = q[0], open = q[1];
+            if (k == EURO) {
+                // The euro in reais: euro→dollar times dollar→real, now and 24 h ago.
+                if (dollar == null) continue;
+                last *= dollar[0];
+                open *= dollar[1];
+            }
+            found++;
+            prices[k] = last;
+            changes[k] = open > 0 ? (last - open) / open * 100 : Double.NaN;
         }
+        if (found == 0) pricesAt = 0;   // cached in another currency (config changed): fetch again
     }
 
     private static Weather parseWeather(String body) throws Exception {
@@ -229,6 +278,9 @@ final class HomeData {
      * Uses the last weather fetched (it moves ~1 min a day); without data, 6:00 and 18:00.
      */
     boolean isNight(long now) {
+        String theme = Prefs.theme();
+        if (theme.equals("dark")) return true;
+        if (theme.equals("light")) return false;
         long t = Shaders.timeOfDay(now, 0);
         long rise = Shaders.timeOfDay(weather.sunrise, 6 * 60 * 60_000L);
         long set = Shaders.timeOfDay(weather.sunset, 18 * 60 * 60_000L);
@@ -238,7 +290,7 @@ final class HomeData {
     // MARK: - Formatting
 
     private static Locale locale() {
-        return Ui.en ? Locale.US : PT;
+        return Ui.locale();
     }
 
     /** 580.4k · 21.0k · 1.04k · 5.61 (as short as possible; the dollar always with cents). */
@@ -262,7 +314,8 @@ final class HomeData {
     static String brl(double v) {
         String symbol = "R$ ";
         if (Double.isNaN(v)) return symbol + "—";
-        return v >= 1000 ? String.format(locale(), symbol + "%,.0f", v) : String.format(locale(), symbol + "%.2f", v);
+        return Ui.once("brl", v, () -> v >= 1000 ? String.format(locale(), symbol + "%,.0f", v)
+                : String.format(locale(), symbol + "%.2f", v));
     }
 
     /** The weather in words, from Open-Meteo's WMO code. */
@@ -279,6 +332,18 @@ final class HomeData {
             if (code >= 71 && code <= 77 || code == 85 || code == 86) return "Snow";
             if (code >= 95) return "Thunderstorms";
             return "Rain";
+        }
+        if (Ui.es) {
+            if (code == 0) return day ? "Despejado" : "Noche despejada";
+            if (code == 1) return "Mayormente despejado";
+            if (code == 2) return "Parcialmente nublado";
+            if (code == 3) return "Nublado";
+            if (code == 45 || code == 48) return "Niebla";
+            if (code >= 51 && code <= 57) return "Llovizna";
+            if (code == 65 || code == 67 || code == 82) return "Lluvia fuerte";
+            if (code >= 71 && code <= 77 || code == 85 || code == 86) return "Nieve";
+            if (code >= 95) return "Tormenta";
+            return "Lluvia";
         }
         if (code == 0) return day ? "Céu limpo" : "Noite limpa";
         if (code == 1) return "Poucas nuvens";
@@ -299,21 +364,21 @@ final class HomeData {
     }
 
     private static boolean fahrenheit() {
-        String unit = Config.TEMPERATURE.trim().toUpperCase(Locale.ROOT);
-        if (unit.startsWith("F")) return true;
-        if (unit.startsWith("C")) return false;
+        String unit = Prefs.temperature();
+        if (unit.equals("F")) return true;
+        if (unit.equals("C")) return false;
         return "US".equals(Locale.getDefault().getCountry());
     }
 
     /** "+1.2%" / "−0.8%" (a real minus sign). */
     static String change(double v) {
         if (Double.isNaN(v)) return "";
-        return (v >= 0 ? "+" : "−") + String.format(locale(), "%.1f%%", Math.abs(v));
+        return Ui.once("change", v, () -> (v >= 0 ? "+" : "−") + String.format(locale(), "%.1f%%", Math.abs(v)));
     }
 
     static String hour(long at) {
-        return Ui.en ? new SimpleDateFormat("h a", Locale.US).format(new java.util.Date(at))
-                : new SimpleDateFormat("HH'h'", PT).format(new java.util.Date(at));
+        return Ui.once("hour", at, () -> Ui.en ? new SimpleDateFormat("h a", Locale.US).format(new java.util.Date(at))
+                : new SimpleDateFormat(Ui.es ? "HH:mm" : "HH'h'", Ui.locale()).format(new java.util.Date(at)));
     }
 
     /** How long ago the data was fetched, if it's stale (no internet): "12 min ago". */
@@ -323,6 +388,7 @@ final class HomeData {
         if (age < every * 2) return "";
         long minutes = age / 60_000;
         if (Ui.en) return minutes < 60 ? minutes + " min ago" : (minutes / 60) + " h ago";
+        if (Ui.es) return minutes < 60 ? "hace " + minutes + " min" : "hace " + (minutes / 60) + " h";
         return minutes < 60 ? "há " + minutes + " min" : "há " + (minutes / 60) + " h";
     }
 }

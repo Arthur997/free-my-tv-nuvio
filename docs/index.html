@@ -241,7 +241,7 @@
             <li><b>Install:</b>
               <div class="code"><code>adb connect 192.168.1.50:5555 &amp;&amp; adb install -r FreeMyTV.apk</code><button class="copy-btn" type="button" aria-label="Copy command">Copy</button></div>
               On TCL TVs, also let it run in the background (TCL blocks it by default):
-              <div class="code"><code>adb shell appops set io.freemytv AUTO_START allow</code><button class="copy-btn" type="button" aria-label="Copy command">Copy</button></div>
+              <div class="code"><code>adb shell &quot;appops set io.freemytv AUTO_START allow || appops set io.freemytv APP_AUTO_START allow&quot;</code><button class="copy-btn" type="button" aria-label="Copy command">Copy</button></div>
             </li>
             <li><b>On the TV:</b> open <em>Free My TV</em> → <em>Home Screen</em> → <em>Free My TV</em>.</li>
           </ol>
@@ -276,7 +276,7 @@
         <details><summary>Does it change picture quality?</summary><p>No. Picture settings aren't touched, and videos play through the same hardware path. We measured the same resolution and the same video source in both modes.</p></details>
         <details><summary>What gets turned off?</summary><p>The stock home screen and screensaver (replaced), Google TV's recovery home, Play Games and YouTube Music, and on TCL TVs the TCL Channel, messages, store demo, hotel menu, manuals, mirroring and logging apps. Google Assistant only if you ask for it in the config.</p></details>
         <details><summary>Can I make it mine?</summary><p>That's the idea. Open the folder in Claude Code and just ask: "add Crunchyroll to the shelf", "show prices in euros", "set it up for my Sony". It changes the code, rebuilds the app and puts it on your TV.</p></details>
-        <details><summary>Does it speak my language?</summary><p>English and Portuguese, following the TV's language. Want another one? Ask Claude to add it.</p></details>
+        <details><summary>Does it speak my language?</summary><p>English, Spanish and Portuguese, following the TV's language, or the one you pick in its settings. Want another one? Ask Claude to add it.</p></details>
         <details><summary>Does it collect any data?</summary><p>No accounts, no analytics, no tracking. It only talks to TMDB (picks), Open-Meteo (weather, with the coordinates you set) and Binance (prices).</p></details>
         <details><summary>Is it free?</summary><p>Yes. MIT license, and the TMDB key is free too.</p></details>
       </div>

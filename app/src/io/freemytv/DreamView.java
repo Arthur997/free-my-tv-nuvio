@@ -9,8 +9,6 @@ import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.RadialGradient;
 import android.graphics.Rect;
-import android.graphics.RecordingCanvas;
-import android.graphics.RenderNode;
 import android.graphics.RuntimeShader;
 import android.graphics.Shader;
 import android.os.Handler;
@@ -58,7 +56,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         final float lightCaption, lightClock;
         final boolean zoomIn;
         final float panX, panY;
-        final RenderNode caption = new RenderNode("caption");
+        final Recording caption = Recording.create("caption");
         long startedAt;
 
         Slide(Recs.Pick pick, Bitmap image, Bitmap frost, float lightCaption, float lightClock, int n) {
@@ -100,8 +98,8 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     private final Recs recs;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private ExecutorService worker = Executors.newSingleThreadExecutor();
-    private final RenderNode content = new RenderNode("clock");     // without photos: the clock over the aurora
-    private final RenderNode chrome = new RenderNode("corner");     // date, weather, prices and the clock's shadow
+    private final Recording content = Recording.create("clock");     // without photos: the clock over the aurora
+    private final Recording chrome = Recording.create("corner");     // date, weather, prices and the clock's shadow
     private final float timeOffset = (float) (Math.random() * 300);
     private final Matrix matrix = new Matrix();
     private final float[] placeA = new float[3], placeB = new float[3];
@@ -151,7 +149,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         try {
             glassShader = new RuntimeShader(Shaders.GLASS_TEXT);
             glassPaint.setShader(glassShader);
-        } catch (RuntimeException | LinkageError e) {   // Android 12: no AGSL
+        } catch (RuntimeException | LinkageError e) {   // Android 9 to 12: no AGSL
             AppLog.w("glass clock unavailable: " + e.getMessage());
             glassShader = null;
         }
@@ -441,7 +439,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
 
         if (chromeDirty) recordChrome();
         chrome.setAlpha(first);
-        canvas.drawRenderNode(chrome);
+        chrome.draw(canvas);
         drawGlass(canvas, first, e);
         drawCaptions(canvas, up);
     }
@@ -499,12 +497,12 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     // MARK: - Corner: date and weather, glass clock, prices
 
     private void recordChrome() {
-        RecordingCanvas c = chrome.beginRecording(w, h);
+        Canvas c = chrome.beginRecording(w, h);
         try {
             float right = RIGHT * k;
             float x = right;
             HomeData.Weather wx = data.weather;
-            if (!Double.isNaN(wx.temp)) {
+            if (!Double.isNaN(wx.temp) && Prefs.weather()) {
                 String temp = HomeData.degrees(wx.temp);
                 float tw = cornerDate.measureText(temp);
                 c.drawText(temp, x - tw, DATE_BASE * k, cornerDate);
@@ -530,24 +528,25 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             // Compact prices under the clock, right-aligned.
             float base = (CLOCK_TOP + Ui.cap(cornerClock) / k + QUOTES_GAP) * k;
             float cap = Ui.cap(cornerQuote), gap = 7 * k, spacing = 26 * k;
+            int[] coins = HomeData.active();
             int n = HomeData.coinCount();
             String[] values = new String[n];
             float[] glyphs = new float[n];
             float total = spacing * (n - 1);
             for (int i = 0; i < n; i++) {
-                values[i] = HomeData.compact(data.prices[i]);
-                glyphs[i] = Glyphs.width(getContext(), HomeData.COINS[i], cap);
+                values[i] = HomeData.compact(data.prices[coins[i]]);
+                glyphs[i] = Glyphs.width(getContext(), HomeData.COINS[coins[i]], cap);
                 total += glyphs[i] + gap + cornerQuote.measureText(values[i]);
             }
             float qx = right - total;
             for (int i = 0; i < n; i++) {
-                Glyphs.coin(getContext(), c, HomeData.COINS[i], qx + glyphs[i] / 2, base - cap / 2, cap, 0xA6FFFFFF);
+                Glyphs.coin(getContext(), c, HomeData.COINS[coins[i]], qx + glyphs[i] / 2, base - cap / 2, cap, 0xA6FFFFFF);
                 qx += glyphs[i] + gap;
                 c.drawText(values[i], qx, base, cornerQuote);
                 qx += cornerQuote.measureText(values[i]) + spacing;
             }
             String stale = HomeData.staleness(data.pricesAt, 5 * 60_000L);
-            if (!stale.isEmpty()) c.drawText(stale, right - total - 24 * k - cornerStale.measureText(stale), base, cornerStale);
+            if (!stale.isEmpty() && n > 0) c.drawText(stale, right - total - 24 * k - cornerStale.measureText(stale), base, cornerStale);
         } finally {
             chrome.endRecording();
         }
@@ -672,7 +671,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     // MARK: - Photo caption (bottom left)
 
     private void recordCaption(Slide s) {
-        RecordingCanvas c = s.caption.beginRecording(w, h);
+        Canvas c = s.caption.beginRecording(w, h);
         try {
             float x = MARGIN * k, metaBase = META_BASE * k, titleBase = metaBase - 58 * k;
             String title = s.pick.title == null ? "" : s.pick.title;
@@ -699,7 +698,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             float a = current.startedAt == firstAt ? fadeIn(up - firstAt - 700, 900) : 1;
             current.caption.setAlpha(a);
             current.caption.setTranslationY(14 * k * (1 - a));
-            c.drawRenderNode(current.caption);
+            current.caption.draw(c);
             return;
         }
         long t = up - incoming.startedAt;
@@ -707,13 +706,13 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         if (out > 0.004f) {
             current.caption.setAlpha(out);
             current.caption.setTranslationY(0);
-            c.drawRenderNode(current.caption);
+            current.caption.draw(c);
         }
         float in = fadeIn(t - 1300, 900);
         if (in > 0.004f) {
             incoming.caption.setAlpha(in);
             incoming.caption.setTranslationY(14 * k * (1 - in));
-            c.drawRenderNode(incoming.caption);
+            incoming.caption.draw(c);
         }
     }
 
@@ -727,7 +726,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         }
         scene.drawBackground(canvas);
         if (dirty) {
-            RecordingCanvas rc = content.beginRecording(w, h);
+            Canvas rc = content.beginRecording(w, h);
             try {
                 drawContent(rc);
             } finally {
@@ -739,7 +738,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         content.setTranslationX((float) (40 * k * Math.sin(phase)));
         content.setTranslationY((float) (26 * k * Math.sin(2 * phase + 0.7)));
         content.setAlpha(alpha);
-        canvas.drawRenderNode(content);
+        content.draw(canvas);
     }
 
     private void drawContent(Canvas c) {
@@ -751,7 +750,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
 
         // Weather: symbol, temperature, high and low, centered under the clock.
         HomeData.Weather wx = data.weather;
-        if (!Double.isNaN(wx.temp)) {
+        if (!Double.isNaN(wx.temp) && Prefs.weather()) {
             float base = clockBase + 76 * k;
             String symbol = Symbols.weather(wx.code, wx.isDay);
             String now = HomeData.degrees(wx.temp);
@@ -769,21 +768,22 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
 
         // Prices near the bottom edge: small white logo + value, all four on one line.
         float cap = Ui.cap(quotePaint), spacing = 56 * k, gap = 10 * k;
+        int[] coins = HomeData.active();
         String[] values = new String[HomeData.coinCount()];
         float total = spacing * (values.length - 1);
         for (int i = 0; i < values.length; i++) {
-            values[i] = HomeData.price(data.prices[i]);
-            total += Glyphs.width(getContext(), HomeData.COINS[i], cap) + gap + quotePaint.measureText(values[i]);
+            values[i] = HomeData.price(data.prices[coins[i]]);
+            total += Glyphs.width(getContext(), HomeData.COINS[coins[i]], cap) + gap + quotePaint.measureText(values[i]);
         }
         float x = cx - total / 2, base = h - 92 * k;
         for (int i = 0; i < values.length; i++) {
-            float gw = Glyphs.width(getContext(), HomeData.COINS[i], cap);
-            Glyphs.coin(getContext(), c, HomeData.COINS[i], x + gw / 2, base - cap / 2, cap, 0x80FFFFFF);
+            float gw = Glyphs.width(getContext(), HomeData.COINS[coins[i]], cap);
+            Glyphs.coin(getContext(), c, HomeData.COINS[coins[i]], x + gw / 2, base - cap / 2, cap, 0x80FFFFFF);
             x += gw + gap;
             c.drawText(values[i], x, base, quotePaint);
             x += quotePaint.measureText(values[i]) + spacing;
         }
         String stale = HomeData.staleness(data.pricesAt, 5 * 60_000L);
-        if (!stale.isEmpty()) c.drawText(Ui.tr("cotações de ", "prices from ") + stale, cx, base + 38 * k, stalePaint);
+        if (!stale.isEmpty() && values.length > 0) c.drawText(Ui.tr("cotações de ", "prices from ") + stale, cx, base + 38 * k, stalePaint);
     }
 }

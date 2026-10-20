@@ -235,7 +235,7 @@
             <li><b>Instalar:</b>
               <div class="code"><code>adb connect 192.168.1.50:5555 &amp;&amp; adb install -r FreeMyTV.apk</code><button class="copy-btn" type="button" aria-label="Copiar comando">Copiar</button></div>
               Nas TVs TCL, libere também o funcionamento em segundo plano (a TCL bloqueia por padrão):
-              <div class="code"><code>adb shell appops set io.freemytv AUTO_START allow</code><button class="copy-btn" type="button" aria-label="Copiar comando">Copiar</button></div>
+              <div class="code"><code>adb shell &quot;appops set io.freemytv AUTO_START allow || appops set io.freemytv APP_AUTO_START allow&quot;</code><button class="copy-btn" type="button" aria-label="Copiar comando">Copiar</button></div>
             </li>
             <li><b>Na TV:</b> abra <em>Free My TV</em> → <em>Início</em> → <em>Free My TV</em>.</li>
           </ol>
@@ -270,7 +270,7 @@
         <details><summary>Muda a qualidade da imagem?</summary><p>Não. Os ajustes de imagem não são tocados e os vídeos passam pelo mesmo caminho no hardware. Medimos a mesma resolução e a mesma fonte de vídeo nos dois modos.</p></details>
         <details><summary>O que é desligado?</summary><p>A tela inicial e o protetor de tela de fábrica (substituídos), a tela de recuperação do Google TV, Play Games e YouTube Music e, nas TVs TCL, o TCL Channel, as mensagens, a demonstração de loja, o menu de hotel, os manuais e os apps de espelhamento e de registros. O Google Assistente só se você pedir no config.</p></details>
         <details><summary>Dá para deixar do meu jeito?</summary><p>Essa é a ideia. Abra a pasta no Claude Code e é só pedir: "coloque o Crunchyroll na prateleira", "mostre as cotações em reais", "configure para a minha Sony". Ele muda o código, compila o app e coloca na sua TV.</p></details>
-        <details><summary>Fica em português?</summary><p>Fica. O app segue o idioma da TV, em português ou inglês. Quer outro idioma? Peça ao Claude.</p></details>
+        <details><summary>Fica em português?</summary><p>Fica. O app segue o idioma da TV (português, inglês ou espanhol), ou o que você escolher nos ajustes dele. Quer outro idioma? Peça ao Claude.</p></details>
         <details><summary>Ele coleta algum dado?</summary><p>Não. Sem contas, sem análises, sem rastreamento. Ele só fala com o TMDB (destaques), o Open-Meteo (clima, com as coordenadas que você definir) e a Binance (cotações).</p></details>
         <details><summary>É grátis?</summary><p>Sim. Licença MIT, e a chave do TMDB também é grátis.</p></details>
       </div>
