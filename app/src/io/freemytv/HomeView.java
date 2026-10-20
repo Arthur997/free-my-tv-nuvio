@@ -87,9 +87,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static final int Z_STATUS = 0, Z_HERO = 1, Z_SHELF = 2, Z_DRAWER = 3;
     private static final ExecutorService LOADER = Executors.newSingleThreadExecutor();
     // Light design (the L_ constants): title, tab bar, three recommendation cards and the shelf.
-    // The tab bar is a 68 px capsule; the cards sit on the 5-column grid (the wide one spans 3).
-    private static final float L_TITLE_BASE = 130, L_TABBAR_TOP = 158, L_TABBAR_H = 68, L_CARDS_TOP = 262, L_CARD_H = 442;
-    private static final float L_TALL_W = 320, L_CARD_GAP = 40, L_BUTTON = 68, L_BUTTON_GAP = 20, L_BUTTON_CY = 103;
+    // The tab bar is a 68 px capsule.
+    private static final float L_TITLE_BASE = 130, L_TABBAR_TOP = 158, L_TABBAR_H = 68;
+    // Three equal 16:9 cards (the photos are 16:9: nothing cut), the row as wide as the content, and the cards with
+    // their titles centered between the tab bar and the shelf; L_CARD_TEXT is the room the title and its details take.
+    private static final float L_CARD_GAP = 48, L_CARD_TEXT = 92, L_BUTTON = 68, L_BUTTON_GAP = 20, L_BUTTON_CY = 103;
     private static final float L_PLATTER_TOP = 814, L_TILE_H = 126;
     private static final int L_INK = 0xFF1D1D1F, L_DIM = 0xFF6E6E73, L_FAINT = 0xFF8E8E93;
     private static final String[] TABS = {"Explorar", "Filmes", "Séries"};
@@ -2189,11 +2191,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             topRects[3 + i].set(right - b, cy - b / 2, right, cy + b / 2);
             right -= b + L_BUTTON_GAP * k;
         }
-        float top = L_CARDS_TOP * k, ch = L_CARD_H * k, g = L_CARD_GAP * k, left = MARGIN * k, tall = L_TALL_W * k;
-        float wide = (CONTENT_R - MARGIN) * k - 2 * tall - 2 * g;
-        cardRects[0].set(left, top, left + wide, top + ch);
-        cardRects[1].set(cardRects[0].right + g, top, cardRects[0].right + g + tall, top + ch);
-        cardRects[2].set(cardRects[1].right + g, top, cardRects[1].right + g + tall, top + ch);
+        float g = L_CARD_GAP * k, left = MARGIN * k;
+        float cw = ((CONTENT_R - MARGIN) * k - 2 * g) / 3, ch = cw * 9 / 16;
+        float above = (L_TABBAR_TOP + L_TABBAR_H) * k, below = L_PLATTER_TOP * k;
+        float top = above + (below - above - ch - L_CARD_TEXT * k) / 2;
+        for (int i = 0; i < 3; i++) cardRects[i].set(left + i * (cw + g), top, left + i * (cw + g) + cw, top + ch);
         heroDirty = statusDirty = true;
     }
 
@@ -2215,9 +2217,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             }
         }
         cardCounter = all.size() > 3 ? (cardOffset + 1) + "–" + (cardOffset + list.size()) + Ui.tr(" de ", " of ") + all.size() : "";
-        // On demand: the three on screen and the next three of this tab only (another tab loads when it's opened), so
-        // moving on shows them right away; the rest of the list costs nothing until it comes up.
+        // A queue, in this order (the photos load one at a time, first asked first): the three on screen and the next
+        // three of this tab, then the first three of Explore, Movies and Shows, so switching tabs is instant. The rest
+        // of a top's list costs nothing until it comes up.
         for (int i = cardOffset; i < Math.min(all.size(), cardOffset + 6); i++) recs.backdrop(all.get(i));
+        for (Recs.Pick p : recs.wanted()) recs.backdrop(p);
         Backdrop b = cards.isEmpty() ? null : recs.backdrop(cards.get(0));
         if (cards.isEmpty() || b != null) showBackdrop(b);
         heroDirty = true;
@@ -2303,9 +2307,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         for (int i = 0; i < 3; i++) if (i != top) drawLightCard(c, i);
         if (top >= 0) drawLightCard(c, top);
         if (!cardCounter.isEmpty()) {
-            // Under the last card, on the right: where the top's list is ("4–6 of 10").
+            // Above the last card, on the right: where the top's list is ("4–6 of 10").
             float cw = lCardMeta.measureText(cardCounter);
-            c.drawText(cardCounter, cardRects[2].right - cw, cardRects[2].bottom + 80 * k, lCardMeta);
+            c.drawText(cardCounter, cardRects[2].right - cw, cardRects[2].top - 24 * k, lCardMeta);
         }
         if (showClock) drawTopClock(c);
         else if (HomeData.coinCount() > 0) drawQuotes(c);
@@ -2367,8 +2371,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /**
      * Recommendation card: the title's photo (already at the focused card size, so it stays sharp), rounded corners and
-     * a soft shadow; when focused, it grows 5%, rises and lights up its border. Below it, the title (and on the large
-     * card, genre · runtime · service).
+     * a soft shadow; when focused, it grows 5%, rises and lights up its border. Below it, the title and its details
+     * (genre · runtime · service).
      */
     private void drawLightCard(Canvas c, int i) {
         RectF base = cardRects[i];
@@ -2387,7 +2391,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         shadows.draw(c, tmp, r0, DEEP_BLUR * k, shadowDeep);
         c.restore();
         Backdrop b = p == null ? null : recs.backdrop(p);
-        Bitmap img = b == null ? null : (i == 0 ? b.wide : b.tall);
+        Bitmap img = b == null ? null : b.wide;
         if (img != null) {
             roundImage(c, img, cell, r);
         } else {
@@ -2402,7 +2406,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (p == null) return;
         fitCardText(i, p, bw);
         c.drawText(cardTitleText[i], base.left, base.bottom + 46 * k, lCardTitle);
-        if (i == 0 && !cardMetaText[i].isEmpty()) c.drawText(cardMetaText[i], base.left, base.bottom + 80 * k, lCardMeta);
+        if (!cardMetaText[i].isEmpty()) c.drawText(cardMetaText[i], base.left, base.bottom + 80 * k, lCardMeta);
     }
 
     // Card titles cut to fit, kept per card on screen: measured again only when the title, its details or the size change.

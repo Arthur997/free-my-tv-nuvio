@@ -112,9 +112,10 @@ final class Recs {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final List<Listener> listeners = new ArrayList<>();
-    // Built and ready to draw, least recently drawn first: the three on screen and the next three stay.
+    // Built and ready to draw, least recently drawn first: this tab's six (on screen and next) and the first three of
+    // each tab fit (onTrimMemory lets them go when the TV is short of memory).
     private final Map<String, Backdrop> images = new LinkedHashMap<>(16, 0.75f, true);
-    private static final int READY_LIGHT = 6, READY_GLASS = 4;
+    private static final int READY_LIGHT = 15, READY_GLASS = 4;
     private final java.util.Set<String> pending = new java.util.HashSet<>();
     private volatile List<Pick> picks = new ArrayList<>();
     private volatile int period = -1;
