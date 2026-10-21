@@ -147,7 +147,8 @@ public class SettingsActivity extends Activity {
     }
 
     static final class SettingsView extends View implements Choreographer.FrameCallback {
-        private static final int MAIN = 0, HOME_CHOICE = 1, HOME_SETTINGS = 2, REMOTE_KEYS = 3, PICKER = 4, SHELF_EDIT = 5, MORE = 6;
+        private static final int MAIN = 0, HOME_CHOICE = 1, HOME_SETTINGS = 2, REMOTE_KEYS = 3, PICKER = 4, SHELF_EDIT = 5, MORE = 6,
+                WATCH_APPS = 7;
         private static final float LIST_ROW_H = 68, LIST_ROW_GAP = 6;
         private static final int PICK_VISIBLE = 9;
         private static final float LIST_X = 1000, LIST_R = 1824, LIST_TOP = 186, ROW_H = 66, ROW_GAP = 6, CHOICE_H = 104;   // the menu: 7 rows and the notes below fit
@@ -165,6 +166,7 @@ public class SettingsActivity extends Activity {
         // The shelf editor: the apps it can hold (selected ones first, in order) and the selection.
         private final List<String[]> shelfRows = new ArrayList<>();
         private final List<String> shelfOrder = new ArrayList<>();
+        private final List<String[]> watchRows = new ArrayList<>();   // More Settings > Continue watching: {package, name}
         private int pickCurrent, pickScroll;
         // Where the picker came from (that screen and row get the focus back), its title, and what a pick does.
         private int pickReturnScreen, pickReturnRow;
@@ -264,6 +266,12 @@ public class SettingsActivity extends Activity {
                     if (at >= pickLabels.size()) return "";
                     return pickLabels.get(at) + (at == pickCurrent ? Ui.tr(", escolhido", ", selected") : "")
                             + ", " + (at + 1) + Ui.tr(" de ", " of ") + pickLabels.size();
+                }
+                case WATCH_APPS: {
+                    int at = pickScroll + row;
+                    if (at >= watchRows.size()) return "";
+                    String[] app = watchRows.get(at);
+                    return app[1] + ", " + onOff(!Prefs.watchNextOff(app[0]));
                 }
                 case SHELF_EDIT: {
                     int at = pickScroll + row;
@@ -388,6 +396,7 @@ public class SettingsActivity extends Activity {
                 case MORE: return moreLabels().length;
                 case PICKER: return Math.min(PICK_VISIBLE, pickLabels.size());
                 case SHELF_EDIT: return Math.min(PICK_VISIBLE, shelfRows.size());
+                case WATCH_APPS: return Math.min(PICK_VISIBLE, watchRows.size());
                 default: return Prefs.KEYS.length;
             }
         }
@@ -413,7 +422,7 @@ public class SettingsActivity extends Activity {
             c.drawText(Ui.tr("Início e tela de descanso da TV", "Your TV's home screen and screensaver"), cx, 660 * k, subtitle);
             c.drawText(versionName(getContext()), cx, 704 * k, version);
 
-            if (screen == MAIN) drawMain(c, seconds); else if (screen == HOME_CHOICE) drawChoice(c); else if (screen == PICKER) drawPicker(c); else if (screen == SHELF_EDIT) drawShelfEditor(c); else drawList(c);
+            if (screen == MAIN) drawMain(c, seconds); else if (screen == HOME_CHOICE) drawChoice(c); else if (screen == PICKER) drawPicker(c); else if (screen == SHELF_EDIT) drawShelfEditor(c); else if (screen == WATCH_APPS) drawWatchApps(c); else drawList(c);
         }
 
         private void drawMain(Canvas c, float seconds) {
@@ -654,6 +663,9 @@ public class SettingsActivity extends Activity {
                             if (screen == PICKER) {
                                 focus = pickReturnRow;
                                 screen = pickReturnScreen;
+                            } else if (screen == WATCH_APPS) {
+                                focus = MORE_WATCH;
+                                screen = MORE;
                             } else {
                                 focus = screen == HOME_SETTINGS ? 2 : screen == MORE ? 3 : screen == SHELF_EDIT ? 4 : screen == REMOTE_KEYS ? 5 : 0;
                                 screen = MAIN;
@@ -722,7 +734,7 @@ public class SettingsActivity extends Activity {
         }
 
         /** More Settings: the picks (where they open, which list, how many), prices, the weather's city, the shelf, the top. */
-        private static final int MORE_TOP_COUNT = 2, MORE_TMDB_KEY = 9;
+        private static final int MORE_TOP_COUNT = 2, MORE_TMDB_KEY = 9, MORE_WATCH = 10;
 
         /** Whether there is a key and where it comes from; never the key itself. */
         private String tmdbKeyState() {
@@ -737,14 +749,14 @@ public class SettingsActivity extends Activity {
                     Ui.tr("Atualizar cotações", "Refresh prices"), Ui.tr("Cidade do clima", "Weather city"),
                     Ui.tr("Capa dos apps na prateleira", "Shelf app art"), Ui.tr("Topo do Início", "Top of Home"),
                     Ui.tr("Tela de descanso", "Screensaver"), Ui.tr("Modo desempenho", "Performance mode"),
-                    Ui.tr("Chave do TMDB", "TMDB key")};
+                    Ui.tr("Chave do TMDB", "TMDB key"), Ui.tr("Continuar assistindo", "Continue Watching", "Seguir viendo")};
         }
 
         private String[] moreValues() {
             String[] every = {Ui.tr("Tempo real", "Live"), "1 min", "5 min"};
             int city = Prefs.cityIndex();
             return new String[] {targetNames().get(targetIndex()),
-                    Prefs.topRecs() ? Ui.tr("Top do dia", "Today's top") : Ui.tr("Original (3 por hora)", "Original (3 an hour)"),
+                    Prefs.topRecs() ? Ui.tr("Top do dia", "Today's top") : Ui.tr("Original (5 por hora)", "Original (5 an hour)"),
                     String.valueOf(Prefs.topCount()),
                     every[Prefs.pricesEveryIndex()],
                     city < 0 ? Prefs.city() + Ui.tr(" (padrão)", " (default)") : Prefs.CITIES[city][0],
@@ -752,7 +764,15 @@ public class SettingsActivity extends Activity {
                     Prefs.topClock() ? Ui.tr("Relógio e clima", "Clock and weather") : Ui.tr("Cotações", "Prices"),
                     Prefs.ownScreensaver() ? "Free My TV" : Ui.tr("Da TV (fotos do Google)", "The TV's own (Google photos)"),
                     Prefs.performance() ? Ui.tr("Ligado (sem vidro)", "On (no glass)") : Ui.tr("Desligado", "Off"),
-                    tmdbKeyState()};
+                    tmdbKeyState(), watchAppsState()};
+        }
+
+        /** Continue watching: every app, or how many are kept out. */
+        private static String watchAppsState() {
+            int off = Prefs.watchNextOffCount();
+            return off == 0 ? Ui.tr("Todos os apps", "All apps", "Todas las apps")
+                    : Ui.tr(off + (off == 1 ? " app desligado" : " apps desligados"), off + (off == 1 ? " app off" : " apps off"),
+                            off + (off == 1 ? " app desactivada" : " apps desactivadas"));
         }
 
         /** "Open picks in": each title's own streaming app (the default), then the apps that open IMDb links. */
@@ -809,7 +829,7 @@ public class SettingsActivity extends Activity {
                     openPicker(title, targetNames(), targetIndex(), row, at -> Prefs.setRecsTarget(targetKeys()[at]));
                     return true;
                 case 1:
-                    java.util.Collections.addAll(l, Ui.tr("Original (3 por hora)", "Original (3 an hour)"), Ui.tr("Top do dia", "Today's top"));
+                    java.util.Collections.addAll(l, Ui.tr("Original (5 por hora)", "Original (5 an hour)"), Ui.tr("Top do dia", "Today's top"));
                     openPicker(title, l, Prefs.topRecs() ? 1 : 0, row, at -> Prefs.setTopRecs(at == 1));
                     return true;
                 case MORE_TOP_COUNT:
@@ -977,11 +997,11 @@ public class SettingsActivity extends Activity {
         }
 
         private boolean scrolling() {
-            return screen == PICKER || screen == SHELF_EDIT;
+            return screen == PICKER || screen == SHELF_EDIT || screen == WATCH_APPS;
         }
 
         private int listSize() {
-            return screen == SHELF_EDIT ? shelfRows.size() : pickLabels.size();
+            return screen == SHELF_EDIT ? shelfRows.size() : screen == WATCH_APPS ? watchRows.size() : pickLabels.size();
         }
 
         // MARK: - Shelf editor
@@ -1059,6 +1079,54 @@ public class SettingsActivity extends Activity {
             c.drawText(Ui.tr("OK põe ou tira da prateleira (até " + HomeApps.MAX_SHELF + "). ← → mudam a ordem.",
                     "OK adds or removes (up to " + HomeApps.MAX_SHELF + "). ← → change the order.",
                     "OK pone o quita del estante (hasta " + HomeApps.MAX_SHELF + "). ← → cambian el orden."), LIST_X * k + 30 * k, hy, hint);
+        }
+
+        // MARK: - Continue watching: which apps may show
+
+        /** The apps with something to continue now (each app writes its own list), on or off for the home screen. */
+        private void openWatchApps() {
+            watchRows.clear();
+            watchRows.addAll(WatchNext.apps(getContext()));
+            pickScroll = 0;
+            focus = 0;
+            screen = WATCH_APPS;
+        }
+
+        private void toggleWatchApp() {
+            if (watchRows.isEmpty()) return;
+            String pkg = watchRows.get(pickScroll + focus)[0];
+            Prefs.setWatchNextOff(pkg, !Prefs.watchNextOff(pkg));
+        }
+
+        private void drawWatchApps(Canvas c) {
+            Paint heading = Ui.text(Ui.displaySemibold, 34 * k, fg(0xFFFFFFFF));
+            c.drawText(Ui.tr("Continuar assistindo", "Continue Watching", "Seguir viendo"), LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
+            int rows = rowCount();
+            for (int i = 0; i < rows; i++) {
+                String[] app = watchRows.get(pickScroll + i);
+                boolean on = !Prefs.watchNextOff(app[0]);
+                float y = (LIST_TOP + 20 + i * (LIST_ROW_H + LIST_ROW_GAP)) * k;
+                rowRect.set(LIST_X * k, y, LIST_R * k, y + LIST_ROW_H * k);
+                float f = drawRowBackground(c, i);
+                rowLabel.setColor(blend(on ? fg(0xF2FFFFFF) : fg(0x80FFFFFF), on ? INK : 0x801C1C1E, f));
+                rowValue.setColor(blend(fg(0xB3FFFFFF), 0xB31C1C1E, f));
+                float base = rowRect.centerY() + Ui.halfCap(rowLabel);
+                c.drawText(TextUtils.ellipsize(app[1], new TextPaint(rowLabel), 520 * k, TextUtils.TruncateAt.END).toString(), rowRect.left + 30 * k, base, rowLabel);
+                c.drawText(onOff(on), rowRect.right - 30 * k, base, rowValue);
+            }
+            Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
+            float hy = (LIST_TOP + 20 + rows * (LIST_ROW_H + LIST_ROW_GAP) + 36) * k;
+            String text = !WatchNext.allowed(getContext())
+                    ? Ui.tr("Sem acesso à lista dos apps: troque o Início para Free My TV de novo.",
+                            "No access to the apps' lists: switch the home screen to Free My TV again.",
+                            "Sin acceso a la lista de las apps: cambia el inicio a Free My TV otra vez.")
+                    : watchRows.isEmpty()
+                    ? Ui.tr("Nenhum app tem algo para continuar agora.", "No app has anything to continue right now.",
+                            "Ninguna app tiene algo para seguir ahora.")
+                    : Ui.tr("OK liga ou desliga. Só aparecem os apps com algo para continuar.",
+                            "OK turns it on or off. Only apps with something to continue are listed.",
+                            "OK activa o desactiva. Solo aparecen las apps con algo para seguir.");
+            c.drawText(text, LIST_X * k + 30 * k, hy, hint);
         }
 
         /** The app a remote button opens (row `focus` of Remote Buttons). */
@@ -1166,6 +1234,13 @@ public class SettingsActivity extends Activity {
                 return;
             } else if (screen == REMOTE_KEYS) {
                 openKeyPicker(focus);
+            } else if (screen == WATCH_APPS) {
+                toggleWatchApp();
+                invalidate();
+                spoken.focusMoved();
+                return;
+            } else if (screen == MORE && focus == MORE_WATCH) {
+                openWatchApps();
             } else if (screen == MORE && focus == MORE_TMDB_KEY) {
                 activity.askTmdbKey();
                 return;

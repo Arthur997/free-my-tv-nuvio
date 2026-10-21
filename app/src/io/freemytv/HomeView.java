@@ -98,9 +98,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static final int SLOTS = Recs.ON_SCREEN;
     private static final float L_PLATTER_TOP = 814, L_TILE_H = 126;
     private static final int L_INK = 0xFF1D1D1F, L_DIM = 0xFF6E6E73, L_FAINT = 0xFF8E8E93;
-    private static final String[] TABS = {"Explorar", "Filmes", "Séries"};
-    private static final String[] TABS_EN = {"Explore", "Movies", "Shows"};
-    private static final String[] TABS_ES = {"Explorar", "Películas", "Series"};
+    // The first tab is what to continue (the apps' Watch Next lists, WatchNext); the others, the picks (Recs).
+    private static final String[] TABS = {"Continuar assistindo", "Filmes", "Séries"};
+    private static final String[] TABS_EN = {"Continue Watching", "Movies", "Shows"};
+    private static final String[] TABS_ES = {"Seguir viendo", "Películas", "Series"};
     private static final String[] TAB_KIND = {null, "movie", "tv"};
     private static final int Z_TOP = 4, Z_CARDS = 5;
 
@@ -139,6 +140,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private List<Recs.Pick> cards = new ArrayList<>();      // the ones on screen (up to 3)
     // The tab's whole list (the top can have up to 20) and where the three on screen start in it; "4–6 of 10".
     private List<Recs.Pick> allCards = new ArrayList<>();
+    // Continue watching, read in the background on resume and every tick; `watchingKey` tells when it changed.
+    private List<Recs.Pick> watching = new ArrayList<>();
+    private String watchingKey = "";
+    private boolean watchAllowed = true;
+    private static long askedWatchAt;
     private int cardOffset;
     private String cardCounter = "";
     private final Spring[] topFocus = new Spring[6];
@@ -310,7 +316,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             checkNotices();
             updatePalette();
             checkNight(true);
-            updatePicks();      // three new ones every hour
+            updatePicks();      // five new ones every hour
+            loadWatching();
             wake();
             handler.postDelayed(this, 15_000);
         }
@@ -387,6 +394,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         handler.postDelayed(tick, 15_000);
         checkNotices();
         reload();
+        askWatchPermission();
+        loadWatching();
         updatePalette();
         updatePicks();
         hideMenu();   // back from App info or the uninstall question
@@ -2458,8 +2467,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      * background taken from the first one.
      */
     private void updateCards() {
-        List<Recs.Pick> all = recs.now(TAB_KIND[tab]);
-        if (!samePicks(all, allCards)) allCards = all;
+        List<Recs.Pick> all = tab == 0 ? watching : recs.now(TAB_KIND[tab]);
+        allCards = all;   // the same titles may come back with new details (how much is left)
         cardOffset = Math.max(0, Math.min(cardOffset, all.size() - SLOTS));
         if (cardShift.value >= 0.999f) shiftFrom = shiftTo = cardOffset;   // not mid-glide
         List<Recs.Pick> list = new ArrayList<>(all.subList(cardOffset, Math.min(all.size(), cardOffset + SLOTS)));
@@ -2558,6 +2567,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             c.drawText(tabs()[i], r.centerX() - p.measureText(tabs()[i]) / 2, r.centerY() + Ui.halfCap(p), p);
         }
         drawCards(c);
+        if (tab == 0 && cards.isEmpty()) drawNothingToContinue(c);
         if (!cardCounter.isEmpty()) {
             // Above the last column, on the right: where the top's list is ("5–9 of 20").
             float cw = lCardMeta.measureText(cardCounter);
@@ -2682,31 +2692,39 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         Bitmap img = b == null ? null : big > 0.5f ? b.wide : b.small;
         if (img != null) {
             roundImage(c, img, cell, r);
-            drawUnitShader(c, cell, r, veil, CARD_SCRIM, 1);
         } else {
             fill.setShader(null);
             fill.setColor(tone(0xFFDADADF, 0xFF2C2C2E));
             c.drawRoundRect(cell, r, r, fill);
         }
+        // A title with no picture at all (some apps' Watch Next rows) still shows its name on the placeholder.
+        boolean named = img != null || p.backdrop == null;
+        // The apps' own pictures for what to continue usually have the name written on them: only the details (app,
+        // time left) go on top, and only on the big card.
+        boolean ownName = p.intentUri != null && img != null;
+        if (ownName && big < 0.01f) named = false;
+        if (named) drawUnitShader(c, cell, r, veil, CARD_SCRIM, 1);
         if (f > 0.01f) {
             drawUnitShader(c, cell, r, sheen, CARD_SHEEN, f);
             drawUnitShader(c, cell, r, rim, CARD_RIM, f);
         }
-        if (img != null) drawCardName(c, p, cell, big);
+        float lift = p.progress > 0.01f ? drawProgress(c, cell, p.progress, s) : 0;
+        if (named) drawCardName(c, p, cell, big, lift, !ownName);
         if (save >= 0) c.restoreToCount(save);
     }
 
     /** The logo (or the name) at the bottom left of the photo; on the big card, the genre and the app below it. */
-    private void drawCardName(Canvas c, Recs.Pick p, RectF card, float big) {
+    private void drawCardName(Canvas c, Recs.Pick p, RectF card, float big, float lift, boolean withName) {
         String[] text = cardTexts(p);
         float cw = card.width(), ch = card.height();
         float x = card.left + cw * 0.05f;
         float metaAlpha = big * big;
-        float bottom = card.bottom - ch * (0.08f + 0.02f * big) - (metaAlpha > 0.01f && !text[2].isEmpty() ? 40 * k * big : 0);
+        float bottom = card.bottom - lift - ch * (0.08f + 0.02f * big) - (metaAlpha > 0.01f && !text[2].isEmpty() ? 40 * k * big : 0);
         if (metaAlpha > 0.01f && !text[2].isEmpty()) {
             onPhotoMeta.setAlpha(Math.round(217 * metaAlpha));
-            c.drawText(text[2], x, card.bottom - ch * 0.08f, onPhotoMeta);
+            c.drawText(text[2], x, card.bottom - lift - ch * 0.08f, onPhotoMeta);
         }
+        if (!withName) return;
         Bitmap logo = recs.logo(p);
         if (logo != null) {
             float maxW = cw * (0.5f - 0.08f * big), maxH = ch * (0.3f - 0.04f * big);
@@ -2717,6 +2735,67 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         onPhotoTitle.setTextSize((24 + 16 * big) * k);
         c.drawText(big > 0.5f ? text[1] : text[0], x, bottom, onPhotoTitle);
+    }
+
+    /**
+     * How much was watched, as on Google TV: a thin bar along the bottom of the photo. Returns the room it takes, so
+     * the name sits above it.
+     */
+    private float drawProgress(Canvas c, RectF card, float progress, float s) {
+        float pad = 16 * k * s, height = 6 * k * s, bottom = card.bottom - 14 * k * s;
+        tmp.set(card.left + pad, bottom - height, card.right - pad, bottom);
+        fill.setShader(null);
+        fill.setColor(0x4DFFFFFF);
+        c.drawRoundRect(tmp, height / 2, height / 2, fill);
+        tmp.right = tmp.left + Math.max(height, tmp.width() * progress);
+        fill.setColor(0xF2FFFFFF);
+        c.drawRoundRect(tmp, height / 2, height / 2, fill);
+        return 14 * k * s + height;
+    }
+
+    /** Continue watching with nothing in it: why, in the cards' place. */
+    private void drawNothingToContinue(Canvas c) {
+        String title = watchAllowed ? Ui.tr("Nada para continuar ainda", "Nothing to continue yet", "Nada para seguir todavía")
+                : Ui.tr("Sem acesso ao que você assiste", "No access to what you watch", "Sin acceso a lo que ves");
+        String line = watchAllowed
+                ? Ui.tr("O que você começar no YouTube, na Netflix e em outros apps aparece aqui.",
+                        "What you start on YouTube, Netflix and other apps shows up here.",
+                        "Lo que empieces en YouTube, Netflix y otras apps aparece aquí.")
+                : Ui.tr("Aceite quando a TV pedir, ou troque o Início de novo em Free My TV → Início.",
+                        "Allow it when the TV asks, or switch the home screen again in Free My TV → Home Screen.",
+                        "Acéptalo cuando el TV lo pida, o cambia el inicio otra vez en Free My TV → Inicio.");
+        float cx = (cardRects[0].left + cardRects[4].right) / 2, cy = (cardRects[0].top + cardRects[0].bottom) / 2;
+        float tw = lTabOn.measureText(title), lw = lCardMeta.measureText(line);
+        lTabOn.setColor(tone(L_INK, WHITE));
+        c.drawText(title, cx - tw / 2, cy - 8 * k, lTabOn);
+        c.drawText(line, cx - lw / 2, cy + 36 * k, lCardMeta);
+    }
+
+    /** Reads the apps' Watch Next lists in the background; the tab is redrawn only when something changed. */
+    private void loadWatching() {
+        final Context c = getContext().getApplicationContext();
+        LOADER.execute(() -> {
+            final boolean allowed = WatchNext.allowed(c);
+            final List<Recs.Pick> list = WatchNext.load(c);
+            StringBuilder key = new StringBuilder();
+            for (Recs.Pick p : list) key.append(Recs.key(p)).append(p.meta).append(Math.round(p.progress * 100)).append('|');
+            final String newKey = key.toString();
+            handler.post(() -> {
+                if (newKey.equals(watchingKey) && allowed == watchAllowed) return;
+                watchingKey = newKey;
+                watchAllowed = allowed;
+                watching = list;
+                if (tab == 0) updateCards();
+            });
+        });
+    }
+
+    /** No permission yet (the switch grants it; an older switch didn't): the TV asks once in a while. */
+    private void askWatchPermission() {
+        boolean askedLately = askedWatchAt != 0 && SystemClock.uptimeMillis() - askedWatchAt < 10 * 60_000L;
+        if (WatchNext.allowed(activity) || askedLately) return;
+        askedWatchAt = SystemClock.uptimeMillis();
+        activity.requestPermissions(new String[] {WatchNext.PERMISSION}, 1);
     }
 
     // Each title's name and details cut to fit (small card, big card), made once: no work while the cards move.

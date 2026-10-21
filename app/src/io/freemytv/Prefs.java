@@ -202,6 +202,25 @@ final class Prefs {
         put("shelf", sb.toString());
     }
 
+    // MARK: - Continue watching
+
+    /** Apps kept out of "Continue watching" (More Settings); every app shows until turned off. */
+    static boolean watchNextOff(String pkg) {
+        return ("," + sp().getString("watchNextOff", "") + ",").contains("," + pkg + ",");
+    }
+
+    static void setWatchNextOff(String pkg, boolean off) {
+        List<String> list = new ArrayList<>();
+        for (String p : sp().getString("watchNextOff", "").split(",")) if (!p.isEmpty() && !p.equals(pkg)) list.add(p);
+        if (off) list.add(pkg);
+        put("watchNextOff", String.join(",", list));
+    }
+
+    static int watchNextOffCount() {
+        String v = sp().getString("watchNextOff", "");
+        return v.isEmpty() ? 0 : v.split(",").length;
+    }
+
     // MARK: - Remote buttons
 
     private static String defaultApp(int keyCode) {

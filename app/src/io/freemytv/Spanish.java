@@ -124,7 +124,7 @@ final class Spanish {
             case "Picks": return "Recomendaciones";
             case "Titles in the top": return "Títulos en el top";
             case "Today's top": return "Top del día";
-            case "Original (3 an hour)": return "Original (3 por hora)";
+            case "Original (5 an hour)": return "Original (5 por hora)";
             case "Performance mode": return "Modo rendimiento";
             case "OK opens the list of apps.": return "OK abre la lista de apps.";
             case "OK opens the choices; ← and → change it right away.": return "OK abre las opciones; ← y → lo cambian al instante.";

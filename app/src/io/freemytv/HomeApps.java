@@ -378,6 +378,15 @@ final class HomeApps {
         Intent intent;
         switch (it.kind) {
             case APP:
+                if (it.uri != null && it.uri.startsWith("intent:")) {
+                    // Continue watching: the app's own link to the title, as it wrote it in the Watch Next list.
+                    try {
+                        intent = Intent.parseUri(it.uri, Intent.URI_INTENT_SCHEME);
+                    } catch (java.net.URISyntaxException e) {
+                        intent = launchIntent(a.getPackageManager(), it.pkg);
+                    }
+                    break;
+                }
                 if (it.uri != null) {
                     // A fresh task: an already open Nuvio would otherwise just come back where it was.
                     intent = new Intent(Intent.ACTION_VIEW, Uri.parse(it.uri)).setPackage(it.pkg)

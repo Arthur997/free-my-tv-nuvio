@@ -233,6 +233,8 @@ final class HomeMode {
                     AppLog.w("remote buttons service: " + e.getMessage());
                 }
             }
+            // "Continue watching" reads the apps' Watch Next lists (WatchNext): granted here, so the TV doesn't ask.
+            adb.shell("pm grant " + PKG + " " + WatchNext.PERMISSION);
             notice(c, Ui.tr("Free My TV ligado: Início novo, " + disabled.size() + " apps desligados.",
                     "Free My TV is on: new home screen, " + disabled.size() + " apps turned off."));
             busy(c, Ui.tr("Medindo o Free My TV…", "Measuring Free My TV…"));

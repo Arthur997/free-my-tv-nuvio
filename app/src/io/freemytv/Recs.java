@@ -50,6 +50,10 @@ final class Recs {
         String kind;            // "movie" or "tv"
         String title, backdrop, meta = "", app, pkg, imdb;
         String logo;            // the title's logo on TMDB (a transparent PNG), or null
+        // Continue watching (WatchNext): the app's own link to where it stopped, and how much was watched (0 to 1).
+        // Its `backdrop` is then the picture's address (https://, content:// or android.resource://), not a TMDB path.
+        String intentUri;
+        float progress;
         boolean detailed;
     }
 
@@ -221,6 +225,7 @@ final class Recs {
     /** Name of the service the pick is on ("Netflix"), or empty. */
     static String serviceName(Pick p) {
         if (p == null || p.app == null) return "";
+        if (p.intentUri != null) return p.app;   // continue watching: the app's own name
         String[] a = linkApp(p.app);
         return a != null ? a[1] : SERVICE_NAME.get(p.app);
     }
@@ -242,6 +247,7 @@ final class Recs {
 
     /** What "Watch" opens: the title in the app picked in More Settings, or the streaming app it is on. */
     static HomeApps.Item item(Pick p) {
+        if (p.intentUri != null) return HomeApps.title(p.pkg, p.intentUri, p.app);   // continue watching
         String[] a = linkApp(p.app);
         if (a == null) return HomeApps.app(p.pkg, serviceName(p));
         String link = (p.kind.equals("movie") ? a[3] : a[4]).replace("{id}", p.imdb);
@@ -298,7 +304,9 @@ final class Recs {
     }
 
     private File imageFile(Pick p) {
-        return new File(new File(context.getCacheDir(), "recs"), p.backdrop.replace("/", ""));
+        // A continue-watching picture is a whole address: a short name made from it.
+        String name = p.backdrop.startsWith("/") ? p.backdrop.replace("/", "") : "watch-" + Integer.toHexString(p.backdrop.hashCode());
+        return new File(new File(context.getCacheDir(), "recs"), name);
     }
 
     /** With a key: fetches the list if stale or the time of day (morning/afternoon/night) changed; then the details. */
@@ -424,7 +432,7 @@ final class Recs {
     List<Pick> wanted() {
         List<Pick> out = new ArrayList<>();
         java.util.Set<String> seen = new java.util.HashSet<>();
-        for (String kind : new String[] {null, "movie", "tv"}) {
+        for (String kind : new String[] {"movie", "tv"}) {   // the first tab is continue watching (WatchNext)
             // The first five of each tab (all there is in the original): in the top, the rest load as you browse.
             List<Pick> tab = now(kind);
             for (int i = 0; i < Math.min(ON_SCREEN, tab.size()); i++) if (seen.add(key(tab.get(i)))) out.add(tab.get(i));
@@ -797,7 +805,27 @@ final class Recs {
     // MARK: - Images (TMDB originals on disk, up to 24 so the whole list fits; this hour's kept ready in memory)
 
     private void download(Pick p) throws IOException {
-        fetch(IMAGES + imageSize() + p.backdrop, imageFile(p));
+        if (p.backdrop.startsWith("/")) {
+            fetch(IMAGES + imageSize() + p.backdrop, imageFile(p));
+            return;
+        }
+        InputStream inside = WatchNext.open(context, p.backdrop);   // null: on the internet
+        if (inside == null) fetch(p.backdrop, imageFile(p));
+        else save(inside, imageFile(p));
+    }
+
+    /** Copies a picture another app shares (content://) to `f`, like a download. */
+    private static void save(InputStream source, File f) throws IOException {
+        //noinspection ResultOfMethodCallIgnored
+        f.getParentFile().mkdirs();
+        File part = new File(f.getPath() + ".part");
+        try (InputStream in = source; FileOutputStream out = new FileOutputStream(part)) {
+            byte[] buffer = new byte[16384];
+            int n;
+            while ((n = in.read(buffer)) > 0) out.write(buffer, 0, n);
+        }
+        if (!part.renameTo(f)) throw new IOException("couldn't save the image");
+        prune(f.getParentFile());
     }
 
     /** Saves `url` to `f` (an image already on disk isn't downloaded again), keeping the newest few in its folder. */
