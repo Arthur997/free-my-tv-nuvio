@@ -127,9 +127,9 @@ final class Prefs {
 
     // MARK: - Fork options (Free My TV > More Settings)
 
-    /** The picks open in Nuvio (when installed); off: in the streaming app of each title. */
-    static boolean recsInNuvio() { return sp().getBoolean("recsNuvio", true); }
-    static void setRecsInNuvio(boolean on) { put("recsNuvio", on); }
+    /** Where the picks open: "apps" (the streaming app of each title, the default) or a key of Recs.LINK_APPS. */
+    static String recsTarget() { return sp().getString("recsTarget", "apps"); }
+    static void setRecsTarget(String key) { put("recsTarget", key); }
 
     /** Picks: off = the original (3 per tab, new ones every hour); on = today's top titles, browsable with → and ←. */
     static boolean topRecs() { return sp().getBoolean("topRecs", false); }

@@ -36,10 +36,18 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="content" android:host="android.media.tv" />
         </intent>
-        <!-- Nuvio: the picks open there when it's installed (Recs). -->
+        <!-- The apps the picks can open in (More Settings > Open picks in, Recs.LINK_APPS). -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="nuvio" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="nuvio-legacy" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="stremio" />
         </intent>
     </queries>
 

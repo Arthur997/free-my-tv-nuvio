@@ -743,7 +743,7 @@ public class SettingsActivity extends Activity {
         private String[] moreValues() {
             String[] every = {Ui.tr("Tempo real", "Live"), "1 min", "5 min"};
             int city = Prefs.cityIndex();
-            return new String[] {Prefs.recsInNuvio() ? "Nuvio" : Ui.tr("App de cada título", "Each title's app"),
+            return new String[] {targetNames().get(targetIndex()),
                     Prefs.topRecs() ? Ui.tr("Top do dia", "Today's top") : Ui.tr("Original (3 por hora)", "Original (3 an hour)"),
                     String.valueOf(Prefs.topCount()),
                     every[Prefs.pricesEveryIndex()],
@@ -753,6 +753,25 @@ public class SettingsActivity extends Activity {
                     Prefs.ownScreensaver() ? "Free My TV" : Ui.tr("Da TV (fotos do Google)", "The TV's own (Google photos)"),
                     Prefs.performance() ? Ui.tr("Ligado (sem vidro)", "On (no glass)") : Ui.tr("Desligado", "Off"),
                     tmdbKeyState()};
+        }
+
+        /** "Open picks in": each title's own streaming app (the default), then the apps that open IMDb links. */
+        private static String[] targetKeys() {
+            String[] keys = new String[Recs.LINK_APPS.length + 1];
+            keys[0] = "apps";
+            for (int i = 0; i < Recs.LINK_APPS.length; i++) keys[i + 1] = Recs.LINK_APPS[i][0];
+            return keys;
+        }
+
+        private static List<String> targetNames() {
+            List<String> names = new ArrayList<>();
+            names.add(Ui.tr("App de cada título", "Each title's app"));
+            for (String[] a : Recs.LINK_APPS) names.add(a[1]);
+            return names;
+        }
+
+        private static int targetIndex() {
+            return Math.max(0, java.util.Arrays.asList(targetKeys()).indexOf(Prefs.recsTarget()));
         }
 
         /** OK on a Home Settings or More Settings row: the list of its choices. False: nothing to choose now. */
@@ -787,8 +806,7 @@ public class SettingsActivity extends Activity {
             }
             switch (row) {
                 case 0:
-                    java.util.Collections.addAll(l, "Nuvio", Ui.tr("App de cada título", "Each title's app"));
-                    openPicker(title, l, Prefs.recsInNuvio() ? 0 : 1, row, at -> Prefs.setRecsInNuvio(at == 0));
+                    openPicker(title, targetNames(), targetIndex(), row, at -> Prefs.setRecsTarget(targetKeys()[at]));
                     return true;
                 case 1:
                     java.util.Collections.addAll(l, Ui.tr("Original (3 por hora)", "Original (3 an hour)"), Ui.tr("Top do dia", "Today's top"));
@@ -842,7 +860,11 @@ public class SettingsActivity extends Activity {
         /** Changes the focused More Settings row one step (the city goes through the list, then back to the default). */
         private void adjustMore(int dir) {
             switch (focus) {
-                case 0: Prefs.setRecsInNuvio(!Prefs.recsInNuvio()); break;
+                case 0: {
+                    String[] keys = targetKeys();
+                    Prefs.setRecsTarget(keys[(targetIndex() + dir + keys.length) % keys.length]);
+                    break;
+                }
                 case 1: Prefs.setTopRecs(!Prefs.topRecs()); break;
                 case MORE_TOP_COUNT: {
                     if (!Prefs.topRecs()) return;   // only the top has a size

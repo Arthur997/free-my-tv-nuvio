@@ -97,8 +97,10 @@ final class HomeApps {
         {"globoplay", "Globoplay", "com.globo.globotv", "FF5A1F", "tint", "1"},
         {"spotify", "Spotify", "com.spotify.tv.android", "1DB954", "", "1"},
     };
+    /** On the shelf in place of a package: the TV's live channels (the TV's own live TV app, see liveTv). */
+    static final String LIVE_TV_KEY = "freemytv:live-tv";
     /** The shelf until it's edited on the TV (Free My TV → Shelf). */
-    private static final List<String> DEFAULT_SHELF = java.util.Arrays.asList(
+    private static final List<String> DEFAULT_SHELF = java.util.Arrays.asList(LIVE_TV_KEY,
             "com.google.android.youtube.tv", "space.nuvio.nativelegacy", "com.brt.ttv", "com.android.tv.settings");
     static final int MAX_SHELF = 8;
     /** Live TV apps of some brands (the antenna's channels open through the standard Android request first). */
@@ -125,6 +127,10 @@ final class HomeApps {
         PackageManager pm = c.getPackageManager();
         for (String pkg : shelfPackages(c)) {
             if (items.size() >= MAX_SHELF) break;
+            if (pkg.equals(LIVE_TV_KEY)) {
+                if (liveTv(c) != null) items.add(special(c, LIVE_TV, "live", Ui.tr("TV ao vivo", "Live TV"), "live_tv"));
+                continue;
+            }
             Intent launch = launchIntent(pm, pkg);
             if (launch == null) continue;
             ResolveInfo ri = pm.resolveActivity(launch, 0);
@@ -163,7 +169,10 @@ final class HomeApps {
         if (custom != null) return custom;
         List<String> out = new ArrayList<>();
         PackageManager pm = c.getPackageManager();
-        for (String pkg : DEFAULT_SHELF) if (out.size() < MAX_SHELF && launchIntent(pm, pkg) != null) out.add(pkg);
+        for (String pkg : DEFAULT_SHELF) {
+            boolean there = pkg.equals(LIVE_TV_KEY) ? liveTv(c) != null : launchIntent(pm, pkg) != null;
+            if (out.size() < MAX_SHELF && there) out.add(pkg);
+        }
         return out;
     }
 
@@ -172,6 +181,7 @@ final class HomeApps {
         PackageManager pm = c.getPackageManager();
         List<String[]> out = new ArrayList<>();
         Set<String> seen = new HashSet<>();
+        if (liveTv(c) != null && seen.add(LIVE_TV_KEY)) out.add(new String[] {LIVE_TV_KEY, Ui.tr("TV ao vivo", "Live TV")});
         for (String[] d : SHELF) if (launchIntent(pm, d[2]) != null && seen.add(d[2])) out.add(new String[] {d[2], d[1]});
         List<String[]> more = new ArrayList<>();
         Intent query = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
@@ -330,11 +340,11 @@ final class HomeApps {
         return "hdmi";
     }
 
-    /** Installed, enabled TV apps that are not on the home screen (the TV's Settings is among them), plus our own. */
+    /** Installed, enabled TV apps (the shelf's too, and the TV's Settings), plus our own settings card first. */
     static List<Item> others(Context c) {
         PackageManager pm = c.getPackageManager();
-        Set<String> skip = new HashSet<>(shelfPackages(c));   // what is on the shelf now, not every known app
-        skip.addAll(java.util.Arrays.asList(LIVE_TV_APPS));
+        // Every TV app, the shelf's too (All Apps means all); only ours (its settings card comes first) and HIDDEN stay out.
+        Set<String> skip = new HashSet<>();
         skip.add(c.getPackageName());
         skip.addAll(HIDDEN);
         Intent query = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
