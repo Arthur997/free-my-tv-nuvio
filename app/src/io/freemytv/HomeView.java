@@ -1198,7 +1198,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float bw = base.width(), bh = base.height(), r0 = TILE_RADIUS * k;
         float cx = base.centerX(), cy = base.centerY();
         cell.set(cx - bw * s / 2, cy - bh * s / 2, cx + bw * s / 2, cy + bh * s / 2);
-        float r = r0 * s;
+        // Concentric with the glass while it grows (outer radius = inner radius + padding): the padding left above it
+        // shrinks, so its corner opens up by as much (22 at rest, ~35 focused, never less than the scaled one).
+        float inset = SHELF_PAD * k - (bh * s - bh) / 2;
+        float r = Math.max(r0 * s, (TILE_RADIUS + SHELF_PAD) * k - inset);
         // Shadow at the resting icon size, enlarged by the transform (so the blur stays cached): short at rest, deep
         // and lower when focused.
         c.save();
@@ -1648,6 +1651,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         spoken.focusMoved();
     }
 
+    private final RectF gridCell = new RectF();   // reused for every app in the grid (no allocation per frame)
+
     private void drawSheet(Canvas c) {
         c.drawColor(0xA8000000);
         float shift = scroll.value * GRID_ROW * k;
@@ -1667,7 +1672,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             float y = gridTop + r * GRID_ROW * k - shift;
             if (y > h || y + GRID_ROW * k < 0) continue;
             float x = left + col * (GRID_W + GRID_GAP) * k;
-            RectF base = new RectF(x, y, x + GRID_W * k, y + GRID_H * k);
+            RectF base = gridCell;
+            base.set(x, y, x + GRID_W * k, y + GRID_H * k);
             float f = gridFocus[i].value;
             drawCard(c, others.get(i).tile, base, GRID_RADIUS * k, f, 0.08f);
             if (sheetOpen && i == gridIndex) focusedCell.set(cell);
