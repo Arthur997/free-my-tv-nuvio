@@ -53,6 +53,11 @@ final class Backdrop {
     }
 
     static Backdrop make(Bitmap src, boolean forLight) {
+        return make(src, forLight, null);
+    }
+
+    /** `preview`: where to also save the big card as a JPEG (Recs.preview shows it at once on the next start). */
+    static Backdrop make(Bitmap src, boolean forLight, java.io.File preview) {
         Bitmap out = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(out);
         Paint photo = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
@@ -62,7 +67,9 @@ final class Backdrop {
         src.recycle();
         if (forLight) {
             // Light design: everything comes from the photo without scrims.
-            Bitmap wide = card(out, WIDE_W, WIDE_H), small = card(out, SMALL_W, SMALL_H);
+            Bitmap wide = card(out, WIDE_W, WIDE_H), small = gpu(card(out, SMALL_W, SMALL_H));
+            if (preview != null) savePreview(wide, preview);
+            wide = gpu(wide);
             int[] frost = reduce(out, FW, FH, 3, 3);
             int[] light = whiten(frost.clone(), 0.82f);
             int[] glass = reduce(out, GW, GH, 2, 2);
@@ -157,7 +164,20 @@ final class Backdrop {
         }
         Bitmap out = Bitmap.createScaledBitmap(b, w, h, true);
         if (b != full && b != out) b.recycle();
-        return gpu(opaque(out));
+        return opaque(out);   // still in memory: the caller moves it to the GPU (after saving a preview)
+    }
+
+    private static void savePreview(Bitmap card, java.io.File f) {
+        //noinspection ResultOfMethodCallIgnored
+        f.getParentFile().mkdirs();
+        java.io.File part = new java.io.File(f.getPath() + ".part");
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(part)) {
+            card.compress(Bitmap.CompressFormat.JPEG, 85, out);
+        } catch (java.io.IOException e) {
+            return;
+        }
+        //noinspection ResultOfMethodCallIgnored
+        part.renameTo(f);
     }
 
     private static final Paint DITHER = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);

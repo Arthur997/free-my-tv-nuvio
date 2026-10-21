@@ -121,6 +121,10 @@ final class Recs {
     private final Map<String, Backdrop> images = new LinkedHashMap<>(16, 0.75f, true);
     private final Map<String, Bitmap> logos = new LinkedHashMap<>(16, 0.75f, true);   // by Pick.logo
     private final java.util.Set<String> badLogos = new java.util.HashSet<>();
+    // Each card's big picture saved as a JPEG when it's built: decoded in a few ms (the whole build takes ~0.5 s), it
+    // shows the cards right away after the home screen restarts, until the full one is ready. By Pick.backdrop.
+    private final Map<String, Bitmap> previews = new LinkedHashMap<>(16, 0.75f, true);
+    private final ExecutorService previewIo = Executors.newSingleThreadExecutor();
     private static final int READY_LIGHT = 18, READY_GLASS = 4;
     private final java.util.Set<String> pending = new java.util.HashSet<>();
     private volatile List<Pick> picks = new ArrayList<>();
@@ -879,10 +883,12 @@ final class Recs {
             if (b == null) throw new IOException("unreadable image");
             AppLog.w("backdrop \u201c" + p.title + "\u201d: " + bounds.outWidth + "×" + bounds.outHeight);
             boolean forLight = light;
-            Backdrop backdrop = Backdrop.make(b, forLight);
+            Backdrop backdrop = Backdrop.make(b, forLight, forLight && !previewFile(p).exists() ? previewFile(p) : null);
             if (forLight != light) return true;   // the design changed midway: this one is stale
             synchronized (images) {
                 images.put(p.backdrop, backdrop);
+                previews.remove(p.backdrop);   // the full one now; if it's let go later, the preview may come back
+                pending.remove("preview:" + p.backdrop);
                 while (images.size() > (forLight ? READY_LIGHT : READY_GLASS)) images.remove(images.keySet().iterator().next());
             }
             if (forLight) loadLogo(p);
@@ -896,6 +902,35 @@ final class Recs {
         }
     }
 
+    private File previewFile(Pick p) {
+        return new File(new File(context.getCacheDir(), "cards"), imageFile(p).getName() + ".jpg");
+    }
+
+    /** The card's saved picture while the full one is built, or null (none saved yet, or still being read). */
+    Bitmap preview(Pick p) {
+        if (p == null || p.backdrop == null) return null;
+        final String key = p.backdrop;
+        final File f = previewFile(p);
+        synchronized (images) {
+            Bitmap b = previews.get(key);
+            if (b != null || !pending.add("preview:" + key)) return b;
+        }
+        previewIo.execute(() -> {
+            BitmapFactory.Options opts = new BitmapFactory.Options();
+            opts.inPreferredConfig = Bitmap.Config.RGB_565;
+            Bitmap b = f.exists() ? BitmapFactory.decodeFile(f.getPath(), opts) : null;
+            synchronized (images) {
+                // Not saved yet: not looked for again (the full picture comes instead, and saves it for next time).
+                if (b != null && !images.containsKey(key)) {
+                    previews.put(key, b);
+                    while (previews.size() > ON_SCREEN + 2) previews.remove(previews.keySet().iterator().next());
+                }
+            }
+            if (b != null) notifyListeners();
+        });
+        return null;
+    }
+
     /**
      * The system is short of memory (onTrimMemory): drop the photos built for the screen, keeping only the `keep` drawn
      * most recently (they come back from disk when asked for again).
@@ -904,6 +939,7 @@ final class Recs {
         synchronized (images) {
             while (images.size() > keep) images.remove(images.keySet().iterator().next());
             while (logos.size() > keep) logos.remove(logos.keySet().iterator().next());
+            while (previews.size() > keep) previews.remove(previews.keySet().iterator().next());
         }
     }
 

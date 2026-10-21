@@ -73,8 +73,9 @@ public class HomeActivity extends Activity {
      */
     @Override public void onTrimMemory(int level) {
         super.onTrimMemory(level);
-        if (level >= TRIM_MEMORY_BACKGROUND) Recs.get(this).trim(0);
-        else if (level >= TRIM_MEMORY_RUNNING_LOW) Recs.get(this).trim(3);   // also when we are just hidden
+        // The five cards on screen stay (coming back shows them at once); the TV really short of memory: those only.
+        if (level >= TRIM_MEMORY_BACKGROUND) Recs.get(this).trim(Recs.ON_SCREEN);
+        else if (level >= TRIM_MEMORY_RUNNING_LOW) Recs.get(this).trim(Recs.ON_SCREEN + 2);   // also when we are just hidden
     }
 
     @Override public boolean dispatchKeyEvent(KeyEvent event) {

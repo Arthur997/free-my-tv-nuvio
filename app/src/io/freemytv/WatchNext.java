@@ -129,6 +129,44 @@ final class WatchNext {
         return out;
     }
 
+    /** The list as saved between starts of the home screen (HomeView shows it at once). */
+    static String toJson(List<Recs.Pick> list) {
+        org.json.JSONArray a = new org.json.JSONArray();
+        try {
+            for (Recs.Pick p : list) {
+                a.put(new org.json.JSONObject().put("id", p.id).put("title", p.title).put("backdrop", p.backdrop)
+                        .put("pkg", p.pkg).put("app", p.app).put("intent", p.intentUri).put("progress", p.progress)
+                        .put("meta", p.meta));
+            }
+        } catch (org.json.JSONException ignored) {
+        }
+        return a.toString();
+    }
+
+    static List<Recs.Pick> fromJson(String json) {
+        List<Recs.Pick> out = new ArrayList<>();
+        try {
+            org.json.JSONArray a = new org.json.JSONArray(json);
+            for (int i = 0; i < a.length(); i++) {
+                org.json.JSONObject o = a.getJSONObject(i);
+                Recs.Pick p = new Recs.Pick();
+                p.id = o.optInt("id");
+                p.kind = "watch";
+                p.title = o.optString("title");
+                p.backdrop = o.isNull("backdrop") ? null : o.optString("backdrop");
+                p.pkg = o.optString("pkg");
+                p.app = o.optString("app");
+                p.intentUri = o.optString("intent");
+                p.progress = (float) o.optDouble("progress", 0);
+                p.meta = o.optString("meta");
+                p.detailed = true;
+                out.add(p);
+            }
+        } catch (org.json.JSONException ignored) {
+        }
+        return out;
+    }
+
     private static final class Row {
         final long id, engaged, position, duration;
         final String pkg, title, episode, season, number, intent, image;

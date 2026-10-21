@@ -141,7 +141,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     // The tab's whole list (the top can have up to 20) and where the three on screen start in it; "4–6 of 10".
     private List<Recs.Pick> allCards = new ArrayList<>();
     // Continue watching, read in the background on resume and every tick; `watchingKey` tells when it changed.
-    private List<Recs.Pick> watching = new ArrayList<>();
+    private List<Recs.Pick> watching;
     private String watchingKey = "";
     private boolean watchAllowed = true;
     private static long askedWatchAt;
@@ -157,7 +157,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private int shiftFrom, shiftTo;
     private final RectF slotFrom = new RectF(), slotTo = new RectF();
     private final List<HomeApps.Item> lightButtons = new ArrayList<>();
-    private Paint lTitle, lTab, lTabOn, lCardMeta, lQuote, lTip, onPhotoTitle, onPhotoMeta;
+    private Paint lTitle, lTab, lTabOn, lCardMeta, lQuote, lTip, onPhotoTitle, onPhotoMeta, badgePaint;
+    private String badgeText = "";
+    private float badgeWidth;
     private String heading = "";
     private float headingBearing;
     private Shader lightGradient;
@@ -330,6 +332,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         recs = Recs.get(a);
         click = new Click(a);
         ui = a.getSharedPreferences("home-ui", Context.MODE_PRIVATE);
+        watching = WatchNext.fromJson(ui.getString("watching", "[]"));   // the last list, at once; the new one follows
         tvInputs = (TvInputManager) a.getSystemService(Context.TV_INPUT_SERVICE);
         setFocusable(true);
         sky = new Layer(a, SKY);
@@ -568,6 +571,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         onPhotoTitle.setShadowLayer(10 * k, 0, 1 * k, 0x66000000);
         onPhotoMeta = Ui.text(Ui.medium, 25 * k, 0xD9FFFFFF);
         onPhotoMeta.setShadowLayer(8 * k, 0, 1 * k, 0x66000000);
+        badgePaint = Ui.text(Ui.semibold, 19 * k, 0xF2FFFFFF);
+        badgePaint.setLetterSpacing(0.02f);
+        badgeText = Ui.tr("Sugestão", "Suggested", "Sugerencia");
+        badgeWidth = badgePaint.measureText(badgeText);
         cardTexts.clear();
         lCardMeta = Ui.text(Ui.medium, 25 * k, L_DIM);
         lQuote = Ui.numbers(Ui.regular, 21 * k, L_FAINT);
@@ -2306,7 +2313,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             case Z_TOP:
                 if (i >= 3) return label(lightButtons, i - 3);
                 return tabs()[i] + Ui.tr(", aba ", ", tab ") + (i + 1) + Ui.tr(" de 3", " of 3");
-            case Z_CARDS: return i < cards.size() ? pickText(cards.get(i)) : "";
+            case Z_CARDS: {
+                if (i >= cards.size()) return "";
+                Recs.Pick p = cards.get(i);
+                return (suggestion(p) ? badgeText + ": " : "") + pickText(p);
+            }
             case Z_SHELF: return label(shelf, i);
             case Z_DRAWER: return label(drawerItems, i);
             default: return "";
@@ -2467,7 +2478,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      * background taken from the first one.
      */
     private void updateCards() {
-        List<Recs.Pick> all = tab == 0 ? watching : recs.now(TAB_KIND[tab]);
+        List<Recs.Pick> all = tab == 0 ? withSuggestions(watching) : recs.now(TAB_KIND[tab]);
         allCards = all;   // the same titles may come back with new details (how much is left)
         cardOffset = Math.max(0, Math.min(cardOffset, all.size() - SLOTS));
         if (cardShift.value >= 0.999f) shiftFrom = shiftTo = cardOffset;   // not mid-glide
@@ -2490,6 +2501,31 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (cards.isEmpty() || b != null) showBackdrop(b);
         heroDirty = true;
         spoken.focusMoved();    // new picks under the focused card
+    }
+
+    /**
+     * Continue watching with fewer titles than cards: the empty ones get picks from the top (movies and shows, as the
+     * other tabs have them), marked "Suggested"; never a title that is already there to continue.
+     */
+    private List<Recs.Pick> withSuggestions(List<Recs.Pick> continuing) {
+        if (continuing.size() >= SLOTS) return continuing;
+        List<Recs.Pick> out = new ArrayList<>(continuing);
+        java.util.Set<String> titles = new java.util.HashSet<>();
+        for (Recs.Pick p : continuing) titles.add(sameTitle(p.title));
+        for (Recs.Pick p : recs.now(null)) {
+            if (out.size() >= SLOTS) break;
+            if (titles.add(sameTitle(p.title))) out.add(p);
+        }
+        return out;
+    }
+
+    private static String sameTitle(String title) {
+        return title == null ? "" : title.trim().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /** A pick filling an empty card of Continue watching (it has no link to where it stopped). */
+    private boolean suggestion(Recs.Pick p) {
+        return tab == 0 && p.intentUri == null;
     }
 
     private void selectTab(int index) {
@@ -2567,7 +2603,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             c.drawText(tabs()[i], r.centerX() - p.measureText(tabs()[i]) / 2, r.centerY() + Ui.halfCap(p), p);
         }
         drawCards(c);
-        if (tab == 0 && cards.isEmpty()) drawNothingToContinue(c);
+        if (tab == 0 && watching.isEmpty() && cards.isEmpty()) drawNothingToContinue(c);
         if (!cardCounter.isEmpty()) {
             // Above the last column, on the right: where the top's list is ("5–9 of 20").
             float cw = lCardMeta.measureText(cardCounter);
@@ -2689,7 +2725,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         // How big this card is now, from a small one (0) to the big one (1): it changes while the list moves.
         float big = Ui.clamp((bw - cardRects[1].width()) / (cardRects[0].width() - cardRects[1].width()));
         Backdrop b = recs.backdrop(p);
-        Bitmap img = b == null ? null : big > 0.5f ? b.wide : b.small;
+        Bitmap img = b != null ? (big > 0.5f ? b.wide : b.small) : recs.preview(p);   // the saved one until it's built
         if (img != null) {
             roundImage(c, img, cell, r);
         } else {
@@ -2710,6 +2746,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         float lift = p.progress > 0.01f ? drawProgress(c, cell, p.progress, s) : 0;
         if (named) drawCardName(c, p, cell, big, lift, !ownName);
+        if (suggestion(p)) drawBadge(c, cell, s);
         if (save >= 0) c.restoreToCount(save);
     }
 
@@ -2753,6 +2790,16 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         return 14 * k * s + height;
     }
 
+    /** "Suggested", small at the top left of the photo: this card isn't something you were watching. */
+    private void drawBadge(Canvas c, RectF card, float s) {
+        float padX = 12 * k, h = 32 * k, inset = 14 * k * s;
+        tmp.set(card.left + inset, card.top + inset, card.left + inset + badgeWidth + 2 * padX, card.top + inset + h);
+        fill.setShader(null);
+        fill.setColor(0x8C000000);
+        c.drawRoundRect(tmp, h / 2, h / 2, fill);
+        c.drawText(badgeText, tmp.left + padX, tmp.centerY() + Ui.halfCap(badgePaint), badgePaint);
+    }
+
     /** Continue watching with nothing in it: why, in the cards' place. */
     private void drawNothingToContinue(Canvas c) {
         String title = watchAllowed ? Ui.tr("Nada para continuar ainda", "Nothing to continue yet", "Nada para seguir todavía")
@@ -2785,6 +2832,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 watchingKey = newKey;
                 watchAllowed = allowed;
                 watching = list;
+                ui.edit().putString("watching", WatchNext.toJson(list)).apply();
                 if (tab == 0) updateCards();
             });
         });
