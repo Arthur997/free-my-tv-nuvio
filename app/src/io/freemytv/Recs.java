@@ -49,6 +49,7 @@ final class Recs {
         int id;
         String kind;            // "movie" or "tv"
         String title, backdrop, meta = "", app, pkg, imdb;
+        String logo;            // the title's logo on TMDB (a transparent PNG), or null
         boolean detailed;
     }
 
@@ -65,7 +66,7 @@ final class Recs {
     }
     private static final long LIST_EVERY = 6 * 3600_000L;
     /** Bump when what is saved for each title changes (the saved list is discarded and fetched again). */
-    private static final int CACHE_VERSION = 5;   // 5: no anime
+    private static final int CACHE_VERSION = 6;   // 6: the titles' logos
     private static final int MANHA = 0, TARDE = 1, NOITE = 2;
     static final String[] PERIOD_LABEL = {"PARA ESTA MANHÃ", "PARA ESTA TARDE", "PARA ESTA NOITE"};
     static final String[] PERIOD_LABEL_EN = {"THIS MORNING", "THIS AFTERNOON", "TONIGHT"};
@@ -94,6 +95,8 @@ final class Recs {
         SERVICE_NAME.put("max", "Max");
         SERVICE_NAME.put("appletv", "Apple TV");
     }
+    /** Titles on screen at once in each tab: the big card and the four small ones. */
+    static final int ON_SCREEN = 5;
     /** Country for "what streams where" (config.properties "tmdb_region", e.g. US, GB, BR). */
     private static final String REGION = Config.TMDB_REGION.trim().toUpperCase(Locale.ROOT);
 
@@ -109,10 +112,12 @@ final class Recs {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final List<Listener> listeners = new ArrayList<>();
-    // Built and ready to draw, least recently drawn first: this tab's six (on screen and next) and the first three of
-    // each tab fit (onTrimMemory lets them go when the TV is short of memory).
+    // Built and ready to draw, least recently drawn first: this tab's seven (on screen and the next column) and the
+    // first five of each tab fit (onTrimMemory lets them go when the TV is short of memory).
     private final Map<String, Backdrop> images = new LinkedHashMap<>(16, 0.75f, true);
-    private static final int READY_LIGHT = 15, READY_GLASS = 4;
+    private final Map<String, Bitmap> logos = new LinkedHashMap<>(16, 0.75f, true);   // by Pick.logo
+    private final java.util.Set<String> badLogos = new java.util.HashSet<>();
+    private static final int READY_LIGHT = 18, READY_GLASS = 4;
     private final java.util.Set<String> pending = new java.util.HashSet<>();
     private volatile List<Pick> picks = new ArrayList<>();
     private volatile int period = -1;
@@ -182,7 +187,7 @@ final class Recs {
         return now(null);
     }
 
-    /** This hour's 3, movies only ("movie") or shows only ("tv"); null = both (the home screen tabs). */
+    /** This hour's five, movies only ("movie") or shows only ("tv"); null = both (the home screen tabs). */
     List<Pick> now(String kind) {
         List<Pick> list = new ArrayList<>();
         if (!hasKey(context)) return list;    // no TMDB key: no recommendations
@@ -195,11 +200,11 @@ final class Recs {
         // Top of the day (More Settings): in rank order, as many as asked for.
         if (Prefs.topRecs()) return new ArrayList<>(list.subList(0, Math.min(Prefs.topCount(), list.size())));
         long hour = System.currentTimeMillis() / 3600_000L;
-        // Three per hour, never two from the same franchise ("Law & Order" and "Law & Order: Special…").
+        // Five per hour, never two from the same franchise ("Law & Order" and "Law & Order: Special…").
         List<Pick> out = new ArrayList<>();
         java.util.Set<String> seen = new java.util.HashSet<>();
-        for (int i = 0; i < list.size() && out.size() < 3; i++) {
-            Pick p = list.get((int) ((hour * 3 + i) % list.size()));
+        for (int i = 0; i < list.size() && out.size() < ON_SCREEN; i++) {
+            Pick p = list.get((int) ((hour * ON_SCREEN + i) % list.size()));
             if (seen.add(franchise(p.title))) out.add(p);
         }
         return out;
@@ -420,9 +425,9 @@ final class Recs {
         List<Pick> out = new ArrayList<>();
         java.util.Set<String> seen = new java.util.HashSet<>();
         for (String kind : new String[] {null, "movie", "tv"}) {
-            // The first three of each tab (all there is in the original): in the top, the rest load as you browse.
+            // The first five of each tab (all there is in the original): in the top, the rest load as you browse.
             List<Pick> tab = now(kind);
-            for (int i = 0; i < Math.min(3, tab.size()); i++) if (seen.add(key(tab.get(i)))) out.add(tab.get(i));
+            for (int i = 0; i < Math.min(ON_SCREEN, tab.size()); i++) if (seen.add(key(tab.get(i)))) out.add(tab.get(i));
         }
         return out;
     }
@@ -589,6 +594,7 @@ final class Recs {
                 + Ui.language + ",en");
         String best = bestBackdrop(o.optJSONObject("images"));
         if (best != null) p.backdrop = best;
+        p.logo = bestLogo(o.optJSONObject("images"));
         List<String> parts = new ArrayList<>();
         JSONArray genres = o.optJSONArray("genres");
         if (p.kind.equals("tv")) parts.add(Ui.tr("Série", "Series"));
@@ -673,6 +679,76 @@ final class Recs {
         return best;
     }
 
+    /**
+     * The title's logo: in the TV's language, else in English, else one with no language; the best rated among those.
+     * Only PNGs (some logos are SVG, which Android doesn't decode).
+     */
+    private static String bestLogo(JSONObject images) {
+        JSONArray list = images == null ? null : images.optJSONArray("logos");
+        String best = null;
+        double bestScore = -1;
+        for (int i = 0; list != null && i < list.length(); i++) {
+            JSONObject l = list.optJSONObject(i);
+            String path = l == null ? "" : l.optString("file_path", "");
+            if (!path.endsWith(".png")) continue;
+            String lang = l.isNull("iso_639_1") ? "" : l.optString("iso_639_1");
+            int rank = lang.equals(Ui.language) ? 3 : lang.equals("en") ? 2 : lang.isEmpty() ? 1 : 0;
+            if (rank == 0) continue;
+            double score = rank * 100 + l.optDouble("vote_average", 0);
+            if (score > bestScore) {
+                bestScore = score;
+                best = path;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * The pick's logo, ready to draw, or null: none on TMDB, or not loaded yet (it comes with the photo; one let go
+     * when the TV was short of memory loads again in the background).
+     */
+    Bitmap logo(Pick p) {
+        if (p == null || p.logo == null) return null;
+        synchronized (images) {
+            Bitmap b = logos.get(p.logo);
+            if (b != null || badLogos.contains(p.logo) || !images.containsKey(p.backdrop) || !pending.add("logo:" + p.logo)) return b;
+        }
+        io.execute(() -> {
+            loadLogo(p);
+            synchronized (images) {
+                pending.remove("logo:" + p.logo);
+            }
+            notifyListeners();
+        });
+        return null;
+    }
+
+    /** Downloads (once) and decodes the logo; a logo that fails only leaves the title written in text. */
+    private void loadLogo(Pick p) {
+        if (p.logo == null) return;
+        synchronized (images) {
+            if (logos.containsKey(p.logo)) return;
+        }
+        File f = new File(new File(context.getCacheDir(), "recs-logos"), p.logo.replace("/", ""));
+        try {
+            fetch(IMAGES + "w500" + p.logo, f);
+            Bitmap b = BitmapFactory.decodeFile(f.getPath());
+            if (b == null) throw new IOException("unreadable logo");
+            Bitmap ready = Backdrop.logo(b);
+            synchronized (images) {
+                logos.put(p.logo, ready);
+                while (logos.size() > READY_LIGHT) logos.remove(logos.keySet().iterator().next());
+            }
+        } catch (IOException | RuntimeException | OutOfMemoryError e) {
+            //noinspection ResultOfMethodCallIgnored
+            f.delete();
+            synchronized (images) {
+                badLogos.add(p.logo);   // not asked for again until the app restarts
+            }
+            AppLog.w("recommendation logo: " + e.getMessage());
+        }
+    }
+
     private static String[] service(String name) {
         String n = name.toLowerCase(Locale.ROOT);
         for (String[] s : SERVICES) {
@@ -721,12 +797,16 @@ final class Recs {
     // MARK: - Images (TMDB originals on disk, up to 24 so the whole list fits; this hour's kept ready in memory)
 
     private void download(Pick p) throws IOException {
-        File f = imageFile(p);
+        fetch(IMAGES + imageSize() + p.backdrop, imageFile(p));
+    }
+
+    /** Saves `url` to `f` (an image already on disk isn't downloaded again), keeping the newest few in its folder. */
+    private static void fetch(String url, File f) throws IOException {
         if (f.exists()) return;
         //noinspection ResultOfMethodCallIgnored
         f.getParentFile().mkdirs();
         File part = new File(f.getPath() + ".part");
-        HttpURLConnection c = (HttpURLConnection) new URL(IMAGES + imageSize() + p.backdrop).openConnection();
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(8000);
         c.setReadTimeout(20000);
         try (InputStream in = c.getInputStream(); FileOutputStream out = new FileOutputStream(part)) {
@@ -777,6 +857,7 @@ final class Recs {
                 images.put(p.backdrop, backdrop);
                 while (images.size() > (forLight ? READY_LIGHT : READY_GLASS)) images.remove(images.keySet().iterator().next());
             }
+            if (forLight) loadLogo(p);
             notifyListeners();
             return true;
         } catch (IOException | RuntimeException | OutOfMemoryError e) {
@@ -794,6 +875,7 @@ final class Recs {
     void trim(int keep) {
         synchronized (images) {
             while (images.size() > keep) images.remove(images.keySet().iterator().next());
+            while (logos.size() > keep) logos.remove(logos.keySet().iterator().next());
         }
     }
 
@@ -816,7 +898,8 @@ final class Recs {
             for (Pick p : picks) {
                 a.put(new JSONObject().put("id", p.id).put("kind", p.kind).put("title", p.title).put("backdrop", p.backdrop)
                         .put("meta", p.meta).put("app", p.app == null ? "" : p.app).put("pkg", p.pkg == null ? "" : p.pkg)
-                        .put("imdb", p.imdb == null ? "" : p.imdb).put("detailed", p.detailed));
+                        .put("imdb", p.imdb == null ? "" : p.imdb).put("logo", p.logo == null ? "" : p.logo)
+                        .put("detailed", p.detailed));
             }
             cache.edit().putString("picks", a.toString()).putInt("period", period).putLong("listAt", listAt)
                     .putString("language", listLanguage)
@@ -839,6 +922,7 @@ final class Recs {
             p.app = o.optString("app").isEmpty() ? null : o.optString("app");
             p.pkg = o.optString("pkg").isEmpty() ? null : o.optString("pkg");
             p.imdb = o.optString("imdb").isEmpty() ? null : o.optString("imdb");
+            p.logo = o.optString("logo").isEmpty() ? null : o.optString("logo");
             p.detailed = o.optBoolean("detailed");
             out.add(p);
         }

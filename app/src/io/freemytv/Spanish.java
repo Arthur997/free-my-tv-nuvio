@@ -116,7 +116,7 @@ final class Spanish {
             case "Shelf app art": return "Imagen de las apps en el estante";
             case "The app's own": return "La original de la app";
             case "Logo": return "Logo";
-            case "Top of For You": return "Arriba de Para ti";
+            case "Top of Home": return "Arriba del Inicio";
             case "Clock and weather": return "Reloj y clima";
             case "Prices": return "Cotizaciones";
             case "Rates": return "Cotizaciones";
@@ -143,6 +143,11 @@ final class Spanish {
             case "The TV's own (Google photos)": return "La del TV (fotos de Google)";
             case "no ads, with the TV's own screensaver": return "sin anuncios, con el protector de pantalla del TV";
             case "No ads, with the TV's own screensaver": return "Sin anuncios, con el protector de pantalla del TV";
+            case "Open": return "Abrir";
+            case "App info": return "Información de la app";
+            case "Uninstall": return "Desinstalar";
+            case "Couldn't open the app's info.": return "No se pudo abrir la información de la app.";
+            case "Couldn't uninstall this app here.": return "No se puede desinstalar esta app desde aquí.";
             default:
                 if (english.startsWith("Free My TV is on: new home screen, ")) {
                     return "Free My TV está activo: nueva pantalla de inicio, "
@@ -156,8 +161,8 @@ final class Spanish {
                     return "Activas · Top del día, " + english.substring("On · Today's top, ".length()).replace(" titles.", " títulos.");
                 }
                 if (english.startsWith("On · ")) {
-                    return "Activas · " + english.substring(5).replace(" titles from the TV's apps, 3 new ones every hour.",
-                            " títulos de las apps del TV, 3 nuevos cada hora.");
+                    return "Activas · " + english.substring(5).replace(" titles from the TV's apps, 5 new ones every hour.",
+                            " títulos de las apps del TV, 5 nuevos cada hora.");
                 }
                 if (english.endsWith(" min ago")) return "hace " + english.substring(0, english.length() - 4);
                 if (english.endsWith(" h ago")) return "hace " + english.substring(0, english.length() - 4);

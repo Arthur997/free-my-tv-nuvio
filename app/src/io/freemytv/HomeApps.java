@@ -413,6 +413,36 @@ final class HomeApps {
         }
     }
 
+    /** The app's page in the TV's settings (storage, permissions, force stop). */
+    static boolean openInfo(Activity a, String pkg) {
+        return start(a, new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", pkg, null)));
+    }
+
+    /** Android's own "Uninstall this app?" confirmation: nothing goes until the person says OK there. */
+    static boolean uninstall(Activity a, String pkg) {
+        return start(a, new Intent(Intent.ACTION_DELETE, Uri.fromParts("package", pkg, null)));
+    }
+
+    /** Only apps the person installed: system apps are never uninstalled (Original must be able to bring them back). */
+    static boolean removable(Context c, String pkg) {
+        try {
+            ApplicationInfo info = c.getPackageManager().getApplicationInfo(pkg, 0);
+            return (info.flags & (ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)) == 0;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
+    }
+
+    private static boolean start(Activity a, Intent intent) {
+        try {
+            a.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            return true;
+        } catch (ActivityNotFoundException | SecurityException e) {
+            AppLog.w("couldn't open " + intent.getAction() + ": " + e.getMessage());
+            return false;
+        }
+    }
+
     /**
      * Live TV: tune the antenna input directly. MediaTek TV Center otherwise restores the last source used, which can
      * be HDMI, so its explicit activity receives the tuner URI. Other TV apps keep the standard channel-list request.

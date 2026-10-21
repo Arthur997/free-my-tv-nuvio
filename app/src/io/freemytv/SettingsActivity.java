@@ -487,8 +487,8 @@ public class SettingsActivity extends Activity {
             else if (!error.isEmpty()) line = Ui.tr("Erro: ", "Error: ") + error + ".";
             else if (count > 0 && Prefs.topRecs()) line = Ui.tr("Ligadas · Top do dia, " + count + " títulos.",
                     "On · Today's top, " + count + " titles.");
-            else if (count > 0) line = Ui.tr("Ligadas · " + count + " títulos nos apps da TV, 3 novos a cada hora.",
-                    "On · " + count + " titles from the TV's apps, 3 new ones every hour.");
+            else if (count > 0) line = Ui.tr("Ligadas · " + count + " títulos nos apps da TV, 5 novos a cada hora.",
+                    "On · " + count + " titles from the TV's apps, 5 new ones every hour.");
             else line = Ui.tr("Buscando os títulos…", "Fetching titles…");
             c.drawText(TextUtils.ellipsize(line, notice, 790 * k, TextUtils.TruncateAt.END).toString(), x, y + 42 * k, notice);
             version.setTextAlign(Paint.Align.LEFT);
@@ -735,7 +735,7 @@ public class SettingsActivity extends Activity {
             return new String[] {Ui.tr("Abrir recomendações em", "Open picks in"),
                     Ui.tr("Recomendações", "Picks"), Ui.tr("Títulos no Top", "Titles in the top"),
                     Ui.tr("Atualizar cotações", "Refresh prices"), Ui.tr("Cidade do clima", "Weather city"),
-                    Ui.tr("Capa dos apps na prateleira", "Shelf app art"), Ui.tr("Topo do Para você", "Top of For You"),
+                    Ui.tr("Capa dos apps na prateleira", "Shelf app art"), Ui.tr("Topo do Início", "Top of Home"),
                     Ui.tr("Tela de descanso", "Screensaver"), Ui.tr("Modo desempenho", "Performance mode"),
                     Ui.tr("Chave do TMDB", "TMDB key")};
         }

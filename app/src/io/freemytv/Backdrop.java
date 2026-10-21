@@ -23,23 +23,27 @@ import android.graphics.Shader;
  */
 final class Backdrop {
     static final int W = 1920, H = 1080, FW = 192, FH = 108, GW = 480, GH = 270;
-    /** The card at its focused size (1.05×): For You's three cards are equal and 16:9, like the photos. */
-    static final int WIDE_W = 584, WIDE_H = 328;
+    /**
+     * The cards at their focused size (1.05×), 16:9 like the photos: the big one and the four small ones (each its
+     * own size, so the small ones aren't a big image squeezed down, which shimmers).
+     */
+    static final int WIDE_W = 920, WIDE_H = 518, SMALL_W = 424, SMALL_H = 238;
     final Bitmap image;
     final int[] frost;      // heavily blurred (frosted glass, bottom drawer)
     final int[] glass;      // lightly blurred (Liquid Glass: the photo shows through the glass)
-    final Bitmap wide;                  // the photo on the cards
+    final Bitmap wide, small;           // the photo on the big card and on the small ones
     final int[] light, lightGlass;      // by day: the frosted and glass versions, lightened
     final Bitmap lightImage;            // by day: the background (the lightened frosted version, scaled up on screen)
     final int[] nightFrost, nightGlass; // at night: frosted (the bottom drawer's frosted glass) and glass, darkened
     final Bitmap nightImage;            // at night: the background (the darkened frosted version)
 
-    private Backdrop(Bitmap image, int[] frost, int[] glass, Bitmap wide, int[] light, int[] lightGlass,
+    private Backdrop(Bitmap image, int[] frost, int[] glass, Bitmap wide, Bitmap small, int[] light, int[] lightGlass,
                      int[] night, int[] nightGlass) {
         this.image = image;
         this.frost = frost;
         this.glass = glass;
         this.wide = wide;
+        this.small = small;
         this.light = light;
         this.lightGlass = lightGlass;
         this.nightFrost = night;
@@ -58,7 +62,7 @@ final class Backdrop {
         src.recycle();
         if (forLight) {
             // Light design: everything comes from the photo without scrims.
-            Bitmap wide = card(out, WIDE_W, WIDE_H);   // one 16:9 size for every card
+            Bitmap wide = card(out, WIDE_W, WIDE_H), small = card(out, SMALL_W, SMALL_H);
             int[] frost = reduce(out, FW, FH, 3, 3);
             int[] light = whiten(frost.clone(), 0.82f);
             int[] glass = reduce(out, GW, GH, 2, 2);
@@ -66,7 +70,7 @@ final class Backdrop {
             int[] night = darken(frost.clone(), 0.76f);
             int[] nightGlass = darken(glass, 0.56f);
             out.recycle();
-            return new Backdrop(null, frost, null, wide, light, lightGlass, night, nightGlass);
+            return new Backdrop(null, frost, null, wide, small, light, lightGlass, night, nightGlass);
         }
 
         float boost = Math.max(0, Math.min(0.3f, (luminance(out, 0, 0.22f, 0.5f, 0.62f) - 0.22f) * 1.1f));
@@ -93,7 +97,7 @@ final class Backdrop {
 
         int[] frost = reduce(out, FW, FH, 3, 3);
         int[] glass = reduce(out, GW, GH, 2, 2);
-        return new Backdrop(gpu(out), frost, glass, null, null, null, null, null);
+        return new Backdrop(gpu(out), frost, glass, null, null, null, null, null, null);
     }
 
     /** How many times smaller the screensaver photo's frosted version is (the glass math uses the same number). */
@@ -170,6 +174,40 @@ final class Backdrop {
     }
 
     /** Copies it to GPU memory (cheap to draw; the process doesn't keep the pixels). */
+    /**
+     * A title's logo for the cards: at most 480 wide, and white when it is dark (a black logo would vanish on the
+     * photo's dark bottom); colored and light logos stay as they are.
+     */
+    static Bitmap logo(Bitmap src) {
+        float scale = Math.min(1f, 480f / src.getWidth());
+        Bitmap b = Bitmap.createBitmap(Math.max(1, Math.round(src.getWidth() * scale)),
+                Math.max(1, Math.round(src.getHeight() * scale)), Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(b);
+        c.scale(scale, scale);
+        Paint p = new Paint(Paint.FILTER_BITMAP_FLAG);
+        if (inkLuminance(src) < 0.3f) {
+            p.setColorFilter(new android.graphics.PorterDuffColorFilter(0xFFFFFFFF, android.graphics.PorterDuff.Mode.SRC_IN));
+        }
+        c.drawBitmap(src, 0, 0, p);
+        src.recycle();
+        return gpu(b);
+    }
+
+    /** How light the logo's visible pixels are on average (0 = black, 1 = white), from a sample of them. */
+    private static float inkLuminance(Bitmap b) {
+        double sum = 0, weight = 0;
+        int stepX = Math.max(1, b.getWidth() / 64), stepY = Math.max(1, b.getHeight() / 32);
+        for (int y = 0; y < b.getHeight(); y += stepY) {
+            for (int x = 0; x < b.getWidth(); x += stepX) {
+                int px = b.getPixel(x, y), a = px >>> 24;
+                if (a < 40) continue;
+                sum += a * (0.2126 * ((px >> 16) & 255) + 0.7152 * ((px >> 8) & 255) + 0.0722 * (px & 255)) / 255;
+                weight += a;
+            }
+        }
+        return weight == 0 ? 1 : (float) (sum / weight);
+    }
+
     static Bitmap gpu(Bitmap b) {
         Bitmap g = b.copy(Bitmap.Config.HARDWARE, false);
         if (g == null) return b;

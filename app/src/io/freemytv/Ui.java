@@ -143,6 +143,40 @@ final class Ui {
         return es ? spanish : en ? english : pt;
     }
 
+    /** Brands as people write them (Build.BRAND is often lowercase: "tcl", "xiaomi", "nvidia"). */
+    private static final String[][] BRANDS = {
+        {"tcl", "TCL"}, {"lge", "LG"}, {"lg", "LG"}, {"nvidia", "NVIDIA"}, {"onn", "onn."}, {"philips", "Philips"},
+        {"tpvision", "Philips"}, {"hisense", "Hisense"}, {"vidaa", "Hisense"}, {"xiaomi", "Xiaomi"}, {"sony", "Sony"},
+        {"google", "Google"}, {"sharp", "Sharp"}, {"toshiba", "Toshiba"}, {"panasonic", "Panasonic"},
+        {"aoc", "AOC"}, {"jvc", "JVC"}, {"semp", "Semp"}, {"multilaser", "Multilaser"}, {"amazon", "Amazon"},
+    };
+    /** Chip makers and placeholders that cheap boxes report as their brand: not a brand to show. */
+    private static final String[] NOT_BRANDS = {"", "android", "generic", "unknown", "alps", "mediatek", "mtk",
+        "amlogic", "rockchip", "allwinner", "realtek", "droidlogic"};
+    private static String brand;
+
+    /** The TV's brand only, never its model ("TCL" on a TCL C6K); "" when the TV doesn't say one. */
+    static synchronized String brand() {
+        if (brand == null) brand = brandName(isPlaceholder(Build.BRAND) ?Build.MANUFACTURER : Build.BRAND);
+        return brand;
+    }
+
+    private static String brandName(String raw) {
+        String b = raw == null ? "" : raw.trim();
+        if (isPlaceholder(b)) return "";
+        String key = b.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
+        for (String[] known : BRANDS) if (key.equals(known[0])) return known[1];
+        // Unknown: short names are initials ("BGH"), longer ones get a capital ("semp toshiba" → "Semp toshiba").
+        if (b.length() <= 3) return b.toUpperCase(Locale.ROOT);
+        return b.equals(b.toLowerCase(Locale.ROOT)) ? Character.toUpperCase(b.charAt(0)) + b.substring(1) : b;
+    }
+
+    private static boolean isPlaceholder(String raw) {
+        String key = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+        for (String s : NOT_BRANDS) if (key.equals(s)) return true;
+        return false;
+    }
+
     static Locale locale() {
         return es ? spanish() : en ? Locale.US : PT;
     }
