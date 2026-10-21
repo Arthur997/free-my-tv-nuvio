@@ -1121,11 +1121,10 @@ public class SettingsActivity extends Activity {
                             "No access to the apps' lists: switch the home screen to Free My TV again.",
                             "Sin acceso a la lista de las apps: cambia el inicio a Free My TV otra vez.")
                     : watchRows.isEmpty()
-                    ? Ui.tr("Nenhum app tem algo para continuar agora.", "No app has anything to continue right now.",
-                            "Ninguna app tiene algo para seguir ahora.")
-                    : Ui.tr("OK liga ou desliga. Só aparecem os apps com algo para continuar.",
-                            "OK turns it on or off. Only apps with something to continue are listed.",
-                            "OK activa o desactiva. Solo aparecen las apps con algo para seguir.");
+                    ? Ui.tr("Nenhum app de vídeo instalado.", "No video apps installed.", "Ninguna app de video instalada.")
+                    : Ui.tr("OK liga ou desliga. Os apps de vídeo da TV e os que têm algo para continuar.",
+                            "OK turns it on or off. The TV's video apps and any with something to continue.",
+                            "OK activa o desactiva. Las apps de video del TV y las que tienen algo para seguir.");
             c.drawText(text, LIST_X * k + 30 * k, hy, hint);
         }
 

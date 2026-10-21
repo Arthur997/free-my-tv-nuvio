@@ -93,12 +93,28 @@ final class WatchNext {
         }
     }
 
-    /** The apps with something in the list now, as {package, name} (More Settings: which ones may show). */
+    /** Video apps that may keep a list, listed in More Settings even before they have anything in it. */
+    private static final String[] VIDEO_APPS = {"com.google.android.youtube.tv", "com.netflix.ninja",
+        "com.amazon.amazonvideo.livingroom", "com.disney.disneyplus", "com.wbd.stream", "com.apple.atve.androidtv.appletv",
+        "com.globo.globotv", "com.hulu.livingroomplus", "com.cbs.ott", "com.peacocktv.peacockandroid", "com.nuvio.tv",
+        "space.nuvio.nativelegacy", "com.stremio.one", "tv.pluto.android", "com.crunchyroll.crunchyroid"};
+
+    /**
+     * The apps that can show here, as {package, name} (More Settings: which ones may show): the known video apps on the
+     * TV, and any other app with something in the list now.
+     */
     static List<String[]> apps(Context c) {
         List<String[]> out = new ArrayList<>();
-        if (!allowed(c)) return out;
         PackageManager pm = c.getPackageManager();
         Set<String> seen = new HashSet<>();
+        for (String pkg : VIDEO_APPS) {
+            String name = appName(pm, pkg);
+            if (name != null && seen.add(pkg)) out.add(new String[] {pkg, name});
+        }
+        if (!allowed(c)) {
+            Collections.sort(out, (a, b) -> a[1].compareToIgnoreCase(b[1]));
+            return out;
+        }
         try (Cursor q = c.getContentResolver().query(TvContract.WatchNextPrograms.CONTENT_URI,
                 new String[] {TvContract.WatchNextPrograms.COLUMN_PACKAGE_NAME}, null, null, null)) {
             while (q != null && q.moveToNext()) {
