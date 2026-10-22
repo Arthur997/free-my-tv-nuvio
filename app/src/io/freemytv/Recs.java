@@ -53,6 +53,8 @@ final class Recs {
         String title, backdrop, meta = "", app, pkg, imdb;
         String link;            // opens the title in its app (looked up with Watchmode), or null: the app's home
         String logo;            // the title's logo on TMDB (a transparent PNG), or null
+        String overview = "", year = "";   // the preview after resting on a card: the synopsis and the year
+        double rating;                     // TMDB's average (0 to 10), 0 = none
         // Continue watching (WatchNext): the app's own link to where it stopped, and how much was watched (0 to 1).
         // Its `backdrop` is then the picture's address (https://, content:// or android.resource://), not a TMDB path.
         String intentUri;
@@ -76,7 +78,7 @@ final class Recs {
     /** The lists are the day's top: fetched once a day (a new day, or 24 h after the last fetch). */
     private static final long LIST_EVERY = 24 * 3600_000L;
     /** Bump when what is saved for each title changes (the saved list is discarded and fetched again). */
-    private static final int CACHE_VERSION = 6;   // 6: the titles' logos
+    private static final int CACHE_VERSION = 7;   // 7: synopsis, rating and year for the preview
     private static final int MANHA = 0, TARDE = 1, NOITE = 2;
     /** Service name on TMDB (part of the name, lowercase) → TV app (HomeApps key, package). */
     private static final String[][] SERVICES = {
@@ -678,6 +680,10 @@ final class Recs {
                 + "?language=" + lang() + "&append_to_response=watch/providers,images,external_ids&include_image_language=null,"
                 + Ui.language.replaceAll("-.*", "") + ",en");
         p.title = title(p, o);
+        p.overview = o.optString("overview", "").trim();
+        p.rating = o.optDouble("vote_average", 0);
+        String date = o.optString(p.kind.equals("movie") ? "release_date" : "first_air_date", "");
+        p.year = date.length() >= 4 ? date.substring(0, 4) : "";
         String best = bestBackdrop(o.optJSONObject("images"));
         if (best != null) p.backdrop = best;
         p.logo = bestLogo(o.optJSONObject("images"));
@@ -1193,6 +1199,7 @@ final class Recs {
                 a.put(new JSONObject().put("id", p.id).put("kind", p.kind).put("title", p.title).put("backdrop", p.backdrop).put("link", p.link == null ? "" : p.link)
                         .put("meta", p.meta).put("app", p.app == null ? "" : p.app).put("pkg", p.pkg == null ? "" : p.pkg)
                         .put("imdb", p.imdb == null ? "" : p.imdb).put("logo", p.logo == null ? "" : p.logo)
+                        .put("overview", p.overview).put("rating", p.rating).put("year", p.year)
                         .put("detailed", p.detailed));
             }
             SharedPreferences.Editor e = cache.edit().putString("picks", a.toString()).putInt("period", period).putLong("listAt", listAt)
@@ -1223,6 +1230,9 @@ final class Recs {
             p.pkg = o.optString("pkg").isEmpty() ? null : o.optString("pkg");
             p.imdb = o.optString("imdb").isEmpty() ? null : o.optString("imdb");
             p.logo = o.optString("logo").isEmpty() ? null : o.optString("logo");
+            p.overview = o.optString("overview");
+            p.rating = o.optDouble("rating", 0);
+            p.year = o.optString("year");
             p.detailed = o.optBoolean("detailed");
             out.add(p);
         }
