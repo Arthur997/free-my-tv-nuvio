@@ -129,8 +129,7 @@ final class Recs {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final List<Listener> listeners = new ArrayList<>();
-    // Built and ready to draw, least recently drawn first: this tab's seven (on screen and the next column) and the
-    // first five of each tab fit (onTrimMemory lets them go when the TV is short of memory).
+    // Built and ready to draw, least recently drawn first (onTrimMemory lets them go when the TV is short of memory).
     private final Map<String, Backdrop> images = new LinkedHashMap<>(16, 0.75f, true);
     private final Map<String, Bitmap> logos = new LinkedHashMap<>(16, 0.75f, true);   // by Pick.logo
     private final java.util.Set<String> badLogos = new java.util.HashSet<>();
@@ -138,7 +137,10 @@ final class Recs {
     // shows the cards right away after the home screen restarts, until the full one is ready. By Pick.backdrop.
     private final Map<String, Bitmap> previews = new LinkedHashMap<>(16, 0.75f, true);
     private final ExecutorService previewIo = Executors.newSingleThreadExecutor();
-    private static final int READY_LIGHT = 18, READY_GLASS = 4;
+    private final ExecutorService builder = Executors.newSingleThreadExecutor();   // decoding and building photos
+    // Room for every card a screen can ask for at once (this tab's on screen and next, the first of each tab, and the
+    // suggestions in Continue Watching): fewer made them push each other out and be built again in a loop.
+    private static final int READY_LIGHT = 24, READY_GLASS = 4;
     private final java.util.Set<String> pending = new java.util.HashSet<>();
     private volatile List<Pick> picks = new ArrayList<>();
     private volatile int period = -1;
@@ -284,6 +286,17 @@ final class Recs {
      * its links); null: each title opens in the streaming app it is on (the default).
      */
     private String[] linkTarget() {
+        synchronized (apps) {
+            checkApps();
+            if (targetVersion != Prefs.version) {
+                target = findLinkTarget();
+                targetVersion = Prefs.version;
+            }
+            return target;
+        }
+    }
+
+    private String[] findLinkTarget() {
         String[] a = linkApp(Prefs.recsTarget());
         if (a == null) return null;
         PackageManager pm = context.getPackageManager();
@@ -294,6 +307,22 @@ final class Recs {
             }
         }
         return null;
+    }
+
+    // What is installed only changes when an app is installed, updated or removed (Android counts those changes): the
+    // answers are kept until then, so the screen's check every 15 s doesn't ask the package manager a dozen times.
+    private final Map<String, Boolean> apps = new HashMap<>();
+    private int appsSeen = -1, targetVersion = -1, stampVersion = -1;
+    private String[] target;
+    private long stamp;
+
+    /** Forgets the kept answers when an app changed since the last look (call with `apps` held). */
+    private void checkApps() {
+        android.content.pm.ChangedPackages changed = context.getPackageManager().getChangedPackages(Math.max(0, appsSeen));
+        if (appsSeen >= 0 && changed == null) return;
+        appsSeen = changed != null ? changed.getSequenceNumber() : 0;
+        apps.clear();
+        targetVersion = stampVersion = -1;
     }
 
     /** The pick's ready backdrop (or null: builds it in the background and notifies when it's ready). */
@@ -308,18 +337,27 @@ final class Recs {
             if (failed != null && SystemClock.uptimeMillis() - failed < 60_000L) return null;
             if (!pending.add(key)) return null;
         }
+        // The network part on `io`, the build on `builder`: the next photo downloads while this one is built.
         io.execute(() -> {
-            boolean ok = false;
+            File source;
             try {
-                ok = loadImage(p);
-            } finally {
-                synchronized (images) {
-                    pending.remove(key);
-                    if (ok) failedAtByKey.remove(key); else failedAtByKey.put(key, SystemClock.uptimeMillis());
-                }
+                source = fetchImage(p);
+            } catch (Exception | OutOfMemoryError e) {
+                AppLog.w("recommendation image: " + e.getMessage());
+                finish(key, false);
+                return;
             }
+            if (source == null) finish(key, true);
+            else builder.execute(() -> finish(key, buildImage(p, source)));
         });
         return null;
+    }
+
+    private void finish(String key, boolean ok) {
+        synchronized (images) {
+            pending.remove(key);
+            if (ok) failedAtByKey.remove(key); else failedAtByKey.put(key, SystemClock.uptimeMillis());
+        }
     }
 
     private final Map<String, Long> failedAtByKey = new HashMap<>();
@@ -835,10 +873,29 @@ final class Recs {
     /** The service's app is on the TV, and the service isn't hidden (an app the TV ships without a subscription, say). */
     private boolean installed(String pkg) {
         if (!HIDDEN.isEmpty()) for (String[] s : SERVICES) if (s[2].equals(pkg) && HIDDEN.contains(s[1])) return false;
-        return HomeApps.launchIntent(context.getPackageManager(), pkg) != null;
+        synchronized (apps) {
+            checkApps();
+            Boolean known = apps.get(pkg);
+            if (known == null) {
+                known = HomeApps.launchIntent(context.getPackageManager(), pkg) != null;
+                apps.put(pkg, known);
+            }
+            return known;
+        }
     }
 
     private long sourceStamp() {
+        synchronized (apps) {
+            checkApps();
+            if (stampVersion != Prefs.version) {
+                stamp = makeStamp();
+                stampVersion = Prefs.version;
+            }
+            return stamp;
+        }
+    }
+
+    private long makeStamp() {
         long stamp = (Prefs.tmdbKey().hashCode() * 31L + REGION.hashCode()) * 31L + (Config.HIDE_ANIMATION ? 1 : 0);
         for (String[] service : SERVICES) stamp = stamp * 31L + (installed(service[2]) ? service[2].hashCode() : 0);
         String[] target = linkTarget();
@@ -988,38 +1045,54 @@ final class Recs {
         prune(f.getParentFile());
     }
 
-    /** Reads the original (≥ 1920 wide) and builds the backdrop (Backdrop: cards plus frosted and glass versions). */
-    /** Details (if missing) and the photo, built for the screen; false = it failed (try again later). */
-    private boolean loadImage(Pick p) {
+    /**
+     * The network part of a photo: the details first when missing (the top's come with its photo: genre, runtime, the
+     * IMDb id Nuvio opens), then the photo on disk. Returns the file to build from, or null when there is nothing to
+     * build (already built, or nothing can open the title). A card built before is made again from its saved preview,
+     * a fraction of the photo's size and with no download.
+     */
+    private File fetchImage(Pick p) throws Exception {
         if (!p.detailed) {
-            // The top's details come with its photo (lazyDetails): genre, runtime, the IMDb id Nuvio opens.
-            try {
-                fetchDetails(p);
-                save();
-            } catch (Exception e) {
-                AppLog.w("recommendation details: " + e.getMessage());
-                return false;
-            }
+            fetchDetails(p);
+            save();
             notifyListeners();
-            if (p.pkg == null) return true;   // nothing can open it: it leaves the list, no photo needed
+            if (p.pkg == null) return null;   // nothing can open it: it leaves the list, no photo needed
         }
         synchronized (images) {
-            if (images.containsKey(p.backdrop)) return true;
+            if (images.containsKey(p.backdrop)) return null;
         }
-        File f = imageFile(p);
+        File preview = previewFile(p);
+        if (light && preview.exists()) return preview;
         try {
             download(p);
+        } catch (IOException e) {
+            //noinspection ResultOfMethodCallIgnored
+            imageFile(p).delete();
+            throw e;
+        }
+        return imageFile(p);
+    }
+
+    /** Decodes `f` just big enough and builds the backdrop (Backdrop: cards plus frosted and glass versions). */
+    private boolean buildImage(Pick p, File f) {
+        boolean fromPreview = f.equals(previewFile(p));
+        if (fromPreview && !light) return true;   // the design changed: the full photo is fetched on the next ask
+        try {
             BitmapFactory.Options bounds = new BitmapFactory.Options();
             bounds.inJustDecodeBounds = true;
             BitmapFactory.decodeFile(f.getPath(), bounds);
             BitmapFactory.Options opts = new BitmapFactory.Options();
             opts.inSampleSize = 1;
-            while (bounds.outWidth / (opts.inSampleSize * 2) >= Backdrop.W) opts.inSampleSize *= 2;
+            // The light design's largest picture is the big card; the other one fills the screen.
+            int needed = light ? Backdrop.WIDE_W : Backdrop.W;
+            while (bounds.outWidth / (opts.inSampleSize * 2) >= needed) opts.inSampleSize *= 2;
             Bitmap b = BitmapFactory.decodeFile(f.getPath(), opts);
             if (b == null) throw new IOException("unreadable image");
-            AppLog.w("backdrop \u201c" + p.title + "\u201d: " + bounds.outWidth + "×" + bounds.outHeight + " → " + Backdrop.W + "×" + Backdrop.H);
+            AppLog.w("backdrop \u201c" + p.title + "\u201d: " + bounds.outWidth + "x" + bounds.outHeight + (fromPreview ? " (saved card)" : ""));
             boolean forLight = light;
-            Backdrop backdrop = Backdrop.make(b, forLight, forLight && !previewFile(p).exists() ? previewFile(p) : null);
+            File preview = forLight && !fromPreview && !previewFile(p).exists() ? previewFile(p) : null;
+            Backdrop backdrop = Backdrop.make(b, forLight, preview);
+            if (preview != null) prune(preview.getParentFile());   // the saved cards: only the newest few stay
             if (forLight != light) return true;   // the design changed midway: this one is stale
             synchronized (images) {
                 images.put(p.backdrop, backdrop);
@@ -1027,7 +1100,10 @@ final class Recs {
                 pending.remove("preview:" + p.backdrop);
                 while (images.size() > (forLight ? READY_LIGHT : READY_GLASS)) images.remove(images.keySet().iterator().next());
             }
-            if (forLight) loadLogo(p);
+            if (forLight) io.execute(() -> {
+                loadLogo(p);
+                notifyListeners();
+            });
             notifyListeners();
             return true;
         } catch (IOException | RuntimeException | OutOfMemoryError e) {
@@ -1057,8 +1133,10 @@ final class Recs {
             Bitmap b = f.exists() ? BitmapFactory.decodeFile(f.getPath(), opts) : null;
             synchronized (images) {
                 // Not saved yet: not looked for again (the full picture comes instead, and saves it for next time).
-                if (b != null && !images.containsKey(key)) {
-                    previews.put(key, b);
+                // Read: free to be read again if it's let go before the full picture is ready.
+                if (b != null) {
+                    pending.remove("preview:" + key);
+                    if (!images.containsKey(key)) previews.put(key, b);
                     while (previews.size() > ON_SCREEN + 2) previews.remove(previews.keySet().iterator().next());
                 }
             }

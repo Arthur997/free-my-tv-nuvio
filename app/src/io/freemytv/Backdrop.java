@@ -71,6 +71,21 @@ final class Backdrop {
 
     /** `preview`: where to also save the big card as a JPEG (Recs.preview shows it at once on the next start). */
     static Backdrop make(Bitmap src, boolean forLight, java.io.File preview) {
+        if (forLight) {
+            // Light design: everything comes from the photo without scrims. The cards straight from it (cropped to 16:9
+            // at their own size), the frosted and glass versions from the big card: no full-screen copy (8 MB, drawn on
+            // every build) is made.
+            Bitmap wide = card(src, WIDE_W, WIDE_H), small = gpu(card(src, SMALL_W, SMALL_H));
+            src.recycle();
+            if (preview != null) savePreview(wide, preview);
+            int[] frost = reduce(wide, FW, FH, 3, 3);
+            int[] light = whiten(frost.clone(), 0.82f);
+            int[] glass = reduce(wide, GW, GH, 2, 2);
+            int[] lightGlass = whiten(glass.clone(), 0.74f);
+            int[] night = darken(frost.clone(), 0.76f);
+            int[] nightGlass = darken(glass, 0.56f);
+            return new Backdrop(null, frost, null, gpu(wide), small, light, lightGlass, night, nightGlass);
+        }
         Bitmap out = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(out);
         Paint photo = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
@@ -78,20 +93,6 @@ final class Backdrop {
         float sw = src.getWidth() * scale, sh = src.getHeight() * scale;
         c.drawBitmap(src, null, new RectF((W - sw) / 2, (H - sh) / 2, (W + sw) / 2, (H + sh) / 2), photo);
         src.recycle();
-        if (forLight) {
-            // Light design: everything comes from the photo without scrims.
-            Bitmap wide = card(out, WIDE_W, WIDE_H), small = gpu(card(out, SMALL_W, SMALL_H));
-            if (preview != null) savePreview(wide, preview);
-            wide = gpu(wide);
-            int[] frost = reduce(out, FW, FH, 3, 3);
-            int[] light = whiten(frost.clone(), 0.82f);
-            int[] glass = reduce(out, GW, GH, 2, 2);
-            int[] lightGlass = whiten(glass.clone(), 0.74f);
-            int[] night = darken(frost.clone(), 0.76f);
-            int[] nightGlass = darken(glass, 0.56f);
-            out.recycle();
-            return new Backdrop(null, frost, null, wide, small, light, lightGlass, night, nightGlass);
-        }
 
         float boost = Math.max(0, Math.min(0.3f, (luminance(out, 0, 0.22f, 0.5f, 0.62f) - 0.22f) * 1.1f));
         Paint scrim = new Paint(Paint.DITHER_FLAG);
@@ -177,6 +178,7 @@ final class Backdrop {
         }
         Bitmap out = Bitmap.createScaledBitmap(b, w, h, true);
         if (b != full && b != out) b.recycle();
+        if (out == full) out = full.copy(full.getConfig(), false);   // already that size: opaque() mustn't recycle the photo
         return opaque(out);   // still in memory: the caller moves it to the GPU (after saving a preview)
     }
 
@@ -196,10 +198,10 @@ final class Backdrop {
     private static final Paint DITHER = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
 
     /**
-     * A photo has no transparency: 16 bits a pixel (RGB_565) hold it in half the memory. Dithered on the way down, so the
-     * sky's soft gradients don't turn into bands.
+     * A photo (or an app's card) has no transparency: 16 bits a pixel (RGB_565) hold it in half the memory. Dithered on
+     * the way down, so soft gradients don't turn into bands.
      */
-    private static Bitmap opaque(Bitmap b) {
+    static Bitmap opaque(Bitmap b) {
         Bitmap o = Bitmap.createBitmap(b.getWidth(), b.getHeight(), Bitmap.Config.RGB_565);
         new Canvas(o).drawBitmap(b, 0, 0, DITHER);
         b.recycle();

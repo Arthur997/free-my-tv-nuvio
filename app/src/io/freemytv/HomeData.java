@@ -77,7 +77,8 @@ final class HomeData {
         if (a != null && activeVersion == Prefs.version) return a;
         int n = 0;
         int[] tmp = new int[COINS.length];
-        for (int i = 0; i < COINS.length; i++) if (Prefs.coin(i) && (i < 3 || CURRENCY.equals("BRL"))) tmp[n++] = i;
+        // The dollar and the euro are prices in reais: not while the prices go in dollars (Binance had no BRL pairs).
+        for (int i = 0; i < COINS.length; i++) if (Prefs.coin(i) && (i < 3 || (CURRENCY.equals("BRL") && !inDollars))) tmp[n++] = i;
         a = java.util.Arrays.copyOf(tmp, n);
         activeCoins = a;
         activeVersion = Prefs.version;
@@ -197,6 +198,7 @@ final class HomeData {
                     } catch (IOException e) {
                         if (inDollars || CURRENCY.equals("USD") || !"HTTP 400".equals(e.getMessage())) throw e;
                         inDollars = true;
+                        activeCoins = null;   // the dollar and the euro leave the list
                         cache.edit().putString("dollarsFor", CURRENCY).apply();
                         AppLog.w("prices: Binance has no " + CURRENCY + " pairs, using dollars");
                         body = getPrices();

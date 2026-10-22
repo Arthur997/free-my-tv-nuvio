@@ -319,7 +319,7 @@ final class HomeMode {
             save(c, started);
             List<String> targets = targets(home, offDream, setupHome);
             Set<String> disabled = new HashSet<>(stringList(state(c), "disabled"));
-            applyScreensaver(adb, ownDream, dream, disabled);
+            applyScreensaver(adb, ownDream, state(c), disabled);
             Set<String> present = packages(adb, "");
             Set<String> keptOff = new HashSet<>(stringList(state(c), "keptOff"));
             // Off now and not on our list: the person turned it off, unless an earlier install of Free My TV did (its
@@ -633,7 +633,7 @@ final class HomeMode {
                     adb.shell("settings put secure screensaver_components " + DREAM);
                     fixed.add(Ui.tr("the screensaver"));
                 } else if (!reverted && !ownDream) {
-                    keepStockScreensaver(adb, dream, disabled);
+                    keepStockScreensaver(adb, s, disabled);
                 }
                 record(adb, disabled);
                 JSONObject latest = state(app);
@@ -667,7 +667,7 @@ final class HomeMode {
             if (!FREE.equals(s.optString("mode"))) return;   // Original: the TV's own, as always
             try (Adb adb = Adb.connect(app, 10_000, null)) {
                 Set<String> disabled = new HashSet<>(stringList(s, "disabled"));
-                applyScreensaver(adb, own, s.optString("originalDream", ""), disabled);
+                applyScreensaver(adb, own, s, disabled);
                 JSONObject latest = state(app);
                 latest.put("disabled", new JSONArray(sorted(disabled)));
                 save(app, latest);
@@ -677,21 +677,22 @@ final class HomeMode {
         }
     }
 
-    private static void applyScreensaver(Adb adb, boolean own, String dream, Set<String> disabled) throws IOException {
+    private static void applyScreensaver(Adb adb, boolean own, JSONObject s, Set<String> disabled) throws IOException {
         if (own) adb.shell("settings put secure screensaver_components " + DREAM);
-        else keepStockScreensaver(adb, dream, disabled);
+        else keepStockScreensaver(adb, s, disabled);
     }
 
     /**
-     * The TV's own screensaver stays (TCL's Google photos one): ours is taken off the setting, and the stock one is
-     * turned back on if an earlier switch turned it off.
+     * The TV's own screensaver stays (TCL's Google photos one): ours gives way to the one the TV had before (as recorded
+     * at the first switch), and the stock one is turned back on if an earlier switch turned it off, unless it lives
+     * in the TV's own home screen, which must stay off (two home screens on would take the Home button).
      */
-    private static void keepStockScreensaver(Adb adb, String dream, Set<String> disabled) throws IOException {
+    private static void keepStockScreensaver(Adb adb, JSONObject s, Set<String> disabled) throws IOException {
         if (adb.shell("settings get secure screensaver_components").contains(PKG + "/")) {   // either of ours
-            adb.shell("settings delete secure screensaver_components");
+            restoreScreensaver(adb, s);
         }
-        String dreamPkg = packageOf(dream);
-        if (dreamPkg != null && !dreamPkg.equals(PKG) && disabled.contains(dreamPkg)
+        String dreamPkg = packageOf(originalDream(s)), homePkg = packageOf(originalHome(s));
+        if (dreamPkg != null && !dreamPkg.equals(PKG) && !dreamPkg.equals(homePkg) && disabled.contains(dreamPkg)
                 && adb.shell("pm enable " + dreamPkg).contains("new state: enabled")) {
             disabled.remove(dreamPkg);
         }

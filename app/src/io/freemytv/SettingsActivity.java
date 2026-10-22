@@ -185,6 +185,9 @@ public class SettingsActivity extends Activity {
         private float k = 1;
         private Paint title, subtitle, version, rowLabel, rowValue, rowSub, header, cellLabel, cellValue, warn, spinner, white, shadow;
         private TextPaint notice;
+        // Made with the size and the theme, not on every frame: a list redraws on every frame of its focus animation.
+        private Paint heading, hint;
+        private final TextPaint fit = new TextPaint();   // for cutting a long name to its row
 
         private final Runnable poll = new Runnable() {
             @Override public void run() {
@@ -353,6 +356,8 @@ public class SettingsActivity extends Activity {
             cellValue.setTextAlign(Paint.Align.RIGHT);
             warn = Ui.text(Ui.regular, 23 * k, lightTheme ? 0xFFB35C00 : AMBER);
             notice = new TextPaint(Ui.text(Ui.regular, 23 * k, fg(0xB3FFFFFF)));
+            heading = Ui.text(Ui.displaySemibold, 34 * k, fg(0xFFFFFFFF));
+            hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
             spinner = new Paint(Paint.ANTI_ALIAS_FLAG);
             spinner.setStyle(Paint.Style.STROKE);
             spinner.setStrokeCap(Paint.Cap.ROUND);
@@ -364,6 +369,11 @@ public class SettingsActivity extends Activity {
         }
 
         /** The background and the text follow the theme (it can change here, or turn to night while open). */
+        private TextPaint fitted(Paint p) {
+            fit.set(p);
+            return fit;
+        }
+
         private void retheme() {
             if (w > 0 && lightTheme() != lightTheme) onSizeChanged(w, h, w, h);
         }
@@ -449,7 +459,7 @@ public class SettingsActivity extends Activity {
                     // Switching: the current step in place of the value, with the spinning arc.
                     String text = busyText.isEmpty() ? Ui.tr("Começando…", "Starting…") : busyText;
                     rowValue.setColor(blend(fg(0xB3FFFFFF), 0xB31C1C1E, f));
-                    String shown = TextUtils.ellipsize(text, new TextPaint(rowValue), 470 * k, TextUtils.TruncateAt.END).toString();
+                    String shown = TextUtils.ellipsize(text, fitted(rowValue), 470 * k, TextUtils.TruncateAt.END).toString();
                     c.drawText(shown, right, base, rowValue);
                     float sx = right - rowValue.measureText(shown) - 26 * k;
                     spinner.setColor(blend(fg(0xFFFFFFFF), INK, f));
@@ -564,7 +574,6 @@ public class SettingsActivity extends Activity {
 
         /** Home screen choice: Free My TV or the original, with a check on the one in use. */
         private void drawChoice(Canvas c) {
-            Paint heading = Ui.text(Ui.displaySemibold, 34 * k, fg(0xFFFFFFFF));
             c.drawText(Ui.tr("Início", "Home Screen"), LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
             String[][] options = {{"Free My TV", Ui.tr("Sem anúncios, com a tela de descanso da TV", "No ads, with the TV's own screensaver")},
                     {"Original", Ui.tr("O Início de fábrica da TV", "The TV's factory home screen")}};
@@ -582,7 +591,6 @@ public class SettingsActivity extends Activity {
                     Symbols.draw(getContext(), c, "check", rowRect.right - 30 * k - cw / 2, rowRect.centerY(), 26 * k, blend(fg(0xFFFFFFFF), INK, f));
                 }
             }
-            Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
             c.drawText(Ui.tr("A troca leva uns segundos e a tela pisca nas medições.",
                     "Switching takes a few seconds; the screen blinks while it measures."), LIST_X * k + 30 * k,
                     (LIST_TOP + 20 + 2 * (CHOICE_H + ROW_GAP) + 40) * k, hint);
@@ -1131,7 +1139,6 @@ public class SettingsActivity extends Activity {
         }
 
         private void drawShelfEditor(Canvas c) {
-            Paint heading = Ui.text(Ui.displaySemibold, 34 * k, fg(0xFFFFFFFF));
             c.drawText(Ui.tr("Prateleira", "Shelf"), LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
             int rows = rowCount();
             for (int i = 0; i < rows; i++) {
@@ -1143,10 +1150,10 @@ public class SettingsActivity extends Activity {
                 rowLabel.setColor(blend(place >= 0 ? fg(0xF2FFFFFF) : fg(0x80FFFFFF), place >= 0 ? INK : 0x801C1C1E, f));
                 rowValue.setColor(blend(fg(0xB3FFFFFF), 0xB31C1C1E, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
-                c.drawText(TextUtils.ellipsize(app[1], new TextPaint(rowLabel), 520 * k, TextUtils.TruncateAt.END).toString(), rowRect.left + 30 * k, base, rowLabel);
+                fit.set(rowLabel);
+                c.drawText(TextUtils.ellipsize(app[1], fit, 520 * k, TextUtils.TruncateAt.END).toString(), rowRect.left + 30 * k, base, rowLabel);
                 c.drawText(place >= 0 ? "#" + (place + 1) : Ui.tr("Fora", "Off"), rowRect.right - 30 * k, base, rowValue);
             }
-            Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
             float hy = (LIST_TOP + 20 + rows * (LIST_ROW_H + LIST_ROW_GAP) + 36) * k;
             c.drawText(Ui.tr("OK põe ou tira da prateleira (até " + HomeApps.MAX_SHELF + "). ← → mudam a ordem.",
                     "OK adds or removes (up to " + HomeApps.MAX_SHELF + "). ← → change the order.",
@@ -1171,7 +1178,6 @@ public class SettingsActivity extends Activity {
         }
 
         private void drawWatchApps(Canvas c) {
-            Paint heading = Ui.text(Ui.displaySemibold, 34 * k, fg(0xFFFFFFFF));
             c.drawText(Ui.tr("Continuar assistindo", "Continue Watching", "Seguir viendo"), LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
             int rows = rowCount();
             for (int i = 0; i < rows; i++) {
@@ -1183,10 +1189,10 @@ public class SettingsActivity extends Activity {
                 rowLabel.setColor(blend(on ? fg(0xF2FFFFFF) : fg(0x80FFFFFF), on ? INK : 0x801C1C1E, f));
                 rowValue.setColor(blend(fg(0xB3FFFFFF), 0xB31C1C1E, f));
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
-                c.drawText(TextUtils.ellipsize(app[1], new TextPaint(rowLabel), 520 * k, TextUtils.TruncateAt.END).toString(), rowRect.left + 30 * k, base, rowLabel);
+                fit.set(rowLabel);
+                c.drawText(TextUtils.ellipsize(app[1], fit, 520 * k, TextUtils.TruncateAt.END).toString(), rowRect.left + 30 * k, base, rowLabel);
                 c.drawText(onOff(on), rowRect.right - 30 * k, base, rowValue);
             }
-            Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
             float hy = (LIST_TOP + 20 + rows * (LIST_ROW_H + LIST_ROW_GAP) + 36) * k;
             String text = !WatchNext.allowed(getContext())
                     ? Ui.tr("Sem acesso à lista dos apps: troque o Início para Free My TV de novo.",
@@ -1228,7 +1234,6 @@ public class SettingsActivity extends Activity {
 
         /** A list of choices: nine rows at a time, the one in use checked. */
         private void drawPicker(Canvas c) {
-            Paint heading = Ui.text(Ui.displaySemibold, 34 * k, fg(0xFFFFFFFF));
             String title = pickTitle;
             c.drawText(title, LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
             int rows = rowCount();
@@ -1244,7 +1249,6 @@ public class SettingsActivity extends Activity {
                     Symbols.draw(getContext(), c, "check", rowRect.right - 30 * k - cw / 2, rowRect.centerY(), 26 * k, blend(fg(0xFFFFFFFF), INK, f));
                 }
             }
-            Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
             float hy = (LIST_TOP + 20 + rows * (LIST_ROW_H + LIST_ROW_GAP) + 36) * k;
             c.drawText((pickScroll + focus + 1) + " / " + pickLabels.size() + "  ·  " + Ui.tr("OK escolhe, Voltar cancela.", "OK picks, Back cancels."),
                     LIST_X * k + 30 * k, hy, hint);
@@ -1254,7 +1258,6 @@ public class SettingsActivity extends Activity {
             boolean keys = screen == REMOTE_KEYS;
             String[] labels = listLabels();
             String[] values = listValues();
-            Paint heading = Ui.text(Ui.displaySemibold, 34 * k, fg(0xFFFFFFFF));
             c.drawText(keys ? Ui.tr("Botões do Controle", "Remote Buttons") : screen == MORE ? Ui.tr("Mais Ajustes", "More Settings")
                     : Ui.tr("Ajustes do Início", "Home Settings"), LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
             for (int i = 0; i < labels.length; i++) {
@@ -1270,7 +1273,6 @@ public class SettingsActivity extends Activity {
                 c.drawText(labels[i], rowRect.left + 30 * k, base, rowLabel);
                 c.drawText(values[i], rowRect.right - 30 * k, base, rowValue);
             }
-            Paint hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
             float hy = (LIST_TOP + 20 + labels.length * (LIST_ROW_H + LIST_ROW_GAP) + 36) * k;
             c.drawText(keys ? Ui.tr("OK abre a lista de apps.", "OK opens the list of apps.")
                     : Ui.tr("OK abre as opções; ← e → mudam direto.", "OK opens the choices; ← and → change it right away."),

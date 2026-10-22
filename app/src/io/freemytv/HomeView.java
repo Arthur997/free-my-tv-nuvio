@@ -156,7 +156,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final RectF[] cardRects = new RectF[SLOTS];
     // The list moving along (→ past the last column): each title glides from its slot in the `shiftFrom` offset to
     // its slot in `shiftTo`, as cardShift goes from 0 to 1.
-    private final Spring cardShift = new Spring(0.34f, 0.9f, 1);
+    private final Spring cardShift = new Spring(0.26f, 0.9f, 1);
     private int shiftFrom, shiftTo;
     private final RectF slotFrom = new RectF(), slotTo = new RectF();
     private final List<HomeApps.Item> lightButtons = new ArrayList<>();
@@ -201,7 +201,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private int pickIndex, heroSlide = 1;
     private Hero hero, heroFrom;
     private long heroFadeAt, bgFadeAt;
-    private final Spring heroFocus = new Spring(0.28f, 0.85f, 0);
+    private final Spring heroFocus = new Spring(0.2f, 0.85f, 0);
     private final RectF heroButton = new RectF();
     private Backdrop bgFrom, bgTo;     // null = gradient (no photo)
     private final int[] frostMix = new int[Backdrop.FW * Backdrop.FH];
@@ -212,7 +212,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private Spring[] drawerFocus = new Spring[0];
     private RectF[] drawerRects = new RectF[0];
     private final RectF weatherCard = new RectF(), quotesCard = new RectF();
-    private final Spring drawer = new Spring(0.46f, 0.92f, 0);
+    private final Spring drawer = new Spring(0.34f, 0.92f, 0);
     private boolean drawerOpen;
     private int drawerIndex;
 
@@ -220,8 +220,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private List<HomeApps.Item> others = new ArrayList<>();
     private Spring[] gridFocus = new Spring[0];
     private String[] gridLabels;
-    private final Spring sheet = new Spring(0.38f, 0.9f, 0);
-    private final Spring scroll = new Spring(0.34f, 1f, 0);
+    private final Spring sheet = new Spring(0.28f, 0.9f, 0);
+    private final Spring scroll = new Spring(0.26f, 1f, 0);
     private final RectF focusedCell = new RectF();
     private boolean sheetOpen;
     private int gridIndex;
@@ -359,11 +359,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         setContentDescription("Free My TV");
         drawerLayer.setVisibility(INVISIBLE);
         for (int i = 0; i < TOP_ITEMS; i++) {
-            topFocus[i] = new Spring(0.26f, 0.85f, 0);
+            topFocus[i] = new Spring(0.2f, 0.85f, 0);
             topRects[i] = new RectF();
         }
         for (int i = 0; i < SLOTS; i++) {
-            cardFocus[i] = new Spring(0.32f, 0.78f, 0);
+            cardFocus[i] = new Spring(0.22f, 0.78f, 0);
             cardRects[i] = new RectF();
         }
         makeLightButtons();
@@ -373,10 +373,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         menuLayer.setVisibility(INVISIBLE);
         scene.setMotion(0.6f, 0f);
         updatePalette();
-        // First time: right away (a cold start opens with the apps already there); missing logos come from reload().
+        // First time: the shelf right away (a cold start opens with the apps already there; their art comes from disk);
+        // missing logos, the inputs and the shortcuts come from reload(), in the background, before anyone gets there:
+        // asking the TV for its inputs here would hold back the first frame.
         setShelf(HomeApps.shelf(a, false));
-        setStatusItems(statusList(a));
-        setDrawerItems(drawerList(a));
+        setStatusItems(new ArrayList<>());
+        setDrawerItems(new ArrayList<>());
     }
 
     // MARK: - Lifecycle (called by HomeActivity)
@@ -697,7 +699,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
     }
 
-    private static final long IDLE_CHECK_MS = 250;
+    private static final long IDLE_CHECK_MS = 1000;   // the clock's minute; keys and data wake it at once
     private boolean frameQueued;
     private boolean showClock = true, showWeatherOn = true, showQuotes = true;
     private final Runnable idleWake = this::wake;
@@ -1057,7 +1059,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             statusRects = new RectF[list.size()];
             int index = Math.min(statusIndex, Math.max(0, list.size() - 1));
             for (int i = 0; i < statusFocus.length; i++) {
-                statusFocus[i] = new Spring(0.26f, 0.85f, 0);
+                statusFocus[i] = new Spring(0.2f, 0.85f, 0);
                 statusRects[i] = new RectF();
                 if (list.get(i).key.equals(focusedKey)) index = i;   // a device came on: keep focus on the same button
             }
@@ -1110,7 +1112,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             tileFocus = new Spring[list.size()];
             tileRects = new RectF[list.size()];
             for (int i = 0; i < tileFocus.length; i++) {
-                tileFocus[i] = new Spring(0.34f, 0.74f, 0);
+                tileFocus[i] = new Spring(0.22f, 0.74f, 0);
                 tileRects[i] = new RectF();
             }
             shelfIndex = Math.min(shelfIndex, Math.max(0, list.size() - 1));
@@ -1387,7 +1389,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             drawerFocus = new Spring[list.size()];
             drawerRects = new RectF[list.size()];
             for (int i = 0; i < drawerFocus.length; i++) {
-                drawerFocus[i] = new Spring(0.28f, 0.85f, 0);
+                drawerFocus[i] = new Spring(0.2f, 0.85f, 0);
                 drawerRects[i] = new RectF();
             }
             drawerIndex = Math.min(drawerIndex, Math.max(0, list.size() - 1));
@@ -1667,7 +1669,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void setOthers(List<HomeApps.Item> list) {
         others = list;
         gridFocus = new Spring[list.size()];
-        for (int i = 0; i < gridFocus.length; i++) gridFocus[i] = new Spring(0.3f, 0.82f, 0);
+        for (int i = 0; i < gridFocus.length; i++) gridFocus[i] = new Spring(0.22f, 0.82f, 0);
         gridLabels = null;
         gridIndex = Math.min(gridIndex, Math.max(0, list.size() - 1));
         retargetGrid(true);
@@ -1687,8 +1689,14 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void closeSheet() {
         sheetOpen = false;
         sheet.target = 0;
+        if (pendingOthers != null) {
+            setOthers(pendingOthers);
+            pendingOthers = null;
+        }
         retarget(false);
     }
+
+    private List<HomeApps.Item> pendingOthers;   // All Apps' new list, read while it was open
 
     private void retargetGrid(boolean snap) {
         for (int i = 0; i < gridFocus.length; i++) {
@@ -1774,8 +1782,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     // The rows' corners are concentric with the panel's (panel radius = row radius + padding).
     private static final float MENU_ROW = 72, MENU_PAD = 12, MENU_HEADER = 58, MENU_GAP = 28, MENU_ROW_RADIUS = 22;
     private static final float MENU_MIN_W = 380, MENU_MAX_W = 560, MENU_TEXT_X = 22, MENU_LABEL_X = 54;
-    private final Spring menu = new Spring(0.3f, 0.86f, 0);
-    private final Spring menuRow = new Spring(0.24f, 0.9f, 0);   // the focus pill's position, in rows
+    private final Spring menu = new Spring(0.22f, 0.86f, 0);
+    private final Spring menuRow = new Spring(0.18f, 0.9f, 0);   // the focus pill's position, in rows
     private final RectF menuRect = new RectF(), menuAnchor = new RectF();
     private final List<Integer> menuActions = new ArrayList<>();
     private String[] menuLabels = new String[0];
@@ -1919,6 +1927,16 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void chooseMenu() {
         HomeApps.Item it = menuApp;
         int action = menuActions.get(menuIndex);
+        if (menuFromShelf) {
+            // The shelf may have been read again meanwhile (an input came on): the focus goes back to this app.
+            int at = -1;
+            for (int i = 0; i < shelf.size() && at < 0; i++) if (shelf.get(i).key.equals(it.key)) at = i;
+            if (at < 0) {
+                closeMenu();
+                return;
+            }
+            shelfIndex = at;
+        }
         if (action == MENU_LEFT || action == MENU_RIGHT) {
             moveOnShelf(action == MENU_LEFT ? -1 : 1, action);   // the panel stays: press again to keep moving
             return;
@@ -2141,7 +2159,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 if (s != null) setShelf(s);
                 setStatusItems(st);
                 setDrawerItems(d);
-                if (o != null && !sheetOpen) setOthers(o);
+                // All Apps open: its new list waits until it closes (the grid doesn't change under the focus).
+                if (o != null && sheetOpen) pendingOthers = o;
+                else if (o != null) setOthers(o);
             });
         });
     }

@@ -859,15 +859,22 @@ final class HomeApps {
         Bitmap logo = key == null ? null : ownLogo(c, key);
         // The app's own art: from disk when this version of the app was seen before (lifting it takes much longer).
         File saved = logo == null ? tileFile(c, pkg) : null;
-        Bitmap tile = logo != null ? logoTile(logo, brand) : saved != null && saved.exists() ? BitmapFactory.decodeFile(saved.getPath()) : null;
+        Bitmap tile = logo != null ? Backdrop.opaque(logoTile(logo, brand)) : saved != null && saved.exists() ? decodeTile(saved) : null;
         if (tile == null) {
             tile = bannerTile(c, pkg);
             if (tile == null) tile = iconTile(c, pkg);
+            tile = Backdrop.opaque(tile);   // every card is opaque (on a dark background): half the memory
             if (saved != null) saveTile(tile, saved);
         }
         tile.setHasMipMap(true);
         TILES.put(cacheKey, tile);
         return tile;
+    }
+
+    private static Bitmap decodeTile(File f) {
+        BitmapFactory.Options opts = new BitmapFactory.Options();
+        opts.inPreferredConfig = Bitmap.Config.RGB_565;
+        return BitmapFactory.decodeFile(f.getPath(), opts);
     }
 
     /** Where an app's card is kept: one file per app version (an update brings new art), or null. */
