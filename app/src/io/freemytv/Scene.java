@@ -36,8 +36,14 @@ final class Scene {
     private boolean auroraDirty = true, imageFrost, imageGlass;
     private Bitmap frostImage, glassA, glassB;
     private BitmapShader glassShaderA;
+    private final boolean withGlass;
 
     Scene() {
+        this(true);
+    }
+
+    Scene(boolean withGlass) {
+        this.withGlass = withGlass;
         try {
             if (Ui.LITE) throw new UnsupportedOperationException("performance mode");   // the flat look, on purpose
             aurora = new RuntimeShader(Shaders.AURORA);
@@ -46,7 +52,7 @@ final class Scene {
             auroraPaint.setShader(aurora);
             glassPaint.setShader(glass);
             liquidPaint.setShader(liquid);
-        } catch (RuntimeException | LinkageError e) {   // Android 9 to 12: no AGSL, flat look instead
+        } catch (RuntimeException | LinkageError e) {   // Android 8 to 12: no AGSL, flat look instead
             AppLog.w("shader unavailable, using gradient: " + e.getMessage());
             aurora = null;
             glass = null;
@@ -100,7 +106,7 @@ final class Scene {
         time = seconds;
         if (aurora == null) return;
         aurora.setFloatUniform("t", seconds);
-        if (!imageFrost || !imageGlass) {
+        if (withGlass && (!imageFrost || !imageGlass)) {
             BitmapShader s = frost.render(seconds, speed, dim, palette.c, (float) w / h);
             if (!imageFrost) glass.setInputShader("frost", s);
             if (!imageGlass) {

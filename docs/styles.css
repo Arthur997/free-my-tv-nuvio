@@ -385,17 +385,6 @@ h2 {
   margin-top: 36px;
 }
 
-.built {
-  margin-top: 22px;
-  font-size: 14px;
-  color: var(--faint);
-}
-
-.built b {
-  color: var(--ink-2);
-  font-weight: 600;
-}
-
 .hero-stage {
   position: relative;
   perspective: 1800px;
@@ -1294,6 +1283,20 @@ h2 {
     width: 64px;
     height: 64px;
     box-shadow: inset -18px -6px 0 0 #eef1ff;
+  }
+}
+
+@media (max-width: 680px) {
+  .tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-radius: 24px;
+  }
+
+  .tabs button {
+    padding: 0 6px;
+    font-size: 14px;
+    white-space: nowrap;
   }
 }
 

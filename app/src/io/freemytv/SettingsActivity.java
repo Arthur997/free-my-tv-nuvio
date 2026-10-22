@@ -683,7 +683,16 @@ public class SettingsActivity extends Activity {
 
         // MARK: - Home Settings and Remote Buttons
 
-        private static final String[] LANGUAGES = {"auto", "pt", "en", "es"}, UNITS = {"auto", "C", "F"}, THEMES = {"auto", "light", "dark"};
+        private static final String[] UNITS = {"auto", "C", "F"}, THEMES = {"auto", "light", "dark"};
+
+        /** "auto", then English and every language with a catalogue (assets/i18n). */
+        private static String[] languageChoices() {
+            String[] all = Ui.languages();
+            String[] v = new String[all.length + 1];
+            v[0] = "auto";
+            System.arraycopy(all, 0, v, 1, all.length);
+            return v;
+        }
         /** Home Settings: language, temperature, theme, weather, quotes, then one row per coin. */
         private static final int COIN_ROWS = 5;
 
@@ -712,7 +721,7 @@ public class SettingsActivity extends Activity {
             String[] labels = settingLabels();
             String[] v = new String[labels.length];
             String lang = Prefs.language();
-            v[0] = lang.equals("pt") ? "Português" : lang.equals("en") ? "English" : lang.equals("es") ? "Español" : Ui.tr("Automático", "Automatic");
+            v[0] = lang.equals("auto") ? Ui.tr("Automático", "Automatic") : Ui.languageName(lang);
             String unit = Prefs.temperature();
             v[1] = unit.equals("C") ? "°C" : unit.equals("F") ? "°F" : Ui.tr("Automática", "Automatic");
             String theme = Prefs.theme();
@@ -734,7 +743,7 @@ public class SettingsActivity extends Activity {
         }
 
         /** More Settings: the picks (where they open, which list, how many), prices, the weather's city, the shelf, the top. */
-        private static final int MORE_TOP_COUNT = 2, MORE_TMDB_KEY = 9, MORE_WATCH = 10;
+        private static final int MORE_TOP_COUNT = 2, MORE_TMDB_KEY = 9, MORE_WATCH = 10, MORE_SOUNDS = 11;
 
         /** Whether there is a key and where it comes from; never the key itself. */
         private String tmdbKeyState() {
@@ -749,22 +758,22 @@ public class SettingsActivity extends Activity {
                     Ui.tr("Atualizar cotações", "Refresh prices"), Ui.tr("Cidade do clima", "Weather city"),
                     Ui.tr("Capa dos apps na prateleira", "Shelf app art"), Ui.tr("Topo do Início", "Top of Home"),
                     Ui.tr("Tela de descanso", "Screensaver"), Ui.tr("Modo desempenho", "Performance mode"),
-                    Ui.tr("Chave do TMDB", "TMDB key"), Ui.tr("Continuar assistindo", "Continue Watching", "Seguir viendo")};
+                    Ui.tr("Chave do TMDB", "TMDB key"), Ui.tr("Continuar assistindo", "Continue Watching", "Seguir viendo"),
+                    Ui.tr("Sons do Início", "Home screen sounds", "Sonidos del inicio")};
         }
 
         private String[] moreValues() {
             String[] every = {Ui.tr("Tempo real", "Live"), "1 min", "5 min"};
-            int city = Prefs.cityIndex();
             return new String[] {targetNames().get(targetIndex()),
                     Prefs.topRecs() ? Ui.tr("Top do dia", "Today's top") : Ui.tr("Original (5 por hora)", "Original (5 an hour)"),
                     String.valueOf(Prefs.topCount()),
                     every[Prefs.pricesEveryIndex()],
-                    city < 0 ? Prefs.city() + Ui.tr(" (padrão)", " (default)") : Prefs.CITIES[city][0],
+                    cityStatus.isEmpty() ? Prefs.city() : cityStatus,
                     Prefs.originalArt() ? Ui.tr("Original do app", "The app's own") : Ui.tr("Logo", "Logo"),
                     Prefs.topClock() ? Ui.tr("Relógio e clima", "Clock and weather") : Ui.tr("Cotações", "Prices"),
                     Prefs.ownScreensaver() ? "Free My TV" : Ui.tr("Da TV (fotos do Google)", "The TV's own (Google photos)"),
                     Prefs.performance() ? Ui.tr("Ligado (sem vidro)", "On (no glass)") : Ui.tr("Desligado", "Off"),
-                    tmdbKeyState(), watchAppsState()};
+                    tmdbKeyState(), watchAppsState(), onOff(Prefs.sounds())};
         }
 
         /** Continue watching: every app, or how many are kept out. */
@@ -800,11 +809,13 @@ public class SettingsActivity extends Activity {
             List<String> l = new ArrayList<>();
             if (screen == HOME_SETTINGS) {
                 switch (row) {
-                    case 0:
-                        java.util.Collections.addAll(l, Ui.tr("Automático", "Automatic"), "Português", "English", "Español");
-                        openPicker(title, l, java.util.Arrays.asList(LANGUAGES).indexOf(Prefs.language()), row,
-                                at -> Prefs.setLanguage(LANGUAGES[at]));
+                    case 0: {
+                        String[] choices = languageChoices();
+                        for (String code : choices) l.add(code.equals("auto") ? Ui.tr("Automático", "Automatic") : Ui.languageName(code));
+                        openPicker(title, l, java.util.Arrays.asList(choices).indexOf(Prefs.language()), row,
+                                at -> Prefs.setLanguage(choices[at]));
                         return true;
+                    }
                     case 1:
                         java.util.Collections.addAll(l, Ui.tr("Automática", "Automatic"), "°C", "°F");
                         openPicker(title, l, java.util.Arrays.asList(UNITS).indexOf(Prefs.temperature()), row,
@@ -842,10 +853,8 @@ public class SettingsActivity extends Activity {
                     openPicker(title, l, Prefs.pricesEveryIndex(), row, Prefs::setPricesEveryIndex);
                     return true;
                 case 4:
-                    l.add(Config.CITY.trim() + Ui.tr(" (padrão)", " (default)"));
-                    for (String[] city : Prefs.CITIES) l.add(city[0]);
-                    openPicker(title, l, Prefs.cityIndex() + 1, row, at -> Prefs.setCityIndex(at - 1));
-                    return true;
+                    askCity();
+                    return false;   // the search opens its own list
                 case 5:
                     java.util.Collections.addAll(l, Ui.tr("Original do app", "The app's own"), Ui.tr("Logo", "Logo"));
                     openPicker(title, l, Prefs.originalArt() ? 0 : 1, row, at -> Prefs.setOriginalArt(at == 0));
@@ -863,6 +872,7 @@ public class SettingsActivity extends Activity {
                         HomeMode.requestScreensaver(getContext(), own);   // the TV's setting changes in the main process
                     });
                     return true;
+                case MORE_SOUNDS: return openOnOff(title, row, Prefs.sounds(), Prefs::setSounds);
                 default:
                     java.util.Collections.addAll(l, Ui.tr("Desligado", "Off"), Ui.tr("Ligado (sem vidro)", "On (no glass)"));
                     openPicker(title, l, Prefs.performance() ? 1 : 0, row, at -> Prefs.setPerformance(at == 1));
@@ -897,12 +907,7 @@ public class SettingsActivity extends Activity {
                     Prefs.setPricesEveryIndex((Prefs.pricesEveryIndex() + dir + n) % n);
                     break;
                 }
-                case 4: {
-                    int n = Prefs.CITIES.length + 1;   // -1 (the default) and every capital
-                    int next = (Prefs.cityIndex() + 1 + dir + n) % n - 1;
-                    Prefs.setCityIndex(next);
-                    break;
-                }
+                case 4: return;   // the city is searched by name (OK)
                 case 5: Prefs.setOriginalArt(!Prefs.originalArt()); break;
                 case 6: Prefs.setTopClock(!Prefs.topClock()); break;
                 case 7: {
@@ -912,6 +917,7 @@ public class SettingsActivity extends Activity {
                     break;
                 }
                 case 8: Prefs.setPerformance(!Prefs.performance()); break;
+                case MORE_SOUNDS: Prefs.setSounds(!Prefs.sounds()); break;
                 default: return;   // the TMDB key: OK opens the text field (activate)
             }
             HomeData.get(getContext()).settingsChanged();
@@ -922,6 +928,12 @@ public class SettingsActivity extends Activity {
         }
 
         private String[] keyLabels() {
+            if (RemoteKeys.STEM_NETFLIX) return new String[] {Ui.tr("Botão Netflix", "Netflix button")};
+            if (RemoteKeys.KTC) return new String[] {Ui.tr("Botão Tabii", "Tabii button")};
+            if (RemoteKeys.SONY) return new String[] {Ui.tr("Botão BRAVIA CORE", "BRAVIA CORE button"),
+                    Ui.tr("Botão Netflix", "Netflix button"), Ui.tr("Botão Disney+", "Disney+ button"),
+                    Ui.tr("Botão Prime Video", "Prime Video button"), Ui.tr("Botão YouTube", "YouTube button"),
+                    Ui.tr("Botão Crunchyroll", "Crunchyroll button"), Ui.tr("Botão Google Play", "Google Play button")};
             return new String[] {Ui.tr("Botão Netflix", "Netflix button"), Ui.tr("Botão YouTube", "YouTube button"),
                     Ui.tr("Botão Prime Video", "Prime Video button"), Ui.tr("Botão TCL Channel", "TCL Channel button")};
         }
@@ -950,7 +962,8 @@ public class SettingsActivity extends Activity {
             appPkgs.clear();
             appLabels.clear();
             appPkgs.add("");
-            appLabels.add(Ui.tr("Nada", "Nothing"));
+            // On Sony, "nothing" leaves the key to the TV, which opens its usual app.
+            appLabels.add(RemoteKeys.SONY ? Ui.tr("Sony default") : Ui.tr("Nada", "Nothing"));
             for (String[] f : found) {
                 appPkgs.add(f[0]);
                 appLabels.add(f[1]);
@@ -972,8 +985,9 @@ public class SettingsActivity extends Activity {
             }
             switch (focus) {
                 case 0: {
-                    int at = java.util.Arrays.asList(LANGUAGES).indexOf(Prefs.language());
-                    Prefs.setLanguage(LANGUAGES[(at + dir + LANGUAGES.length) % LANGUAGES.length]);
+                    String[] choices = languageChoices();
+                    int at = java.util.Arrays.asList(choices).indexOf(Prefs.language());
+                    Prefs.setLanguage(choices[(at + dir + choices.length) % choices.length]);
                     break;
                 }
                 case 1: {
@@ -994,6 +1008,64 @@ public class SettingsActivity extends Activity {
                     break;
             }
             HomeData.get(getContext()).settingsChanged();
+        }
+
+        private String cityStatus = "";
+
+        /** More Settings > Weather city: type the name (the Google TV app on a phone types too); the matches follow. */
+        private void askCity() {
+            if (Ui.tr("Buscando…", "Searching…").equals(cityStatus)) return;
+            android.widget.EditText field = new android.widget.EditText(activity);
+            field.setSingleLine(true);
+            field.setHint(Ui.tr("Digite o nome da cidade", "Type the city's name"));
+            field.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
+            android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(activity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle(Ui.tr("Cidade do clima", "Weather city"))
+                    .setView(field)
+                    .setPositiveButton(Ui.tr("Buscar", "Search"), (d, which) -> searchCity(field.getText().toString()))
+                    .setNegativeButton(Ui.tr("Cancelar", "Cancel"), null)
+                    .create();
+            field.setOnEditorActionListener((v, action, event) -> {
+                dialog.dismiss();
+                searchCity(field.getText().toString());
+                return true;
+            });
+            dialog.show();
+        }
+
+        private void searchCity(String name) {
+            if (name.trim().isEmpty()) return;
+            cityStatus = Ui.tr("Buscando…", "Searching…");
+            invalidate();
+            new Thread(() -> {
+                List<String[]> found;
+                String error;
+                try {
+                    found = HomeData.findCity(name);
+                    error = found.isEmpty() ? Ui.tr("Nenhuma cidade com esse nome.", "No city with that name.") : "";
+                } catch (Exception e) {
+                    found = new ArrayList<>();
+                    error = Ui.tr("Não deu para buscar agora.", "Couldn't search now.");
+                    AppLog.w("city search: " + e.getMessage());
+                }
+                List<String[]> result = found;
+                String message = error;
+                handler.post(() -> {
+                    cityStatus = message;
+                    if (!result.isEmpty() && screen == MORE) {
+                        List<String> labels = new ArrayList<>();
+                        for (String[] city : result) labels.add(city[0]);
+                        // {label, name, latitude, longitude}
+                        openPicker(Ui.tr("Cidade do clima", "Weather city"), labels, -1, 4, at -> {
+                            String[] city = result.get(at);
+                            Prefs.setCity(city[1], city[2], city[3]);
+                        });
+                        spoken.focusMoved();
+                    }
+                    invalidate();
+                    if (!message.isEmpty()) handler.postDelayed(() -> { cityStatus = ""; invalidate(); }, 4000);
+                });
+            }).start();
         }
 
         private boolean scrolling() {
