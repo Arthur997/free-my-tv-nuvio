@@ -1,6 +1,7 @@
 package io.freemytv;
 
 import android.content.Context;
+import android.os.SystemClock;
 import android.util.Base64;
 
 import java.io.ByteArrayOutputStream;
@@ -67,6 +68,41 @@ final class Adb implements Closeable {
     /** Connects and authenticates. If the TV doesn't know our key yet, waits up to `approvalMs` for you to accept. */
     static Adb connect(Context c, int approvalMs, Approval approval) throws IOException {
         KeyPair keys = keys(c);
+        Adb adb = open();
+        try {
+            if (adb.handshake(keys, true)) return adb;
+            // Unknown key: the TV shows "Allow USB debugging?".
+            if (approval != null) approval.waiting();
+            long until = SystemClock.uptimeMillis() + approvalMs;
+            adb.socket.setSoTimeout(APPROVAL_POLL_MS);
+            while (true) {
+                try {
+                    if (adb.read().command == CNXN) {
+                        adb.socket.setSoTimeout(20_000);
+                        return adb;
+                    }
+                } catch (SocketTimeoutException ignored) {
+                    // Still waiting
+                }
+                // Android 9's adbd (and older) sends the "Allow" to the first connection that asked for it since it
+                // started (often a computer's), not to this one, and this one would wait forever. With "Always
+                // allow" the key is saved by then, so a new connection gets in by signature.
+                Adb again = signedIn(keys);
+                if (again != null) {
+                    adb.close();
+                    return again;
+                }
+                if (SystemClock.uptimeMillis() > until) throw new IOException(Ui.tr("debugging permission wasn't accepted on the TV"));
+            }
+        } catch (IOException | RuntimeException e) {
+            adb.close();
+            throw e;
+        }
+    }
+
+    private static final int APPROVAL_POLL_MS = 2_000;
+
+    private static Adb open() throws IOException {
         Socket s = new Socket();
         try {
             s.connect(new InetSocketAddress("127.0.0.1", 5555), 3000);
@@ -74,46 +110,55 @@ final class Adb implements Closeable {
             s.close();
             throw new IOException(Ui.tr("debugging is off on the TV (port 5555 closed)"));
         }
-        Adb adb;
         try {
             s.setSoTimeout(10_000);
-            adb = new Adb(s);
+            return new Adb(s);
         } catch (IOException | RuntimeException e) {
             s.close();
             throw e;
         }
+    }
+
+    /** A new connection that gets in with the key the TV already knows; null if it doesn't know it yet. */
+    private static Adb signedIn(KeyPair keys) {
+        Adb adb = null;
         try {
-            adb.send(CNXN, VERSION, MAX_DATA, "host::\0".getBytes(StandardCharsets.US_ASCII));
-            boolean signed = false, offeredKey = false;
-            while (true) {
-                Message m;
-                try {
-                    m = adb.read();
-                } catch (SocketTimeoutException e) {
-                    throw new IOException(offeredKey ? Ui.tr("debugging permission wasn't accepted on the TV") : Ui.tr("the TV's ADB didn't respond"));
-                }
-                if (m.command == CNXN) {
-                    s.setSoTimeout(20_000);
-                    return adb;
-                }
-                if (m.command == STLS) throw new IOException(Ui.tr("the TV asked for TLS (wireless debugging); use USB debugging"));
-                if (m.command != AUTH || m.arg0 != AUTH_TOKEN) throw new IOException(Ui.tr("unexpected reply from ADB"));
-                if (!signed) {
-                    adb.send(AUTH, AUTH_SIGNATURE, 0, sign(keys.getPrivate(), m.data));
-                    signed = true;
-                } else if (!offeredKey) {
-                    // Unknown key: send the public one; the TV shows "Allow USB debugging?".
-                    adb.send(AUTH, AUTH_RSAPUBLICKEY, 0, publicKeyBlob(keys.getPublic()));
-                    offeredKey = true;
-                    if (approval != null) approval.waiting();
-                    s.setSoTimeout(approvalMs);
-                } else {
-                    throw new IOException(Ui.tr("the TV rejected the app's key"));
-                }
+            adb = open();
+            if (adb.handshake(keys, false)) return adb;
+        } catch (IOException | RuntimeException ignored) {
+            // Not yet
+        }
+        if (adb != null) adb.close();
+        return null;
+    }
+
+    /**
+     * CNXN, then the signature with our key: true when the TV lets us in. If it doesn't know the key, offers it
+     * (`offerKey`: the TV asks to allow it) or gives up, and returns false.
+     */
+    private boolean handshake(KeyPair keys, boolean offerKey) throws IOException {
+        send(CNXN, VERSION, MAX_DATA, "host::\0".getBytes(StandardCharsets.US_ASCII));
+        boolean signed = false;
+        while (true) {
+            Message m;
+            try {
+                m = read();
+            } catch (SocketTimeoutException e) {
+                throw new IOException(Ui.tr("the TV's ADB didn't respond"));
             }
-        } catch (IOException | RuntimeException e) {
-            adb.close();
-            throw e;
+            if (m.command == CNXN) {
+                socket.setSoTimeout(20_000);
+                return true;
+            }
+            if (m.command == STLS) throw new IOException(Ui.tr("the TV asked for TLS (wireless debugging); use USB debugging"));
+            if (m.command != AUTH || m.arg0 != AUTH_TOKEN) throw new IOException(Ui.tr("unexpected reply from ADB"));
+            if (!signed) {
+                send(AUTH, AUTH_SIGNATURE, 0, sign(keys.getPrivate(), m.data));
+                signed = true;
+            } else {
+                if (offerKey) send(AUTH, AUTH_RSAPUBLICKEY, 0, publicKeyBlob(keys.getPublic()));
+                return false;
+            }
         }
     }
 

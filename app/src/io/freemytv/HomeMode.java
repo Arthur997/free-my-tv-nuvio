@@ -950,6 +950,20 @@ final class HomeMode {
         }
     }
 
+    /**
+     * What a switch is doing now, or "" when none is. A switch that stopped halfway (the process killed; on a TV with
+     * little memory it happens) would read as busy forever and lock the Home Screen choice: busy only counts while a
+     * step updated it in the last few minutes, since this boot.
+     */
+    static String busyText(JSONObject s) {
+        String text = s.optString("busy");
+        long at = s.optLong("busyAt"), now = SystemClock.elapsedRealtime();
+        return at > now || now - at > BUSY_STALE_MS ? "" : text;
+    }
+
+    // Longer than the slowest step: the 2 minutes for the debugging prompt.
+    private static final long BUSY_STALE_MS = 4 * 60_000;
+
     private static void busy(Context c, String text) {
         JSONObject s = state(c);
         try { s.put("busy", text).put("busyAt", SystemClock.elapsedRealtime()).put("error", ""); } catch (JSONException ignored) {}

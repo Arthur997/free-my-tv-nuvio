@@ -246,7 +246,7 @@ public class SettingsActivity extends Activity {
                 state = HomeMode.state(getContext());
                 hasKey = Recs.hasKey(getContext());
                 recs = Recs.status(getContext());
-                boolean nowBusy = !state.optString("busy").isEmpty();
+                boolean nowBusy = !HomeMode.busyText(state).isEmpty();
                 if (nowBusy) pendingAt = 0;
                 // A switch just ended: TalkBack reads how it went (the newest notice).
                 JSONArray notices = state.optJSONArray("notices");
@@ -712,11 +712,11 @@ public class SettingsActivity extends Activity {
         }
 
         private boolean busy() {
-            return !state.optString("busy").isEmpty() || (pendingAt != 0 && SystemClock.uptimeMillis() - pendingAt < 10_000);
+            return !HomeMode.busyText(state).isEmpty() || (pendingAt != 0 && SystemClock.uptimeMillis() - pendingAt < 10_000);
         }
 
         private String busyLine() {
-            String text = state.optString("busy");
+            String text = HomeMode.busyText(state);
             return text.isEmpty() ? Ui.tr("Começando…", "Starting…") : text;
         }
 
@@ -863,7 +863,7 @@ public class SettingsActivity extends Activity {
         private void drawSwitchMessage(Canvas c, float y) {
             String error = state.optString("error");
             boolean working = busy();
-            String busyText = state.optString("busy");
+            String busyText = HomeMode.busyText(state);
             if (working && (busyText.contains("Permitir") || busyText.contains("Allow"))) {
                 c.drawText(Ui.tr("Na TV: marque “Sempre permitir” e aperte OK.", "On the TV: tick “Always allow” and press OK."),
                         LIST_X * k + 30 * k, y, warn);
