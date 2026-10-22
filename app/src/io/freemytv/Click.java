@@ -11,9 +11,9 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 /**
- * Soft click for the home screen (moving focus and opening). The app synthesizes the sound itself (a short, low
- * "tock"), writes it once as a WAV in the cache and plays it quietly through SoundPool. It only plays on the home
- * screen, never inside apps.
+ * The click of the home screen and the settings (moving the focus, and OK). The app synthesizes the sound itself, a
+ * low, soft "tock" whose pitch slides down a little (what modern interfaces use: felt more than heard), writes it once
+ * as a WAV in the cache and plays it through SoundPool. It only plays in Free My TV's own screens, never inside apps.
  */
 final class Click {
     private static final int RATE = 48_000;
@@ -25,8 +25,11 @@ final class Click {
             pool = new SoundPool.Builder().setMaxStreams(3).setAudioAttributes(new AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()).build();
-            move = pool.load(wav(c, "click-move.wav", 1450f, 0.009f, 0.030f), 1);
-            open = pool.load(wav(c, "click-open.wav", 880f, 0.022f, 0.090f), 1);
+            // The version in the name: a new sound replaces the one cached by an earlier version (gone too).
+            new File(c.getCacheDir(), "click-move.wav").delete();
+            new File(c.getCacheDir(), "click-open.wav").delete();
+            move = pool.load(wav(c, "tock-move-2.wav", 640f, 470f, 0.009f, 0.035f), 1);
+            open = pool.load(wav(c, "tock-open-2.wav", 420f, 300f, 0.030f, 0.12f), 1);
         } catch (IOException | RuntimeException e) {
             AppLog.w("click sound unavailable: " + e.getMessage());
             release();
@@ -34,11 +37,11 @@ final class Click {
     }
 
     void move() {
-        if (pool != null && Prefs.sounds()) pool.play(move, 0.14f, 0.14f, 1, 0, 1f);
+        if (pool != null && Prefs.sounds()) pool.play(move, 0.32f, 0.32f, 1, 0, 1f);
     }
 
     void open() {
-        if (pool != null && Prefs.sounds()) pool.play(open, 0.18f, 0.18f, 1, 0, 1f);
+        if (pool != null && Prefs.sounds()) pool.play(open, 0.42f, 0.42f, 1, 0, 1f);
     }
 
     void release() {
@@ -46,8 +49,11 @@ final class Click {
         pool = null;
     }
 
-    /** Sine wave plus one harmonic, 1.5 ms attack (no pop) and exponential decay. */
-    private static String wav(Context c, String name, float freq, float decay, float seconds) throws IOException {
+    /**
+     * A sine whose pitch slides from `from` to `to` Hz in the first 25 ms, with a soft octave below (body) and a faint
+     * fifth above (color); 2 ms attack (no pop) and exponential decay.
+     */
+    private static String wav(Context c, String name, float from, float to, float decay, float seconds) throws IOException {
         File f = new File(c.getCacheDir(), name);
         if (f.exists() && f.length() > 44) return f.getPath();
         int n = Math.round(RATE * seconds);
@@ -56,11 +62,15 @@ final class Click {
         b.put("fmt ".getBytes("US-ASCII")).putInt(16).putShort((short) 1).putShort((short) 1)
                 .putInt(RATE).putInt(RATE * 2).putShort((short) 2).putShort((short) 16);
         b.put("data".getBytes("US-ASCII")).putInt(n * 2);
+        double phase = 0;
         for (int i = 0; i < n; i++) {
             double t = (double) i / RATE;
-            double env = Math.min(1, t / 0.0015) * Math.exp(-t / decay);
-            double s = 0.75 * Math.sin(2 * Math.PI * freq * t) + 0.25 * Math.sin(2 * Math.PI * freq * 2.01 * t);
-            b.putShort((short) Math.round(s * env * 0.7 * Short.MAX_VALUE));
+            double glide = Math.min(1, t / 0.025);
+            double freq = from + (to - from) * (1 - (1 - glide) * (1 - glide));   // eases into the lower pitch
+            phase += 2 * Math.PI * freq / RATE;
+            double env = Math.min(1, t / 0.002) * Math.exp(-t / decay);
+            double s = 0.72 * Math.sin(phase) + 0.2 * Math.sin(phase / 2) + 0.08 * Math.sin(phase * 1.5);
+            b.putShort((short) Math.round(s * env * 0.8 * Short.MAX_VALUE));
         }
         try (FileOutputStream out = new FileOutputStream(f)) {
             out.write(b.array());

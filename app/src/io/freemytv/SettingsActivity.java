@@ -52,6 +52,11 @@ public class SettingsActivity extends Activity {
         setContentView(view);
     }
 
+    @Override protected void onDestroy() {
+        view.release();
+        super.onDestroy();
+    }
+
     @Override protected void onResume() {
         super.onResume();
         view.resume();
@@ -188,6 +193,7 @@ public class SettingsActivity extends Activity {
         // Made with the size and the theme, not on every frame: a list redraws on every frame of its focus animation.
         private Paint heading, hint;
         private final TextPaint fit = new TextPaint();   // for cutting a long name to its row
+        private final Click click;   // the same click as the home screen's
 
         private final Runnable poll = new Runnable() {
             @Override public void run() {
@@ -212,6 +218,7 @@ public class SettingsActivity extends Activity {
         SettingsView(SettingsActivity a) {
             super(a);
             activity = a;
+            click = new Click(a);
             for (int i = 0; i < pop.length; i++) pop[i] = new Spring(0.28f, 0.85f, 0);
             setFocusable(true);
             setContentDescription("Free My TV");
@@ -314,6 +321,10 @@ public class SettingsActivity extends Activity {
             handler.post(poll);
             Choreographer.getInstance().postFrameCallback(this);
             spoken.readAgain();
+        }
+
+        void release() {
+            click.release();
         }
 
         void pause() {
@@ -633,17 +644,22 @@ public class SettingsActivity extends Activity {
                 case KeyEvent.KEYCODE_DPAD_UP:
                     if (down && focus > 0) focus--;
                     else if (down && scrolling() && pickScroll > 0) pickScroll--;
+                    else if (down) return true;   // already at the top: no click
+                    if (down) click.move();
                     invalidate();
                     spoken.focusMoved();
                     return true;
                 case KeyEvent.KEYCODE_DPAD_DOWN:
                     if (down && focus < rowCount() - 1) focus++;
                     else if (down && scrolling() && pickScroll + rowCount() < listSize()) pickScroll++;
+                    else if (down) return true;   // already at the bottom: no click
+                    if (down) click.move();
                     invalidate();
                     spoken.focusMoved();
                     return true;
                 case KeyEvent.KEYCODE_DPAD_LEFT:
                 case KeyEvent.KEYCODE_DPAD_RIGHT:
+                    if (down && (screen == SHELF_EDIT || screen == HOME_SETTINGS || screen == MORE)) click.move();
                     if (down && screen == SHELF_EDIT) {
                         moveShelfApp(e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1);
                         invalidate();
@@ -668,6 +684,7 @@ public class SettingsActivity extends Activity {
                         if (e.getRepeatCount() == 0) backDown = true;
                     } else {
                         if (backDown && !e.isCanceled()) {
+                            click.move();
                             if (screen == PICKER) {
                                 focus = pickReturnRow;
                                 screen = pickReturnScreen;
@@ -1286,6 +1303,7 @@ public class SettingsActivity extends Activity {
         }
 
         private void activate() {
+            click.open();
             Context c = getContext();
             if (screen == HOME_CHOICE) {
                 boolean wantFree = focus == 0;
