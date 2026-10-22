@@ -21,8 +21,10 @@ import java.nio.ByteOrder;
  *
  * Every key press clicks. Two things made clicks go missing on TVs: the "system sounds" channel, which TVs turn down
  * or off (the click now plays as media, with the TV's volume), and the audio output going to sleep after a moment of
- * silence (TVs and soundbars cut the start of the next short sound while it wakes). While a Free My TV screen is on,
- * a silent loop keeps the output awake (start/stop).
+ * silence (TVs, soundbars and receivers on an optical cable cut the start of the next short sound while they wake).
+ * While a Free My TV screen is on, a loop keeps the output awake (start/stop). Not digital zeros: a receiver on an
+ * optical cable takes those for "nothing playing" and sleeps anyway; a 1-bit hiss (about -96 dB, far below hearing)
+ * keeps it locked on.
  */
 final class Click {
     private static final int RATE = 48_000;
@@ -82,7 +84,10 @@ final class Click {
                     .setAudioFormat(new AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT)
                             .setSampleRate(RATE).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
                     .setTransferMode(AudioTrack.MODE_STATIC).setBufferSizeInBytes(n * 2).build();
-            awake.write(new short[n], 0, n);
+            short[] hiss = new short[n];
+            java.util.Random random = new java.util.Random(7);
+            for (int i = 0; i < n; i++) hiss[i] = (short) (random.nextInt(3) - 1);   // -1, 0 or +1
+            awake.write(hiss, 0, n);
             awake.setLoopPoints(0, n, -1);
             awake.play();
         } catch (RuntimeException e) {

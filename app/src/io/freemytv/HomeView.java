@@ -86,7 +86,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static final long TOAST_MS = 6000, FADE_MS = 800;
     /** Blur radii of the shadow and shadowDeep paints (Shadows needs them to draw the same blur on older TVs). */
     private static final float SHADOW_BLUR = 26, DEEP_BLUR = 30;
-    private static final int SKY = 0, HERO = 1, STATUS = 2, PLATTER = 3, TILES = 4, DRAWER = 5, SHEET = 6, TOAST = 7, MENU = 8, LAUNCH = 9;
+    private static final int SKY = 0, HERO = 1, STATUS = 2, PLATTER = 3, TILES = 4, DRAWER = 5, SHEET = 6, TOAST = 7, MENU = 8;
     private static final int Z_STATUS = 0, Z_HERO = 1, Z_SHELF = 2, Z_DRAWER = 3;
     private static final ExecutorService LOADER = Executors.newSingleThreadExecutor();
     // Light design (the L_ constants): title, tab bar, three recommendation cards and the shelf.
@@ -123,7 +123,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         @Override public void click(int id) { press(); }
     });
     private final RectF a11yRect = new RectF();
-    private final Layer sky, heroLayer, status, platter, tiles, drawerLayer, sheetLayer, menuLayer, toastLayer, launchLayer;
+    private final Layer sky, heroLayer, status, platter, tiles, drawerLayer, sheetLayer, menuLayer, toastLayer;
     private int zone = Z_SHELF;
 
     // Night look (like Apple's "Automatic" appearance): darker from 18:00 to 6:00, with a 2 s transition.
@@ -301,7 +301,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 case DRAWER: drawDrawer(c); break;
                 case SHEET: drawSheet(c); break;
                 case MENU: drawMenu(c); break;
-                case LAUNCH: drawLaunch(c); break;
                 default: drawToast(c); break;
             }
             scene.setOffset(0, 0);
@@ -348,13 +347,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         sheetLayer = new Layer(a, SHEET);
         menuLayer = new Layer(a, MENU);
         toastLayer = new Layer(a, TOAST);
-        launchLayer = new Layer(a, LAUNCH);
         // Hardware layers on the GPU: only the one that changed is redrawn; moving, fading and scaling stay cheap.
         // Not on Android 9 to 11: on older GPUs (a Mi Box 3's Mali-450) redrawing and compositing a big layer on every
         // frame cost more than drawing straight to the screen (measured: focus on the picks 33 → 12 ms a frame, the
         // drawer 19 → 17 ms).
         for (View v : new View[] {heroLayer, status, platter, tiles, drawerLayer, sheetLayer, menuLayer}) v.setLayerType(Ui.LEGACY ? LAYER_TYPE_NONE : LAYER_TYPE_HARDWARE, null);
-        for (View v : new View[] {sky, heroLayer, status, platter, tiles, drawerLayer, sheetLayer, menuLayer, toastLayer, launchLayer}) {
+        for (View v : new View[] {sky, heroLayer, status, platter, tiles, drawerLayer, sheetLayer, menuLayer, toastLayer}) {
             v.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);   // TalkBack reads the items (Spoken)
             addView(v);
         }
@@ -373,7 +371,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         checkNight(false);
         sheetLayer.setVisibility(INVISIBLE);
         menuLayer.setVisibility(INVISIBLE);
-        launchLayer.setVisibility(INVISIBLE);
         scene.setMotion(0.6f, 0f);
         updatePalette();
         // First time: the shelf right away (a cold start opens with the apps already there; their art comes from disk);
@@ -408,8 +405,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         askWatchPermission();
         loadWatching();
         click.start();
-        launchAt = 0;   // back from the app the transition opened
-        launchLayer.setVisibility(INVISIBLE);
         updatePalette();
         updatePicks();
         hideMenu();   // back from App info or the uninstall question
@@ -515,7 +510,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         measure(drawerLayer, width, Math.round(600 * kk));
         measure(sheetLayer, width, height);
         measure(menuLayer, width, height);
-        measure(launchLayer, width, height);
         measure(toastLayer, Math.round(1000 * kk), Math.round(220 * kk));
         setMeasuredDimension(width, height);
     }
@@ -537,7 +531,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         sheetLayer.setPivotX(width / 2f);
         sheetLayer.setPivotY(height / 2f);
         menuLayer.layout(0, 0, width, height);
-        launchLayer.layout(0, 0, width, height);
         place(toastLayer, (width - toastLayer.getMeasuredWidth()) / 2, 0);
     }
 
@@ -700,7 +693,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         // Busy: something is moving, or the sheet or the drawer is open.
         boolean busy = tilesMoving || statusMoving || heroMoving || drawerItemsMoving || gridMoving || drawerMoving
                 || sheetMoving || toastFading || heroFading || bgFading || nightMoving || sheetOpen || sheet.value > 0.001f
-                || drawerOpen || drawer.value > 0.001f || menuMoving || menuRowMoving || extras || launchAt != 0;
+                || drawerOpen || drawer.value > 0.001f || menuMoving || menuRowMoving || extras;
         // Still: no frames until something happens (a key, new data, a toast wakes it at once); a slow check meanwhile
         // catches the minute of the clock and anything that changed without waking it.
         if (frameQueued) return;   // something in this frame already woke the next one
@@ -2100,7 +2093,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (p == null || b != null) showBackdrop(b);
     }
 
-    /** True while something here moves: the sweep, the preview fading in, a tab's cards changing, an app opening. */
+    /** True while something here moves: the sweep, the preview fading in, a tab's cards changing. */
     private boolean tickExtras(long up) {
         boolean moving = false;
         if (focusedCard >= 0) {
@@ -2114,20 +2107,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             } else {
                 moving = true;
             }
-        }
-        if (launchAt != 0) {
-            long since = up - launchAt;
-            if (!launchOpened && since >= LAUNCH_OPEN_AT_MS) {
-                launchOpened = true;
-                openNow(launchItem, screen);   // the app starts while the card finishes growing
-            }
-            // An app that never shows up (the activity stays): the card goes away by itself.
-            if (since > 2500) {
-                launchAt = 0;
-                launchLayer.setVisibility(INVISIBLE);
-            }
-            launchLayer.invalidate();
-            moving = true;
         }
         return moving;
     }
@@ -2198,64 +2177,17 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         return rating.isEmpty() ? p.year : p.year.isEmpty() ? rating : rating + "  \u00b7  " + p.year;
     }
 
-    // MARK: - Opening an app: the card comes forward as the screen darkens, and the app starts
+    // MARK: - Opening an app
 
-    private static final long LAUNCH_MS = 260, LAUNCH_OPEN_AT_MS = 120;
-    private long launchAt;
-    private boolean launchOpened;
-    private HomeApps.Item launchItem;
-    private Bitmap launchBitmap;
-    private final RectF launchStart = new RectF(), launchRect = new RectF();
+    private final RectF openFrom = new RectF();
 
-    /** The picture the transition grows: the card's photo, or the app's art; null = open the plain way. */
-    private Bitmap launchArt(HomeApps.Item it) {
-        if (Ui.LITE) return null;   // weak TVs: no full-screen frames on the way to the app
-        if (zone == Z_CARDS && !sheetOpen && cardIndex < cards.size()) {
-            Recs.Pick p = cards.get(cardIndex);
-            Backdrop b = recs.backdrop(p);
-            return b != null ? b.wide : recs.preview(p);
-        }
-        return it.tile;
-    }
-
-    /** Where the card is drawn now (the focused one is a little bigger), in screen coordinates. */
-    private RectF launchFrom(RectF r) {
+    /** Where the focused card is drawn now (it's a little bigger), in screen coordinates: the app opens out of it. */
+    private RectF openRect(RectF r) {
         float grow = zone == Z_SHELF && !sheetOpen ? FOCUS_GROW : sheetOpen ? 0.08f : 0.05f;
         float dy = zone == Z_SHELF && !sheetOpen ? tiles.getTranslationY() : 0;
         float gx = r.width() * grow / 2, gy = r.height() * grow / 2;
-        launchStart.set(r.left - gx, r.top - gy + dy, r.right + gx, r.bottom + gy + dy);
-        return launchStart;
-    }
-
-    private void startLaunch(HomeApps.Item it, Bitmap art, RectF from) {
-        launchItem = it;
-        launchBitmap = art;
-        if (from != launchStart) launchStart.set(from);
-        launchAt = SystemClock.uptimeMillis();
-        launchOpened = false;
-        launchLayer.setVisibility(VISIBLE);
-        launchLayer.invalidate();
-        wake();
-    }
-
-    /**
-     * Opening: the screen darkens while the card comes a little forward (8%, at its own sharpness: never stretched to
-     * the screen), and the app starts on top of it.
-     */
-    private void drawLaunch(Canvas c) {
-        if (launchAt == 0 || launchBitmap == null) return;
-        float t = Ui.clamp((SystemClock.uptimeMillis() - launchAt) / (float) LAUNCH_MS), e = 1 - (1 - t) * (1 - t) * (1 - t);
-        fill.setShader(null);
-        fill.setColor(Ui.alpha(0xFF000000, 0.92f * smoothstep(0, 1, t)));
-        c.drawRect(screen, fill);
-        float s = 1 + 0.08f * e, cx = launchStart.centerX(), cy = launchStart.centerY();
-        float hw = launchStart.width() * s / 2, hh = launchStart.height() * s / 2;
-        launchRect.set(cx - hw, cy - hh, cx + hw, cy + hh);
-        float r = 18 * k * s, fade = 1 - smoothstep(0.45f, 1f, t);
-        if (fade <= 0.01f) return;
-        int save = c.saveLayerAlpha(launchRect, Math.round(255 * fade));
-        roundImage(c, launchBitmap, launchRect, r);
-        c.restoreToCount(save);
+        openFrom.set(r.left - gx, r.top - gy + dy, r.right + gx, r.bottom + gy + dy);
+        return openFrom;
     }
 
     // MARK: - Toasts
@@ -2629,22 +2561,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             retarget(false);
             return;
         }
-        Bitmap art = launchArt(it);
-        if (art != null && (zone == Z_CARDS || zone == Z_SHELF || sheetOpen)) {
-            startLaunch(it, art, launchFrom(r));
-            return;
-        }
-        openNow(it, r);
+        openNow(it, zone == Z_CARDS || zone == Z_SHELF || sheetOpen ? openRect(r) : r);
     }
 
     private void openNow(HomeApps.Item it, RectF r) {
         boolean opened = HomeApps.open(activity, it, this, Math.round(r.left), Math.round(r.top),
                 Math.round(r.width()), Math.round(r.height()));
-        if (!opened) {
-            launchAt = 0;
-            launchLayer.setVisibility(INVISIBLE);
-            showToast(Ui.tr("Não deu para abrir ", "Couldn't open ") + it.label + ".");
-        }
+        if (!opened) showToast(Ui.tr("Não deu para abrir ", "Couldn't open ") + it.label + ".");
     }
 
     // MARK: - TalkBack: every reachable item as a virtual node (Spoken). Id = group * 1000 + index + 1.

@@ -441,7 +441,9 @@ final class HomeApps {
         if (intent == null) return false;
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try {
-            a.startActivity(intent, ActivityOptions.makeScaleUpAnimation(from, x, y, Math.max(w, 1), Math.max(h, 1)).toBundle());
+            // The app's window opens out of the card (a clip reveal): the system's compositor draws it, so it stays
+            // smooth while the app is loading, which an animation drawn here can't.
+            a.startActivity(intent, ActivityOptions.makeClipRevealAnimation(from, x, y, Math.max(w, 1), Math.max(h, 1)).toBundle());
             return true;
         } catch (ActivityNotFoundException | SecurityException e) {
             AppLog.w("couldn't open " + it.label + ": " + e.getMessage());
