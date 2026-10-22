@@ -151,8 +151,13 @@ final class Prefs {
     }
 
     /** The home screen's soft click when moving and opening. */
-    static boolean sounds() { return sp().getBoolean("sounds", true); }
-    static void setSounds(boolean on) { put("sounds", on); }
+    /** The click's volume (Click.LEVELS): 0 off, 1 low, 2 medium (the default), 3 high. Sounds turned off before stay off. */
+    static int soundLevel() {
+        if (!sp().contains("soundLevel")) return sp().getBoolean("sounds", true) ? 2 : 0;
+        return Math.max(0, Math.min(3, sp().getInt("soundLevel", 2)));
+    }
+
+    static void setSoundLevel(int level) { put("soundLevel", Math.max(0, Math.min(3, level))); }
 
     // MARK: - TMDB key (typed on the TV, or config.properties)
 

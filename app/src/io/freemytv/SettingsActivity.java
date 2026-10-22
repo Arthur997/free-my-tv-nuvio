@@ -784,7 +784,7 @@ public class SettingsActivity extends Activity {
                     Ui.tr("Capa dos apps na prateleira", "Shelf app art"), Ui.tr("Topo do Início", "Top of Home"),
                     Ui.tr("Tela de descanso", "Screensaver"), Ui.tr("Modo desempenho", "Performance mode"),
                     Ui.tr("Chave do TMDB", "TMDB key"), Ui.tr("Continuar assistindo", "Continue Watching", "Seguir viendo"),
-                    Ui.tr("Sons do Início", "Home screen sounds", "Sonidos del inicio")};
+                    Ui.tr("Volume dos sons", "Sound volume", "Volumen de los sonidos")};
         }
 
         private String[] moreValues() {
@@ -798,7 +798,15 @@ public class SettingsActivity extends Activity {
                     Prefs.topClock() ? Ui.tr("Relógio e clima", "Clock and weather") : Ui.tr("Cotações", "Prices"),
                     Prefs.ownScreensaver() ? "Free My TV" : Ui.tr("Da TV (fotos do Google)", "The TV's own (Google photos)"),
                     Prefs.performance() ? Ui.tr("Ligado (sem vidro)", "On (no glass)") : Ui.tr("Desligado", "Off"),
-                    tmdbKeyState(), watchAppsState(), onOff(Prefs.sounds())};
+                    tmdbKeyState(), watchAppsState(), soundLevels().get(Prefs.soundLevel())};
+        }
+
+        /** The click's volume, from off to high (Prefs.soundLevel). */
+        private static List<String> soundLevels() {
+            List<String> l = new ArrayList<>();
+            java.util.Collections.addAll(l, Ui.tr("Desligado", "Off"), Ui.tr("Baixo", "Low", "Bajo"),
+                    Ui.tr("Médio", "Medium", "Medio"), Ui.tr("Alto", "High", "Alto"));
+            return l;
         }
 
         /** Continue watching: every app, or how many are kept out. */
@@ -897,7 +905,9 @@ public class SettingsActivity extends Activity {
                         HomeMode.requestScreensaver(getContext(), own);   // the TV's setting changes in the main process
                     });
                     return true;
-                case MORE_SOUNDS: return openOnOff(title, row, Prefs.sounds(), Prefs::setSounds);
+                case MORE_SOUNDS:
+                    openPicker(title, soundLevels(), Prefs.soundLevel(), row, Prefs::setSoundLevel);
+                    return true;
                 default:
                     java.util.Collections.addAll(l, Ui.tr("Desligado", "Off"), Ui.tr("Ligado (sem vidro)", "On (no glass)"));
                     openPicker(title, l, Prefs.performance() ? 1 : 0, row, at -> Prefs.setPerformance(at == 1));
@@ -942,7 +952,7 @@ public class SettingsActivity extends Activity {
                     break;
                 }
                 case 8: Prefs.setPerformance(!Prefs.performance()); break;
-                case MORE_SOUNDS: Prefs.setSounds(!Prefs.sounds()); break;
+                case MORE_SOUNDS: Prefs.setSoundLevel((Prefs.soundLevel() + dir + 4) % 4); break;
                 default: return;   // the TMDB key: OK opens the text field (activate)
             }
             HomeData.get(getContext()).settingsChanged();
