@@ -28,6 +28,7 @@ final class Prefs {
         app = c.getApplicationContext();
         prefs = app.getSharedPreferences("settings", Context.MODE_PRIVATE);
         Ui.applyLanguage();   // the language picked on the TV, now that it can be read
+        weakTv = weak(app);
         Ui.LITE = Ui.LEGACY || performance();
     }
 
@@ -163,7 +164,19 @@ final class Prefs {
      * Performance mode: the light drawing paths of Android 9 to 11 (cached shadows, images rounded by a shader) and the
      * flat look instead of the glass shaders (Ui.LITE).
      */
-    static boolean performance() { return sp().getBoolean("performance", false); }
+    static boolean performance() { return sp().getBoolean("performance", weakTv); }
+
+    /** A TV with little memory (Android's low-RAM flag, or under ~1.5 GB): performance mode starts on there. */
+    private static boolean weakTv;
+
+    private static boolean weak(Context c) {
+        android.app.ActivityManager am = (android.app.ActivityManager) c.getSystemService(Context.ACTIVITY_SERVICE);
+        if (am == null) return false;
+        android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
+        am.getMemoryInfo(mi);
+        return am.isLowRamDevice() || mi.totalMem < 1_600_000_000L;
+    }
+
     static void setPerformance(boolean on) {
         Ui.LITE = Ui.LEGACY || on;   // the home screen is rebuilt when settings change: it takes effect right away
         put("performance", on);

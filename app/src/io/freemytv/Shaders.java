@@ -299,11 +299,11 @@ final class Shaders {
     private static final int[] SUNSET = {0x2E1650, 0xE2546C, 0xF39A4F};
     private static final int[] DUSK = {0x10173A, 0x36348A, 0x8A4BB0};
 
-    /**
-     * Palette for the sun's current position at your location. Uses the sunrise and sunset times from the last weather
-     * fetch (they shift ~1 min a day, so yesterday's times are fine today); without data, 5:30 and 17:40.
-     */
-    static void sky(Palette out, long now, long sunrise, long sunset) {
+    /** An average day, by the clock: the day look from 6:00, the night look from 18:00 (ms since midnight). */
+    static final long DAY_STARTS = 6 * 3600_000L, NIGHT_STARTS = 18 * 3600_000L;
+
+    /** Palette for the time of day: sunrise at 6:00 and sunset at 18:00, like an average day. */
+    static void sky(Palette out, long now) {
         java.util.Calendar cal = java.util.Calendar.getInstance();
         cal.setTimeInMillis(now);
         cal.set(java.util.Calendar.HOUR_OF_DAY, 0);
@@ -311,8 +311,7 @@ final class Shaders {
         cal.set(java.util.Calendar.SECOND, 0);
         cal.set(java.util.Calendar.MILLISECOND, 0);
         long midnight = cal.getTimeInMillis();
-        long rise = midnight + timeOfDay(sunrise, (5 * 60 + 30) * 60_000L);
-        long set = midnight + timeOfDay(sunset, (17 * 60 + 40) * 60_000L);
+        long rise = midnight + DAY_STARTS, set = midnight + NIGHT_STARTS;
         long m = 60_000L;
         long[] at = {rise - 60 * m, rise - 15 * m, rise + 45 * m, set - 45 * m, set, set + 45 * m, set + 105 * m};
         int[][] key = {NIGHT, DAWN, DAY, DAY, SUNSET, DUSK, NIGHT};

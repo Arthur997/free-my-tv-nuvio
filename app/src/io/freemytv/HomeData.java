@@ -168,7 +168,8 @@ final class HomeData {
                 }
             });
         }
-        if (!fetchingWeather && (now - weatherAt > WEATHER_EVERY || now < weatherAt)) {
+        // Weather widget off (Home Settings): no forecast is fetched at all.
+        if (Prefs.weather() && !fetchingWeather && (now - weatherAt > WEATHER_EVERY || now < weatherAt)) {
             fetchingWeather = true;
             io.execute(() -> {
                 try {
@@ -275,17 +276,15 @@ final class HomeData {
     }
 
     /**
-     * Night at your location: from sunset to sunrise (like Apple's "Automatic" appearance: the light design darkens).
-     * Uses the last weather fetched (it moves ~1 min a day); without data, 6:00 and 18:00.
+     * Night by the clock, like an average day: from 18:00 to 6:00 (the light design darkens). No sunrise or sunset
+     * needed, so it doesn't depend on the weather being on.
      */
     boolean isNight(long now) {
         String theme = Prefs.theme();
         if (theme.equals("dark")) return true;
         if (theme.equals("light")) return false;
         long t = Shaders.timeOfDay(now, 0);
-        long rise = Shaders.timeOfDay(weather.sunrise, 6 * 60 * 60_000L);
-        long set = Shaders.timeOfDay(weather.sunset, 18 * 60 * 60_000L);
-        return t < rise || t >= set;
+        return t < Shaders.DAY_STARTS || t >= Shaders.NIGHT_STARTS;
     }
 
     // MARK: - Formatting

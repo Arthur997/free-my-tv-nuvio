@@ -52,8 +52,9 @@ import java.util.function.Consumer;
  *  - at the bottom, the glass shelf with the apps (icons in each brand's color, like the tvOS Dock; the focused one
  *    grows);
  *  - ↓ on the shelf: everything moves up and the bottom drawer appears (inputs, shortcuts, weather for the next hours
- *    and quotes with the 24 h change); the background lightens (darkens at night). ↑ or Back closes it;
- *  - from sunset to sunrise, a night look: dark background, smoked glass and white text.
+ *    and quotes with the 24 h change); the background lightens (darkens at night). ↑ or Back closes it; ↓ again
+ *    opens All Apps, and ↑ from its first row comes back to the home screen;
+ *  - from 18:00 to 6:00, a night look: dark background, smoked glass and white text.
  * Measurements are in a 1920×1080 space (k = width / 1920). The screen is split into layers so the TV's weak GPU only
  * redraws what changed.
  */
@@ -125,7 +126,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final Layer sky, heroLayer, status, platter, tiles, drawerLayer, sheetLayer, menuLayer, toastLayer;
     private int zone = Z_SHELF;
 
-    // Night look (like Apple's "Automatic" appearance): darker from sunset to sunrise, with a 2 s transition.
+    // Night look (like Apple's "Automatic" appearance): darker from 18:00 to 6:00, with a 2 s transition.
     private static final long NIGHT_MS = 2000;
     private boolean nightTarget;
     private float night, nightFrom;     // 0 = day, 1 = night
@@ -147,8 +148,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static long askedWatchAt;
     private int cardOffset;
     private String cardCounter = "";
-    private final Spring[] topFocus = new Spring[6];
-    private final RectF[] topRects = new RectF[6];
+    // The top row: the three tabs, then the icon-only buttons (Search, Live TV, HDMI Inputs, TV Settings).
+    private static final int BUTTONS = 4, TOP_ITEMS = 3 + BUTTONS;
+    private final Spring[] topFocus = new Spring[TOP_ITEMS];
+    private final RectF[] topRects = new RectF[TOP_ITEMS];
     private final Spring[] cardFocus = new Spring[SLOTS];
     private final RectF[] cardRects = new RectF[SLOTS];
     // The list moving along (→ past the last column): each title glides from its slot in the `shiftFrom` offset to
@@ -355,7 +358,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         setContentDescription("Free My TV");
         drawerLayer.setVisibility(INVISIBLE);
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < TOP_ITEMS; i++) {
             topFocus[i] = new Spring(0.26f, 0.85f, 0);
             topRects[i] = new RectF();
         }
@@ -453,6 +456,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** The three corner buttons, with their names in the current language. */
     private void makeLightButtons() {
         lightButtons.clear();
+        lightButtons.add(HomeApps.action(HomeApps.SEARCH, "search", Ui.tr("Buscar", "Search", "Buscar"), "search"));
         lightButtons.add(HomeApps.action(HomeApps.LIVE_TV, "live", Ui.tr("TV aberta", "Live TV"), "live_tv"));
         lightButtons.add(HomeApps.action(HomeApps.INPUTS, "inputs", Ui.tr("Entradas HDMI", "HDMI Inputs"), "hdmi"));
         // The gear opens the TV's settings; Free My TV's own are first in More Apps.
@@ -750,8 +754,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void updatePalette() {
-        HomeData.Weather wx = data.weather;
-        Shaders.sky(scene.palette, System.currentTimeMillis(), wx.sunrise, wx.sunset);
+        Shaders.sky(scene.palette, System.currentTimeMillis());
         scene.applyPalette();
     }
 
@@ -1189,7 +1192,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         Paint text = lQuote;
         // The corner buttons' names appear in this row: the quotes fade out while one of them has focus.
         float fade = 1;
-        for (int i = 3; i < 6; i++) fade = Math.min(fade, 1 - Ui.clamp(topFocus[i].value));
+        for (int i = 3; i < TOP_ITEMS; i++) fade = Math.min(fade, 1 - Ui.clamp(topFocus[i].value));
         if (fade <= 0.01f) return;
         int textColor = text.getColor();
         text.setColor(Ui.alpha(textColor, fade));
@@ -1766,7 +1769,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     // MARK: - App options (hold OK on an app): a rounded panel that slides out at its side
 
-    private static final int MENU_OPEN = 0, MENU_INFO = 1, MENU_UNINSTALL = 2;
+    private static final int MENU_OPEN = 0, MENU_INFO = 1, MENU_UNINSTALL = 2, MENU_LEFT = 3, MENU_RIGHT = 4,
+            MENU_SHELF_ADD = 5, MENU_SHELF_REMOVE = 6;
     // The rows' corners are concentric with the panel's (panel radius = row radius + padding).
     private static final float MENU_ROW = 72, MENU_PAD = 12, MENU_HEADER = 58, MENU_GAP = 28, MENU_ROW_RADIUS = 22;
     private static final float MENU_MIN_W = 380, MENU_MAX_W = 560, MENU_TEXT_X = 22, MENU_LABEL_X = 54;
@@ -1777,7 +1781,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private String[] menuLabels = new String[0];
     private String menuTitle = "";
     private HomeApps.Item menuApp;
-    private boolean menuOpen, menuDirty, menuOnRight;
+    private boolean menuOpen, menuDirty, menuOnRight, menuFromShelf;
     private int menuIndex;
     private Paint menuText, menuHeader;
     private float menuTextHalfCap, menuHeaderHalfCap;
@@ -1787,15 +1791,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         HomeApps.Item it = focusedApp();
         if (it == null) return false;
         menuApp = it;
-        menuActions.clear();
-        menuActions.add(MENU_OPEN);
-        menuActions.add(MENU_INFO);
-        if (HomeApps.removable(getContext(), it.pkg)) menuActions.add(MENU_UNINSTALL);
-        menuLabels = new String[menuActions.size()];
-        for (int i = 0; i < menuLabels.length; i++) menuLabels[i] = menuLabel(menuActions.get(i));
-        layoutMenu();
-        menuIndex = 0;
-        menuRow.snap(0);
+        menuFromShelf = !sheetOpen;
+        buildMenu(MENU_OPEN);
+        menuRow.snap(menuIndex);
         menuOpen = true;
         menu.target = 1;
         menuDirty = true;
@@ -1822,9 +1820,37 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         return it.kind == HomeApps.APP && it.pkg != null ? it : null;
     }
 
+    /**
+     * The options for menuApp: open, move along the shelf (from the shelf), put on or take off the shelf, its info, and
+     * uninstall (apps the person installed). The focus stays on `keep` when it's still there (after a move).
+     */
+    private void buildMenu(int keep) {
+        List<String> order = HomeApps.shelfPackages(getContext());
+        menuActions.clear();
+        menuActions.add(MENU_OPEN);
+        if (menuFromShelf && shelfIndex > 0) menuActions.add(MENU_LEFT);
+        if (menuFromShelf && shelfIndex < shelf.size() - 1) menuActions.add(MENU_RIGHT);
+        if (order.contains(menuApp.pkg)) menuActions.add(MENU_SHELF_REMOVE);
+        else if (order.size() < HomeApps.MAX_SHELF) menuActions.add(MENU_SHELF_ADD);
+        menuActions.add(MENU_INFO);
+        if (HomeApps.removable(getContext(), menuApp.pkg)) menuActions.add(MENU_UNINSTALL);
+        menuLabels = new String[menuActions.size()];
+        for (int i = 0; i < menuLabels.length; i++) menuLabels[i] = menuLabel(menuActions.get(i));
+        int at = menuActions.indexOf(keep);
+        // At an end of the shelf the move that was focused is gone: the other direction takes the focus.
+        if (at < 0 && (keep == MENU_LEFT || keep == MENU_RIGHT)) at = menuActions.indexOf(keep == MENU_LEFT ? MENU_RIGHT : MENU_LEFT);
+        menuIndex = Math.max(0, at);
+        menuRow.target = menuIndex;
+        layoutMenu();
+    }
+
     private static String menuLabel(int action) {
         switch (action) {
             case MENU_OPEN: return Ui.tr("Abrir", "Open");
+            case MENU_LEFT: return Ui.tr("Mover para a esquerda", "Move left", "Mover a la izquierda");
+            case MENU_RIGHT: return Ui.tr("Mover para a direita", "Move right", "Mover a la derecha");
+            case MENU_SHELF_ADD: return Ui.tr("Pôr na prateleira", "Add to shelf", "Agregar al estante");
+            case MENU_SHELF_REMOVE: return Ui.tr("Tirar da prateleira", "Remove from shelf", "Quitar del estante");
             case MENU_INFO: return Ui.tr("Informações do app", "App info");
             default: return Ui.tr("Desinstalar", "Uninstall");
         }
@@ -1833,6 +1859,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static String menuSymbol(int action) {
         switch (action) {
             case MENU_OPEN: return "play";
+            case MENU_LEFT: return "arrow_back";
+            case MENU_RIGHT: return "arrow_forward";
+            case MENU_SHELF_ADD: return "add";
+            case MENU_SHELF_REMOVE: return "remove";
             case MENU_INFO: return "info";
             default: return "delete";
         }
@@ -1889,17 +1919,77 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void chooseMenu() {
         HomeApps.Item it = menuApp;
         int action = menuActions.get(menuIndex);
+        if (action == MENU_LEFT || action == MENU_RIGHT) {
+            moveOnShelf(action == MENU_LEFT ? -1 : 1, action);   // the panel stays: press again to keep moving
+            return;
+        }
         closeMenu();
         if (action == MENU_OPEN) {
             activate();
             return;
         }
         click.open();
+        if (action == MENU_SHELF_ADD || action == MENU_SHELF_REMOVE) {
+            putOnShelf(it, action == MENU_SHELF_ADD);
+            return;
+        }
         if (action == MENU_INFO) {
             if (!HomeApps.openInfo(activity, it.pkg)) showToast(Ui.tr("Não deu para abrir as informações do app.", "Couldn't open the app's info."));
         } else if (!HomeApps.uninstall(activity, it.pkg)) {
             showToast(Ui.tr("Não dá para desinstalar este app por aqui.", "Couldn't uninstall this app here."));
         }
+    }
+
+    /** Swaps the focused shelf app with its neighbor; the focus (and the panel) go along with it. */
+    private void moveOnShelf(int dir, int action) {
+        int from = shelfIndex, to = from + dir;
+        if (to < 0 || to >= shelf.size()) return;
+        List<String> order = new ArrayList<>(HomeApps.shelfPackages(getContext()));
+        int a = order.indexOf(shelfKey(shelf.get(from))), b = order.indexOf(shelfKey(shelf.get(to)));
+        if (a < 0 || b < 0) return;
+        java.util.Collections.swap(order, a, b);
+        saveShelf(order);
+        List<HomeApps.Item> list = new ArrayList<>(shelf);
+        java.util.Collections.swap(list, from, to);
+        shelf = list;
+        Spring focused = tileFocus[from];   // the grown tile keeps its size in its new place
+        tileFocus[from] = tileFocus[to];
+        tileFocus[to] = focused;
+        shelfIndex = to;
+        retarget(false);
+        tilesDirty = true;
+        click.move();
+        focusedApp();   // the panel follows the app to its new place
+        buildMenu(action);
+        menuDirty = true;
+    }
+
+    /** Puts the app at the end of the shelf, or takes it off. */
+    private void putOnShelf(HomeApps.Item it, boolean on) {
+        List<String> order = new ArrayList<>(HomeApps.shelfPackages(getContext()));
+        if (on && (order.size() >= HomeApps.MAX_SHELF || order.contains(it.pkg))) return;
+        if (on) order.add(it.pkg);
+        else order.remove(it.pkg);
+        saveShelf(order);
+        if (!on && menuFromShelf && shelfIndex < shelf.size()) {
+            List<HomeApps.Item> list = new ArrayList<>(shelf);
+            list.remove(shelfIndex);
+            setShelf(list);   // gone at once; the reload below confirms it
+        }
+        reload(true);
+        showToast(on ? Ui.tr(it.label + " está na prateleira.", it.label + " is on the shelf.", it.label + " está en el estante.")
+                : Ui.tr(it.label + " saiu da prateleira.", it.label + " is off the shelf.", it.label + " salió del estante."));
+    }
+
+    /** What the shelf order (Prefs) calls an item: its package, or the live TV key. */
+    private static String shelfKey(HomeApps.Item it) {
+        return it.kind == HomeApps.LIVE_TV ? HomeApps.LIVE_TV_KEY : it.pkg;
+    }
+
+    /** Saves the shelf without the home screen starting over on the way back (as a change in Settings makes it). */
+    private void saveShelf(List<String> order) {
+        Prefs.setShelf(order);
+        if (activity instanceof HomeActivity) ((HomeActivity) activity).settingsSeen();
     }
 
     /** The panel's fade, slide and growth (view properties only: its content isn't redrawn while it moves). */
@@ -2028,21 +2118,36 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     // MARK: - Lists (in the background, so returning to the home screen isn't delayed)
 
     private void reload() {
+        reload(false);
+    }
+
+    /**
+     * The inputs and shortcuts every time; the shelf and All Apps only when an app was installed, updated or removed
+     * since the last look (Android counts those changes), or with `apps` (the shelf was just edited).
+     */
+    private void reload(boolean apps) {
         wake();
         final Context c = getContext().getApplicationContext();
         LOADER.execute(() -> {
-            final List<HomeApps.Item> s = HomeApps.shelf(c, true);
+            android.content.pm.ChangedPackages changed = c.getPackageManager().getChangedPackages(Math.max(0, appsSeen));
+            final boolean appsChanged = apps || appsSeen < 0 || changed != null;
+            if (changed != null) appsSeen = changed.getSequenceNumber();
+            else if (appsSeen < 0) appsSeen = 0;
+            final List<HomeApps.Item> s = appsChanged ? HomeApps.shelf(c, true) : null;
             final List<HomeApps.Item> st = statusList(c);
             final List<HomeApps.Item> d = drawerList(c);
-            final List<HomeApps.Item> o = HomeApps.others(c);
+            final List<HomeApps.Item> o = appsChanged ? HomeApps.others(c) : null;
             handler.post(() -> {
-                setShelf(s);
+                if (s != null) setShelf(s);
                 setStatusItems(st);
                 setDrawerItems(d);
-                if (!sheetOpen) setOthers(o);
+                if (o != null && !sheetOpen) setOthers(o);
             });
         });
     }
+
+    /** Android's count of app changes (installs, updates, removals) at the last look; -1 = not looked yet. */
+    private volatile int appsSeen = -1;
 
     // MARK: - Keys: only the arrows, OK and Back (system keys pass through to the system)
 
@@ -2142,8 +2247,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                     } else {
                         return;
                     }
+                } else if (drawerItems.isEmpty()) {
+                    openSheet();   // no drawer: straight to All Apps
                 } else {
-                    if (drawerItems.isEmpty()) return;
                     openDrawer();
                 }
                 break;
@@ -2182,7 +2288,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 } else if (dy < 0) {
                     closeDrawer();
                 } else {
-                    return;
+                    openSheet();   // ↓ all the way down: All Apps
                 }
                 break;
         }
@@ -2212,6 +2318,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (dx != 0) {
             int candidate = gridIndex + dx;
             if (candidate >= 0 && candidate < n && candidate / COLUMNS == r) next = candidate;
+        } else if (dy < 0 && r == 0) {
+            // ↑ all the way up: back to the home screen, the drawer closed too.
+            closeSheet();
+            if (drawerOpen) closeDrawer();
+            retarget(false);
+            click.move();
+            return;
         } else {
             int targetRow = r + dy;
             if (targetRow >= 0 && targetRow < rows) next = Math.min(n - 1, targetRow * COLUMNS + col);
@@ -2453,7 +2566,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             x = topRects[i].right + 4 * k;
         }
         float b = L_BUTTON * k, right = CONTENT_R * k, cy = L_BUTTON_CY * k;
-        for (int i = 2; i >= 0; i--) {
+        for (int i = BUTTONS - 1; i >= 0; i--) {
             topRects[3 + i].set(right - b, cy - b / 2, right, cy + b / 2);
             right -= b + L_BUTTON_GAP * k;
         }
@@ -2634,7 +2747,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         applyTone();
         Paint text = lQuote;
         float fade = 1;   // the corner buttons' names show in this row: fade out while one has focus
-        for (int i = 3; i < 6; i++) fade = Math.min(fade, 1 - Ui.clamp(topFocus[i].value));
+        for (int i = 3; i < TOP_ITEMS; i++) fade = Math.min(fade, 1 - Ui.clamp(topFocus[i].value));
         if (fade <= 0.01f) return;
         long now = System.currentTimeMillis();
         if (now / 60_000 != topMinute) {
@@ -2895,7 +3008,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      */
     private void drawLightButtons(Canvas c) {
         applyTone();
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < BUTTONS; i++) {
             RectF r = topRects[3 + i];
             float f = Ui.clamp(topFocus[3 + i].value), s = 1 + 0.1f * f, rad = r.width() / 2 * s;
             cell.set(r.centerX() - rad, r.centerY() - rad, r.centerX() + rad, r.centerY() + rad);
@@ -2939,7 +3052,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 break;
             case Z_TOP:
                 if (dx != 0) {
-                    int next = Math.max(0, Math.min(5, topIndex + dx));
+                    int next = Math.max(0, Math.min(TOP_ITEMS - 1, topIndex + dx));
                     if (next == topIndex) return true;
                     topIndex = next;
                     if (topIndex < 3) selectTab(topIndex);   // like Apple TV tabs: focusing a tab selects it

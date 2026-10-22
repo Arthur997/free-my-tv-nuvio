@@ -58,6 +58,8 @@ final class HomeApps {
     static final int APP = 0, LIVE_TV = 1, INPUT = 2, ALL_APPS = 3, SETTINGS = 4, ANDROID_SETTINGS = 5;
     /** The "HDMI Inputs" button: opens the bottom drawer on the inputs (the home screen handles it). */
     static final int INPUTS = 7;
+    /** The search button: the TV's own search (by voice, like the remote's mic), which the stock home screen had. */
+    static final int SEARCH = 8;
     /** Image size of each card (16:9; on screen it shows up to ~330 px wide). */
     static final int TILE_W = 384, TILE_H = 216;
 
@@ -408,6 +410,9 @@ final class HomeApps {
             case ANDROID_SETTINGS:
                 intent = new Intent(Settings.ACTION_SETTINGS);
                 break;
+            case SEARCH:
+                intent = search(a.getPackageManager());
+                break;
             default:
                 return false;
         }
@@ -420,6 +425,14 @@ final class HomeApps {
             AppLog.w("couldn't open " + it.label + ": " + e.getMessage());
             return false;
         }
+    }
+
+    /** The TV's search: the Assistant listening (as the remote's mic), else the system's text search, else none. */
+    private static Intent search(PackageManager pm) {
+        Intent[] choices = {new Intent(Intent.ACTION_ASSIST), new Intent("android.search.action.GLOBAL_SEARCH"),
+                new Intent(Intent.ACTION_WEB_SEARCH)};
+        for (Intent i : choices) if (i.resolveActivity(pm) != null) return i;
+        return null;
     }
 
     /** The app's page in the TV's settings (storage, permissions, force stop). */
@@ -785,11 +798,47 @@ final class HomeApps {
         String cacheKey = key != null ? key : pkg;
         if (TILES.containsKey(cacheKey)) return TILES.get(cacheKey);
         Bitmap logo = key == null ? null : ownLogo(c, key);
-        Bitmap tile = logo != null ? logoTile(logo, brand) : bannerTile(c, pkg);
-        if (tile == null) tile = iconTile(c, pkg);
+        // The app's own art: from disk when this version of the app was seen before (lifting it takes much longer).
+        File saved = logo == null ? tileFile(c, pkg) : null;
+        Bitmap tile = logo != null ? logoTile(logo, brand) : saved != null && saved.exists() ? BitmapFactory.decodeFile(saved.getPath()) : null;
+        if (tile == null) {
+            tile = bannerTile(c, pkg);
+            if (tile == null) tile = iconTile(c, pkg);
+            if (saved != null) saveTile(tile, saved);
+        }
         tile.setHasMipMap(true);
         TILES.put(cacheKey, tile);
         return tile;
+    }
+
+    /** Where an app's card is kept: one file per app version (an update brings new art), or null. */
+    private static File tileFile(Context c, String pkg) {
+        try {
+            long updated = c.getPackageManager().getPackageInfo(pkg, 0).lastUpdateTime;
+            return new File(new File(c.getCacheDir(), "tiles"), pkg + "-" + updated + ".png");
+        } catch (PackageManager.NameNotFoundException e) {
+            return null;
+        }
+    }
+
+    private static void saveTile(Bitmap tile, File f) {
+        File dir = f.getParentFile();
+        //noinspection ResultOfMethodCallIgnored
+        dir.mkdirs();
+        String app = f.getName().substring(0, f.getName().lastIndexOf('-') + 1);
+        File[] old = dir.listFiles((d, name) -> name.startsWith(app));   // the art of the app's older versions
+        for (int i = 0; old != null && i < old.length; i++) {
+            //noinspection ResultOfMethodCallIgnored
+            old[i].delete();
+        }
+        File part = new File(f.getPath() + ".part");
+        try (FileOutputStream out = new FileOutputStream(part)) {
+            tile.compress(Bitmap.CompressFormat.PNG, 100, out);
+        } catch (IOException e) {
+            return;
+        }
+        //noinspection ResultOfMethodCallIgnored
+        part.renameTo(f);
     }
 
     /** The app's official TV art (the Android TV banner), at the highest density the app has. */

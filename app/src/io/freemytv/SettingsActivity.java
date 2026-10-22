@@ -368,7 +368,7 @@ public class SettingsActivity extends Activity {
             if (w > 0 && lightTheme() != lightTheme) onSizeChanged(w, h, w, h);
         }
 
-        /** Light like For You by day (theme: auto follows sunset and sunrise), or as Home Settings > Theme says. */
+        /** Light like the home screen by day (theme: auto, 6:00 to 18:00), or as Home Settings > Theme says. */
         private boolean lightTheme() {
             String theme = Prefs.theme();
             if (!theme.equals("auto")) return theme.equals("light");

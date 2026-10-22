@@ -68,7 +68,8 @@ final class Recs {
     private static String imageSize() {
         return Prefs.ownScreensaver() ? "original" : "w1280";
     }
-    private static final long LIST_EVERY = 6 * 3600_000L;
+    /** The lists are the day's top: fetched once a day (a new day, or 24 h after the last fetch). */
+    private static final long LIST_EVERY = 24 * 3600_000L;
     /** Bump when what is saved for each title changes (the saved list is discarded and fetched again). */
     private static final int CACHE_VERSION = 6;   // 6: the titles' logos
     private static final int MANHA = 0, TARDE = 1, NOITE = 2;
@@ -181,6 +182,13 @@ final class Recs {
 
     static String periodLabel() {
         return (Ui.es ? PERIOD_LABEL_ES : Ui.en ? PERIOD_LABEL_EN : PERIOD_LABEL)[period(System.currentTimeMillis())];
+    }
+
+    private static boolean sameDay(long a, long b) {
+        Calendar x = Calendar.getInstance(), y = Calendar.getInstance();
+        x.setTimeInMillis(a);
+        y.setTimeInMillis(b);
+        return x.get(Calendar.YEAR) == y.get(Calendar.YEAR) && x.get(Calendar.DAY_OF_YEAR) == y.get(Calendar.DAY_OF_YEAR);
     }
 
     private static int period(long now) {
@@ -313,7 +321,7 @@ final class Recs {
         return new File(new File(context.getCacheDir(), "recs"), name);
     }
 
-    /** With a key: fetches the list if stale or the time of day (morning/afternoon/night) changed; then the details. */
+    /** With a key: fetches the list once a day (or with a new key, country or language); then the details. */
     void refreshIfStale() {
         if (!hasKey(context) || fetching) return;
         long now = System.currentTimeMillis();
@@ -322,7 +330,7 @@ final class Recs {
         long sinceFail = now - failedAt;    // negative = the clock went back: don't wait
         if (!newKey && failedAt != 0 && sinceFail >= 0 && sinceFail < 10 * 60_000L) return;
         int p = period(now);
-        boolean stale = newKey || p != period || now - listAt > LIST_EVERY || now < listAt || picks.isEmpty()
+        boolean stale = newKey || !sameDay(now, listAt) || now - listAt > LIST_EVERY || now < listAt || picks.isEmpty()
                 || !listLanguage.equals(Ui.language);
         // Photos come on demand (backdrop(): the cards on screen and the next three); so do the top's details.
         boolean lazy = lazyDetails();

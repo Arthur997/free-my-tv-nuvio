@@ -51,6 +51,11 @@ public class HomeActivity extends Activity {
         if (home != null) home.resume();
     }
 
+    /** A setting the home screen changed itself (the shelf, from the app options): no need to start over. */
+    void settingsSeen() {
+        prefsVersion = Prefs.version;
+    }
+
     @Override protected void onPause() {
         if (home != null) home.pause();
         super.onPause();
