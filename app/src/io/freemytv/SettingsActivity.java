@@ -313,6 +313,7 @@ public class SettingsActivity extends Activity {
         }
 
         void resume() {
+            click.start();
             if (running) return;
             running = true;
             startedAt = SystemClock.uptimeMillis();
@@ -328,6 +329,7 @@ public class SettingsActivity extends Activity {
         }
 
         void pause() {
+            click.stop();
             running = false;
             handler.removeCallbacks(poll);
             Choreographer.getInstance().removeFrameCallback(this);
@@ -644,7 +646,6 @@ public class SettingsActivity extends Activity {
                 case KeyEvent.KEYCODE_DPAD_UP:
                     if (down && focus > 0) focus--;
                     else if (down && scrolling() && pickScroll > 0) pickScroll--;
-                    else if (down) return true;   // already at the top: no click
                     if (down) click.move();
                     invalidate();
                     spoken.focusMoved();
@@ -652,14 +653,13 @@ public class SettingsActivity extends Activity {
                 case KeyEvent.KEYCODE_DPAD_DOWN:
                     if (down && focus < rowCount() - 1) focus++;
                     else if (down && scrolling() && pickScroll + rowCount() < listSize()) pickScroll++;
-                    else if (down) return true;   // already at the bottom: no click
                     if (down) click.move();
                     invalidate();
                     spoken.focusMoved();
                     return true;
                 case KeyEvent.KEYCODE_DPAD_LEFT:
                 case KeyEvent.KEYCODE_DPAD_RIGHT:
-                    if (down && (screen == SHELF_EDIT || screen == HOME_SETTINGS || screen == MORE)) click.move();
+                    if (down) click.move();   // every press clicks
                     if (down && screen == SHELF_EDIT) {
                         moveShelfApp(e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1);
                         invalidate();
@@ -679,7 +679,10 @@ public class SettingsActivity extends Activity {
                     }
                     return true;
                 case KeyEvent.KEYCODE_BACK:
-                    if (screen == MAIN) return false;   // leaves the settings
+                    if (screen == MAIN) {
+                        if (down) click.move();
+                        return false;   // leaves the settings
+                    }
                     if (down) {
                         if (e.getRepeatCount() == 0) backDown = true;
                     } else {

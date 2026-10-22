@@ -160,11 +160,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private int shiftFrom, shiftTo;
     private final RectF slotFrom = new RectF(), slotTo = new RectF();
     private final List<HomeApps.Item> lightButtons = new ArrayList<>();
-    private Paint lTitle, lTab, lTabOn, lCardMeta, lQuote, lTip, onPhotoTitle, onPhotoMeta, badgePaint;
+    private Paint lTitle, lTab, lTabOn, lCardMeta, lQuote, lTip, onPhotoTitle, onPhotoMeta, badgePaint, lTopRight;
     private String badgeText = "";
     private float badgeWidth;
     private String heading = "";
-    private float headingWidth;
     private float headingBearing;
     private Shader lightGradient;
 
@@ -324,7 +323,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             updatePalette();
             checkNight(true);
             updatePicks();      // five new ones every hour
-            updateGreeting();
             loadWatching();
             wake();
             handler.postDelayed(this, 15_000);
@@ -409,9 +407,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         reload();
         askWatchPermission();
         loadWatching();
+        click.start();
         launchAt = 0;   // back from the app the transition opened
         launchLayer.setVisibility(INVISIBLE);
-        updateGreeting();
         updatePalette();
         updatePicks();
         hideMenu();   // back from App info or the uninstall question
@@ -426,6 +424,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     void pause() {
         if (!running) return;
         running = false;
+        click.stop();
         Choreographer.getInstance().removeFrameCallback(this);
         handler.removeCallbacks(idleWake);
         frameQueued = false;
@@ -485,7 +484,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     @Override public void onData() {
         wake();
-        updateGreeting();   // the rain coming, from the new forecast
         updatePalette();
         checkNight(true);
         layoutStatus();
@@ -561,7 +559,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         layoutStatus();
         layoutDrawer();
         layoutLight();
-        updateGreeting();
         hero = null;
         heroFrom = null;
         updatePicks();
@@ -582,10 +579,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lTitle.setLetterSpacing(0.004f);
         heading = heading();
         headingBearing = Ui.leftBearing(lTitle, heading);
-        headingWidth = lTitle.measureText(heading);
-        greetingPaint = Ui.text(Ui.medium, 30 * k, L_DIM);
-        greetingText = greetingFrom = "";
+
         lTab = Ui.text(Ui.medium, 30 * k, L_DIM);
+        lTopRight = Ui.numbers(Ui.medium, 30 * k, L_DIM);
+        topMinute = topWeatherAt = -1;   // measured again with this size
         lTabOn = Ui.text(Ui.semibold, 30 * k, L_INK);
         // On the photos (over their dark bottom): white in either look, with a soft shadow for the bright ones.
         onPhotoTitle = Ui.text(Ui.displaySemibold, 40 * k, WHITE);
@@ -973,6 +970,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lTabOn.setColor(tone(L_INK, WHITE));
         lCardMeta.setColor(tone(L_DIM, 0xFF98989D));
         lQuote.setColor(tone(L_FAINT, 0xB8FFFFFF));
+        lTopRight.setColor(tone(L_DIM, 0xFF8E8E93));   // as the tabs that aren't selected
         lTip.setColor(tone(L_INK, WHITE));
         staleQuote.setColor(tone(L_FAINT, 0x99FFFFFF));
     }
@@ -2102,16 +2100,20 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (p == null || b != null) showBackdrop(b);
     }
 
-    /** True while something here moves: the sweep, the preview fading in, the greeting changing. */
+    /** True while something here moves: the sweep, the preview fading in, a tab's cards changing, an app opening. */
     private boolean tickExtras(long up) {
         boolean moving = false;
         if (focusedCard >= 0) {
             long since = up - cardFocusAt;
             moving = since < SWEEP_DELAY_MS + SWEEP_MS || (since >= PREVIEW_MS && since < PREVIEW_MS + PREVIEW_FADE_MS + 50);
         }
-        if (greetingAt != 0) {
-            if (up - greetingAt > GREETING_FADE_MS) greetingAt = 0;
-            else moving = true;
+        if (tabAnimAt != 0) {
+            if (up - tabAnimAt > TAB_OUT_MS + TAB_IN_MS + SLOTS * TAB_STAGGER_MS) {
+                tabAnimAt = 0;
+                tabFrom = null;
+            } else {
+                moving = true;
+            }
         }
         if (launchAt != 0) {
             long since = up - launchAt;
@@ -2196,64 +2198,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         return rating.isEmpty() ? p.year : p.year.isEmpty() ? rating : rating + "  \u00b7  " + p.year;
     }
 
-    // MARK: - The greeting beside the title: the time of day and, when it's coming, the rain
+    // MARK: - Opening an app: the card comes forward as the screen darkens, and the app starts
 
-    private static final long GREETING_FADE_MS = 600;
-    private String greetingText = "", greetingFrom = "";
-    private long greetingAt;
-    private Paint greetingPaint;
-
-    /** "Boa noite · Chuva às 21h": made again on every tick; a change cross-fades. */
-    private void updateGreeting() {
-        if (greetingPaint == null) return;
-        int hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY);
-        String text = hour >= 5 && hour < 12 ? Ui.tr("Bom dia", "Good morning", "Buenos días")
-                : hour >= 12 && hour < 18 ? Ui.tr("Boa tarde", "Good afternoon", "Buenas tardes")
-                : Ui.tr("Boa noite", "Good evening", "Buenas noches");
-        String rain = showWeatherOn ? rainSoon() : "";
-        if (!rain.isEmpty()) text += "  \u00b7  " + rain;
-        if (text.equals(greetingText)) return;
-        greetingFrom = greetingText;
-        greetingText = text;
-        greetingAt = greetingFrom.isEmpty() ? 0 : SystemClock.uptimeMillis();
-        heroDirty = true;
-        wake();
-    }
-
-    /** "Chovendo agora", or "Chuva às 18h" for the first rainy hour in the next six; "" when it stays dry. */
-    private String rainSoon() {
-        HomeData.Weather wx = data.weather;
-        if (Double.isNaN(wx.temp)) return "";
-        if (rainy(wx.code)) return Ui.tr("Chovendo agora", "Raining now", "Lloviendo ahora");
-        for (int i = 0; i < wx.hours.size(); i++) {
-            if (rainy(wx.hourCode.get(i))) {
-                String at = HomeData.hour(wx.hours.get(i));
-                return Ui.tr("Chuva às " + at, "Rain at " + at, "Lluvia a las " + at);
-            }
-        }
-        return "";
-    }
-
-    private static boolean rainy(int code) {
-        return code >= 51 && code <= 67 || code >= 80 && code <= 82 || code >= 95;
-    }
-
-    private void drawGreeting(Canvas c) {
-        if (greetingText.isEmpty()) return;
-        float x = MARGIN * k - headingBearing + headingWidth + 32 * k, base = L_TITLE_BASE * k;
-        int color = tone(L_DIM, 0xFF98989D);
-        float t = greetingAt == 0 ? 1 : Ui.clamp((SystemClock.uptimeMillis() - greetingAt) / (float) GREETING_FADE_MS);
-        if (t < 1 && !greetingFrom.isEmpty()) {
-            greetingPaint.setColor(Ui.alpha(color, 1 - t));
-            c.drawText(greetingFrom, x, base, greetingPaint);
-        }
-        greetingPaint.setColor(Ui.alpha(color, t));
-        c.drawText(greetingText, x, base, greetingPaint);
-    }
-
-    // MARK: - Opening an app: the card grows to the whole screen as the app starts
-
-    private static final long LAUNCH_MS = 280, LAUNCH_OPEN_AT_MS = 140;
+    private static final long LAUNCH_MS = 260, LAUNCH_OPEN_AT_MS = 120;
     private long launchAt;
     private boolean launchOpened;
     private HomeApps.Item launchItem;
@@ -2291,20 +2238,24 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         wake();
     }
 
+    /**
+     * Opening: the screen darkens while the card comes a little forward (8%, at its own sharpness: never stretched to
+     * the screen), and the app starts on top of it.
+     */
     private void drawLaunch(Canvas c) {
         if (launchAt == 0 || launchBitmap == null) return;
         float t = Ui.clamp((SystemClock.uptimeMillis() - launchAt) / (float) LAUNCH_MS), e = 1 - (1 - t) * (1 - t) * (1 - t);
-        launchRect.set(launchStart.left + (screen.left - launchStart.left) * e, launchStart.top + (screen.top - launchStart.top) * e,
-                launchStart.right + (screen.right - launchStart.right) * e, launchStart.bottom + (screen.bottom - launchStart.bottom) * e);
-        float r = 18 * k * (1 - e);
+        fill.setShader(null);
+        fill.setColor(Ui.alpha(0xFF000000, 0.92f * smoothstep(0, 1, t)));
+        c.drawRect(screen, fill);
+        float s = 1 + 0.08f * e, cx = launchStart.centerX(), cy = launchStart.centerY();
+        float hw = launchStart.width() * s / 2, hh = launchStart.height() * s / 2;
+        launchRect.set(cx - hw, cy - hh, cx + hw, cy + hh);
+        float r = 18 * k * s, fade = 1 - smoothstep(0.45f, 1f, t);
+        if (fade <= 0.01f) return;
+        int save = c.saveLayerAlpha(launchRect, Math.round(255 * fade));
         roundImage(c, launchBitmap, launchRect, r);
-        // The last part fades to black, as the app's first frame does.
-        float dark = smoothstep(0.55f, 1f, t);
-        if (dark > 0) {
-            fill.setShader(null);
-            fill.setColor(Ui.alpha(0xFF000000, dark));
-            c.drawRoundRect(launchRect, r, r, fill);
-        }
+        c.restoreToCount(save);
     }
 
     // MARK: - Toasts
@@ -2425,17 +2376,30 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         wake();   // the answer to a key starts on the next frame
         boolean down = e.getAction() == KeyEvent.ACTION_DOWN;
         switch (e.getKeyCode()) {
+            // Every press clicks, even against an edge (Click plays one sound per press).
             case KeyEvent.KEYCODE_DPAD_LEFT:
-                if (down) move(-1, 0);
+                if (down) {
+                    click.move();
+                    move(-1, 0);
+                }
                 return true;
             case KeyEvent.KEYCODE_DPAD_RIGHT:
-                if (down) move(1, 0);
+                if (down) {
+                    click.move();
+                    move(1, 0);
+                }
                 return true;
             case KeyEvent.KEYCODE_DPAD_UP:
-                if (down) move(0, -1);
+                if (down) {
+                    click.move();
+                    move(0, -1);
+                }
                 return true;
             case KeyEvent.KEYCODE_DPAD_DOWN:
-                if (down) move(0, 1);
+                if (down) {
+                    click.move();
+                    move(0, 1);
+                }
                 return true;
             case KeyEvent.KEYCODE_DPAD_CENTER:
             case KeyEvent.KEYCODE_ENTER:
@@ -2448,7 +2412,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                     if (e.getRepeatCount() == 0) okDown = true;
                     else if (okDown && !menuOpen && heldLong(e) && openMenu()) okDown = false;
                 } else {
-                    if (okDown && !e.isCanceled() && spoken.keyClick()) press();
+                    if (okDown && !e.isCanceled() && spoken.keyClick()) {
+                        press();
+                        click.open();
+                    }
                     okDown = false;
                 }
                 return true;
@@ -2456,7 +2423,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 if (down) {
                     if (e.getRepeatCount() == 0) backDown = true;
                 } else {
-                    if (backDown && !e.isCanceled()) back();
+                    if (backDown && !e.isCanceled()) {
+                        back();
+                        click.move();
+                    }
                     backDown = false;
                 }
                 return true;
@@ -2925,6 +2895,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private void selectTab(int index) {
         if (index == tab) return;
+        // The cards on screen leave toward the old tab's side; the new tab's come in from the other, one by one.
+        tabFrom = new ArrayList<>(cards);
+        tabDir = index > tab ? 1 : -1;
+        tabAnimAt = SystemClock.uptimeMillis();
+        wake();
         tab = index;
         cardOffset = shiftFrom = shiftTo = 0;
         cardShift.snap(1);
@@ -2973,7 +2948,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void drawLightTop(Canvas c) {
         applyTone();
         c.drawText(heading, MARGIN * k - headingBearing, L_TITLE_BASE * k, lTitle);
-        drawGreeting(c);
         // Text tabs (the selected one in bold, in the main text color); with focus on the tabs, the selected one gets
         // the white pill with a shadow and grows a little (the tvOS focus).
         float focus = Ui.clamp(topFocus[tab].value);
@@ -3028,7 +3002,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void drawTopClock(Canvas c) {
         float right = CONTENT_R * k;   // the right margin, under the corner buttons (the shelf may be narrow)
         applyTone();
-        Paint text = lQuote;
+        Paint text = lTopRight;   // the tabs' font and size, on their line
         float fade = 1;   // the corner buttons' names show in this row: fade out while one has focus
         for (int i = 3; i < TOP_ITEMS; i++) fade = Math.min(fade, 1 - Ui.clamp(topFocus[i].value));
         if (fade <= 0.01f) return;
@@ -3047,7 +3021,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             topSymbol = Symbols.weather(wx.code, wx.isDay);
         }
         float base = (L_TABBAR_TOP + L_TABBAR_H / 2) * k + Ui.halfCap(text);
-        float cap = Ui.cap(text), gap = 6 * k, spacing = 24 * k, size = cap * 1.4f;
+        float cap = Ui.cap(text), gap = 8 * k, spacing = 28 * k, size = cap * 1.25f;
         float symbolW = showWeather ? Symbols.width(getContext(), topSymbol, size) : 0;
         float total = topTimeW + (showWeather ? spacing + symbolW + gap + topTempW : 0);
         int textColor = text.getColor();
@@ -3057,7 +3031,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (showWeather) {
             x += topTimeW + spacing;
             Symbols.draw(getContext(), c, topSymbol, x + symbolW / 2, base - cap / 2, size,
-                    Ui.alpha(tone(0xB38E8E93, 0x8CFFFFFF), fade));
+                    Ui.alpha(lTopRight.getColor(), fade));
             c.drawText(topTemp, x + symbolW + gap, base, text);
         }
         text.setColor(textColor);
@@ -3068,10 +3042,31 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      * in), only the five on screen otherwise; the focused one last, so it grows over its neighbors.
      */
     private void drawCards(Canvas c) {
+        float since = tabAnimAt == 0 ? Float.MAX_VALUE : SystemClock.uptimeMillis() - tabAnimAt;
+        if (tabFrom != null && since < TAB_OUT_MS) {
+            // The old tab's cards: sliding out and fading.
+            float out = smoothstep(0, 1, since / TAB_OUT_MS);
+            for (int i = 0; i < tabFrom.size() && i < SLOTS; i++) {
+                drawCard(c, tabFrom.get(i), i, i, -tabDir * TAB_SLIDE * k * out, 1 - out, false);
+            }
+        }
         int first = Math.min(shiftFrom, shiftTo), last = Math.min(allCards.size(), Math.max(shiftFrom, shiftTo) + SLOTS);
         int focused = zone == Z_CARDS ? shiftTo + cardIndex : -1;
-        for (int j = first; j < last; j++) if (j != focused) drawCard(c, j);
-        if (focused >= first && focused < last) drawCard(c, focused);
+        for (int j = first; j < last; j++) if (j != focused) drawCard(c, j, since);
+        if (focused >= first && focused < last) drawCard(c, focused, since);
+    }
+
+    // Changing tabs (selectTab): the old cards out, then the new ones in, the big one first.
+    private static final float TAB_OUT_MS = 160, TAB_IN_MS = 300, TAB_STAGGER_MS = 45, TAB_SLIDE = 70;
+    private List<Recs.Pick> tabFrom;
+    private int tabDir;
+    private long tabAnimAt;
+
+    private void drawCard(Canvas c, int j, float sinceTab) {
+        int slot = j - shiftTo;
+        float in = sinceTab == Float.MAX_VALUE ? 1
+                : smoothstep(0, 1, (sinceTab - TAB_OUT_MS * 0.6f - Math.max(0, slot) * TAB_STAGGER_MS) / TAB_IN_MS);
+        drawCard(c, allCards.get(j), j - shiftFrom, slot, tabDir * TAB_SLIDE * k * (1 - in), in, j == focusedCard);
     }
 
     /** Where slot `s` is; past the edges (the titles leaving and arriving), one column further out. */
@@ -3092,17 +3087,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      * title's logo (or its name, when TMDB has no logo). The big card also says the genre and where it streams. When
      * focused, it grows 5%, rises and lights up its border.
      */
-    private void drawCard(Canvas c, int j) {
-        Recs.Pick p = allCards.get(j);
+    private void drawCard(Canvas c, Recs.Pick p, int from, int to, float dx, float fade, boolean focused) {
         float t = cardShift.value, tc = Ui.clamp(t);
-        int from = j - shiftFrom, to = j - shiftTo;
         slotRect(from, slotFrom);
         slotRect(to, slotTo);
-        float alpha = (from >= 0 && from < SLOTS ? 1 - tc : 0) + (to >= 0 && to < SLOTS ? tc : 0);
+        float alpha = ((from >= 0 && from < SLOTS ? 1 - tc : 0) + (to >= 0 && to < SLOTS ? tc : 0)) * fade;
         if (alpha <= 0.01f) return;
         float bw = slotFrom.width() + (slotTo.width() - slotFrom.width()) * t;
         float bh = slotFrom.height() + (slotTo.height() - slotFrom.height()) * t;
-        float bx = slotFrom.centerX() + (slotTo.centerX() - slotFrom.centerX()) * t;
+        float bx = slotFrom.centerX() + (slotTo.centerX() - slotFrom.centerX()) * t + dx;
         float by = slotFrom.centerY() + (slotTo.centerY() - slotFrom.centerY()) * t;
         float v = to >= 0 && to < SLOTS ? cardFocus[to].value : 0, f = Ui.clamp(v), s = 1 + 0.05f * v;
         float r0 = 18 * k, cy = by - 6 * k * v;
@@ -3140,7 +3133,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             drawUnitShader(c, cell, r, sheen, CARD_SHEEN, f);
             drawUnitShader(c, cell, r, rim, CARD_RIM, f);
         }
-        boolean focused = j == focusedCard;
         if (focused && img != null) drawSweep(c, cell, r);
         float preview = focused ? previewAmount() : 0;
         if (preview > 0 && p.overview.isEmpty()) preview = 0;   // nothing to say (Continue Watching's rows)
