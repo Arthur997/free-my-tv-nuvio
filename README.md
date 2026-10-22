@@ -15,6 +15,62 @@ Open source. Built with Claude Code. One button to undo.
 
 </div>
 
+## Este fork (Arthur997/free-my-tv-nuvio)
+
+Uma versão do [Free My TV](https://github.com/simbasjungles/free-my-tv) para Google TV e Android TV, com o projeto
+original mesclado (LG, Samsung, 20 idiomas e as proteções da troca de modo) e as funções abaixo por cima. O resto
+deste README é o do projeto original e vale para este fork também.
+
+### O que este fork tem
+
+**Tela inicial**
+- **"Sua TCL"**: o título mostra a marca da TV (só a marca, nunca o modelo), em qualquer idioma.
+- **Cards em mosaico**: um card grande e quatro pequenos, todos 16:9 (sem cortar as artes), com o **logo oficial** de cada título por cima da foto. Passando da última coluna, a fila anda uma coluna.
+- **Continuar assistindo** (primeira aba): a lista real que os apps deixam no Android (Nuvio, Netflix, Prime Video…), com barra de progresso e tempo que falta; OK abre onde parou. Aparece na hora ao voltar ao Início (cache), e os lugares vazios recebem **sugestões** do Top.
+- **Filmes e Séries**: cinco títulos por hora, ou o **Top do dia** (de 5 a 20 por aba), atualizados uma vez por dia.
+- **Segurar OK num app** abre um painel ao lado: *Abrir*, *Mover para a esquerda/direita*, *Pôr na/Tirar da prateleira*, *Informações do app* e *Desinstalar* (só apps instalados por você, com a confirmação do Android).
+- **Navegação**: ↓ abre a gaveta, ↓ de novo abre *Todos os Apps*; ↑ na primeira fileira volta. Botão de **busca** (voz) no topo, no mesmo vidro dos outros.
+- **Som de clique** próprio, grave e suave, com volume em *Desligado / Baixo / Médio / Alto*.
+- **Tema automático por horário**: claro das 6h às 18h, escuro depois.
+
+**Mais Ajustes** (*Free My TV* → *Mais Ajustes*)
+- **Abrir recomendações em**: no app de cada título, ou direto no **Nuvio**, Nuvio Legacy ou Stremio.
+- **Chave do TMDB** digitada na própria TV (o app Google TV no celular serve de teclado).
+- **Cidade do clima** por busca (qualquer cidade), **atualizar cotações** (tempo real, 1 ou 5 min), **capa dos apps** (logo ou a arte do app), **topo do Início** (relógio e clima, ou cotações).
+- **Tela de descanso**: a da TV fica por padrão; a do Free My TV é opcional.
+- **Continuar assistindo**: escolher quais apps podem aparecer.
+- **Modo desempenho** (sem efeito de vidro), ligado sozinho em TVs com pouca memória.
+- **Volume dos sons**.
+
+**Ajustes do Início**: clima e cotações (com **dólar e euro em reais**) podem ser desligados; desligados, não fazem nenhuma chamada de internet.
+
+**Leve e rápido**: listas atualizadas uma vez por dia, fotos e artes guardadas em disco (voltar ao Início mostra tudo na hora), fotos montadas sem cópias em tela cheia e APK com menos de 1 MB.
+
+### Como instalar este fork
+
+Uns dez minutos. Precisa de uma Google TV ou Android TV (Android 8 ou mais novo) e de um computador na mesma rede.
+
+1. **Na TV**: Configurações → Sistema → Sobre → aperte *Build do Android TV OS* 7 vezes. Depois Configurações → Sistema → Opções do desenvolvedor → ligue a **Depuração USB** (ou a **Depuração sem fio**, no Android 11+). Anote o IP da TV (Configurações → Rede e Internet).
+2. **Com um assistente de IA** ([Claude Code](https://claude.com/claude-code) ou outro), diga:
+   > Instale o Free My TV do fork github.com/Arthur997/free-my-tv-nuvio na minha TV em 192.168.1.50. Moro em Goiânia.
+
+   Ele baixa o código, instala as ferramentas, compila e instala na TV, perguntando antes do que for importante.
+3. **Ou à mão** (ferramentas: JDK 17+, Android SDK command-line tools com build-tools 34 e platform android-34, e adb; veja [The manual way](#the-manual-way)):
+   ```bash
+   git clone https://github.com/Arthur997/free-my-tv-nuvio && cd free-my-tv-nuvio
+   ./build.sh            # a primeira vez cria o config.properties
+   ```
+   No `config.properties`, preencha a cidade (`latitude`, `longitude`, `city`), `tmdb_region=BR`, `currency=BRL` e, se quiser, a `tmdb_key`. Rode `./build.sh` de novo e instale:
+   ```bash
+   adb connect 192.168.1.50:5555          # Depuração sem fio: adb pair <IP>:<porta de pareamento>, depois adb connect <IP>:<porta>
+   adb install -r FreeMyTV.apk
+   adb shell "appops set io.freemytv AUTO_START allow || appops set io.freemytv APP_AUTO_START allow"   # só em TVs TCL
+   ```
+4. **Na TV**: abra *Free My TV* → *Início* → *Free My TV* e aceite o pedido de depuração (marque *Sempre permitir*). A troca concede sozinha a permissão do *Continuar assistindo*.
+5. **Opcional**: em *Mais Ajustes*, cole a **Chave do TMDB** (grátis em themoviedb.org → Settings → API) e escolha **Abrir recomendações em → Nuvio**, se usar o Nuvio.
+
+Para voltar ao Início de fábrica: *Free My TV* → *Início* → *Original*. Guarde o `freemytv.keystore`: as atualizações precisam ser assinadas com a mesma chave.
+
 ## What you get
 
 - **No ads.** No sponsored rows, banners or autoplaying promos. Not one.
