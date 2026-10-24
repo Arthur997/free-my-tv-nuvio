@@ -441,9 +441,7 @@ final class HomeApps {
         if (intent == null) return false;
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try {
-            // The app's window opens out of the card (a clip reveal): the system's compositor draws it, so it stays
-            // smooth while the app is loading, which an animation drawn here can't.
-            a.startActivity(intent, ActivityOptions.makeClipRevealAnimation(from, x, y, Math.max(w, 1), Math.max(h, 1)).toBundle());
+            a.startActivity(intent, openAnimation(a, from, x, y, w, h).toBundle());
             return true;
         } catch (ActivityNotFoundException | SecurityException e) {
             AppLog.w("couldn't open " + it.label + ": " + e.getMessage());
@@ -456,6 +454,17 @@ final class HomeApps {
                 return false;
             }
         }
+    }
+
+    /**
+     * How the app's window comes in. Out of the card (a clip reveal): the system's compositor draws it, so it stays
+     * smooth while the app is loading, which an animation drawn here can't. In performance mode, a short fade over the
+     * home screen instead: on a weak TV the reveal grew the app's blank starting window across the screen for most of
+     * a second, and a clip animated every frame is more than its GPU keeps up with.
+     */
+    private static ActivityOptions openAnimation(Activity a, View from, int x, int y, int w, int h) {
+        if (Prefs.performance()) return ActivityOptions.makeCustomAnimation(a, R.anim.app_open_fade, 0);
+        return ActivityOptions.makeClipRevealAnimation(from, x, y, Math.max(w, 1), Math.max(h, 1));
     }
 
     /** The TV's search: the Assistant listening (as the remote's mic), else the system's text search, else none. */
