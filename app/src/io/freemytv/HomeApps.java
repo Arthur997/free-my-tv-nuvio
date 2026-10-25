@@ -60,6 +60,8 @@ final class HomeApps {
     static final int INPUTS = 7;
     /** The search button: the TV's own search (by voice, like the remote's mic), which the stock home screen had. */
     static final int SEARCH = 8;
+    /** The broom button: frees memory (HomeMode.freeMemoryNow); the home screen handles it, nothing opens. */
+    static final int FREE_MEMORY = 9;
     /** Image size of each card (16:9; on screen it shows up to ~330 px wide). */
     static final int TILE_W = 384, TILE_H = 216;
 

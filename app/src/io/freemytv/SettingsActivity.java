@@ -339,25 +339,10 @@ public class SettingsActivity extends Activity {
             p.rows.add(choice(() -> Ui.tr("Modo desempenho", "Performance mode"),
                     () -> list(Ui.tr("Desligado", "Off"), Ui.tr("Ligado (sem vidro)", "On (no glass)")),
                     () -> Prefs.performance() ? 1 : 0, at -> Prefs.setPerformance(at == 1)));
-            p.rows.add(new Row(() -> Ui.tr("Liberar memória", "Free memory", "Liberar memoria"), this::freeMemoryValue, () -> {
-                freeMemoryAt = System.currentTimeMillis();
-                HomeMode.requestFreeMemory(getContext());
-            }, null, null));
             p.rows.add(choice(() -> Ui.tr("Volume dos sons", "Sound volume", "Volumen de los sonidos"), SettingsView::soundLevels,
                     Prefs::soundLevel, Prefs::setSoundLevel));
             p.hint = () -> Ui.tr("OK abre as opções; ← e → mudam direto.", "OK opens the choices; ← and → change it right away.");
             return p;
-        }
-
-        private long freeMemoryAt;   // when Free memory was pressed (0: not on this screen)
-
-        /** "Free now", then "Freeing…" until the result arrives as the newest notice (the poll reads it). */
-        private String freeMemoryValue() {
-            if (freeMemoryAt == 0) return Ui.tr("Liberar agora", "Free now", "Liberar ahora");
-            JSONArray notices = state.optJSONArray("notices");
-            JSONObject newest = notices == null ? null : notices.optJSONObject(0);
-            if (newest != null && newest.optLong("at") >= freeMemoryAt) return newest.optString("text");
-            return Ui.tr("Liberando…", "Freeing…", "Liberando…");
         }
 
         /** The picks: which list, how big the top is, where they open, the TMDB key, and Continue Watching's apps. */
