@@ -51,6 +51,7 @@ final class Recs {
         int id;
         String kind;            // "movie" or "tv"
         String title, backdrop, meta = "", app, pkg, imdb;
+        String serviceApp, servicePkg;   // the streaming app it's on, also when Nuvio or Stremio open it (Open in…)
         String link;            // opens the title in its app (looked up with Watchmode), or null: the app's home
         String logo;            // the title's logo on TMDB (a transparent PNG), or null
         String overview = "", year = "";   // the preview after resting on a card: the synopsis and the year
@@ -284,6 +285,76 @@ final class Recs {
     }
 
     /**
+     * Where a pick can open just this once (hold OK > Open in…): each installed app that opens IMDb links (Nuvio,
+     * Stremio...), then the streaming app it's on. The default (More Settings) doesn't change.
+     */
+    List<HomeApps.Item> openChoices(Pick p) {
+        List<HomeApps.Item> out = new ArrayList<>();
+        if (p.intentUri != null) return out;   // continue watching: only its own app has the link to where it stopped
+        if (p.imdb != null) {
+            for (String[] a : LINK_APPS) {
+                String pkg = linkPackage(a);
+                if (pkg == null) continue;
+                out.add(HomeApps.title(pkg, (p.kind.equals("movie") ? a[3] : a[4]).replace("{id}", p.imdb), a[1]));
+            }
+        }
+        if (p.servicePkg != null && installed(p.servicePkg)) {
+            out.add(HomeApps.app(p.servicePkg, SERVICE_NAME.get(p.serviceApp), p.link));
+        }
+        return out;
+    }
+
+    /** The first of the app's packages that takes its links, or null when none is installed. */
+    private String linkPackage(String[] a) {
+        PackageManager pm = context.getPackageManager();
+        String probe = a[3].replace("{id}", "tt0000001");
+        for (String pkg : a[2].split(";")) {
+            if (pm.resolveActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(probe)).setPackage(pkg), 0) != null) return pkg;
+        }
+        return null;
+    }
+
+    /**
+     * Fetches one card again (hold OK > Refresh): its details from TMDB and its photo, logo and saved card, which are
+     * dropped from memory and disk. The other cards keep theirs. Without internet the card stays as it was.
+     */
+    void refresh(Pick p) {
+        io.execute(() -> {
+            String backdrop = p.backdrop, logo = p.logo, app = p.app, pkg = p.pkg;
+            File image = imageFile(p), preview = previewFile(p);
+            if (p.intentUri == null) {
+                try {
+                    p.app = null;   // looked up again: the service may have changed
+                    p.pkg = null;
+                    fetchDetails(p);
+                } catch (Exception e) {
+                    AppLog.w("refresh “" + p.title + "”: " + e.getMessage());
+                    p.app = app;
+                    p.pkg = pkg;
+                    return;
+                }
+            }
+            //noinspection ResultOfMethodCallIgnored
+            image.delete();
+            //noinspection ResultOfMethodCallIgnored
+            preview.delete();
+            synchronized (images) {
+                images.remove(backdrop);
+                previews.remove(backdrop);
+                failedAtByKey.remove(backdrop);
+                if (logo != null) {
+                    logos.remove(logo);
+                    badLogos.remove(logo);
+                    //noinspection ResultOfMethodCallIgnored
+                    new File(new File(context.getCacheDir(), "recs-logos"), logo.replace("/", "")).delete();
+                }
+            }
+            save();
+            notifyListeners();   // the screen asks for the photo again, and it's downloaded anew
+        });
+    }
+
+    /**
      * The app the picks open in, as {key, package}, when one is picked in More Settings and installed (one that takes
      * its links); null: each title opens in the streaming app it is on (the default).
      */
@@ -301,14 +372,8 @@ final class Recs {
     private String[] findLinkTarget() {
         String[] a = linkApp(Prefs.recsTarget());
         if (a == null) return null;
-        PackageManager pm = context.getPackageManager();
-        String probe = a[3].replace("{id}", "tt0000001");
-        for (String pkg : a[2].split(";")) {
-            if (pm.resolveActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(probe)).setPackage(pkg), 0) != null) {
-                return new String[] {a[0], pkg};
-            }
-        }
-        return null;
+        String pkg = linkPackage(a);
+        return pkg == null ? null : new String[] {a[0], pkg};
     }
 
     // What is installed only changes when an app is installed, updated or removed (Android counts those changes): the
@@ -711,12 +776,14 @@ final class Recs {
                 p.pkg = s[2];
             }
         }
+        p.serviceApp = p.app;
+        p.servicePkg = p.pkg;
         JSONObject ids = o.optJSONObject("external_ids");
         String imdb = ids == null ? "" : ids.optString("imdb_id", "");
+        if (imdb.startsWith("tt")) p.imdb = imdb;   // also without a picked app: Open in… can offer Nuvio or Stremio
         String[] target = linkTarget();
         if (target != null && imdb.startsWith("tt")) {
             // The service it streams on stays in the line; the picked app (Nuvio, Stremio...) is what opens it.
-            p.imdb = imdb;
             if (p.app != null) parts.add(SERVICE_NAME.get(p.app));
             p.app = target[0];
             p.pkg = target[1];
@@ -1136,7 +1203,7 @@ final class Recs {
         previewIo.execute(() -> {
             BitmapFactory.Options opts = new BitmapFactory.Options();
             opts.inPreferredConfig = Bitmap.Config.RGB_565;
-            Bitmap b = f.exists() ? BitmapFactory.decodeFile(f.getPath(), opts) : null;
+            Bitmap b = f.exists() ? Backdrop.aligned(BitmapFactory.decodeFile(f.getPath(), opts)) : null;
             synchronized (images) {
                 // Not saved yet: not looked for again (the full picture comes instead, and saves it for next time).
                 // Read: free to be read again if it's let go before the full picture is ready.
@@ -1199,6 +1266,7 @@ final class Recs {
                 a.put(new JSONObject().put("id", p.id).put("kind", p.kind).put("title", p.title).put("backdrop", p.backdrop).put("link", p.link == null ? "" : p.link)
                         .put("meta", p.meta).put("app", p.app == null ? "" : p.app).put("pkg", p.pkg == null ? "" : p.pkg)
                         .put("imdb", p.imdb == null ? "" : p.imdb).put("logo", p.logo == null ? "" : p.logo)
+                        .put("serviceApp", p.serviceApp == null ? "" : p.serviceApp).put("servicePkg", p.servicePkg == null ? "" : p.servicePkg)
                         .put("overview", p.overview).put("rating", p.rating).put("year", p.year)
                         .put("detailed", p.detailed));
             }
@@ -1230,6 +1298,8 @@ final class Recs {
             p.pkg = o.optString("pkg").isEmpty() ? null : o.optString("pkg");
             p.imdb = o.optString("imdb").isEmpty() ? null : o.optString("imdb");
             p.logo = o.optString("logo").isEmpty() ? null : o.optString("logo");
+            p.serviceApp = o.optString("serviceApp").isEmpty() ? null : o.optString("serviceApp");
+            p.servicePkg = o.optString("servicePkg").isEmpty() ? null : o.optString("servicePkg");
             p.overview = o.optString("overview");
             p.rating = o.optDouble("rating", 0);
             p.year = o.optString("year");

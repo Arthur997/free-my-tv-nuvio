@@ -30,7 +30,7 @@ final class Backdrop {
      * The cards at their focused size (1.05×), 16:9 like the photos: the big one and the four small ones (each its
      * own size, so the small ones aren't a big image squeezed down, which shimmers).
      */
-    static final int WIDE_W = ui(920), WIDE_H = ui(518), SMALL_W = ui(424), SMALL_H = ui(238);
+    static final int WIDE_W = even(920), WIDE_H = ui(518), SMALL_W = even(424), SMALL_H = ui(238);
 
     private static float uiScale() {
         android.util.DisplayMetrics m = android.content.res.Resources.getSystem().getDisplayMetrics();
@@ -40,6 +40,11 @@ final class Backdrop {
 
     private static int ui(int px) {
         return Math.round(px * UI_SCALE);
+    }
+
+    /** A width at the UI's size, even: see opaque() (at 720p, 920 would be 613). */
+    private static int even(int px) {
+        return 2 * Math.round(px * UI_SCALE / 2);
     }
     final Bitmap image;
     final int[] frost;      // heavily blurred (frosted glass, bottom drawer)
@@ -202,10 +207,28 @@ final class Backdrop {
      * the way down, so soft gradients don't turn into bands.
      */
     static Bitmap opaque(Bitmap b) {
+        if (!rowsAligned(b.getWidth())) return b;
         Bitmap o = Bitmap.createBitmap(b.getWidth(), b.getHeight(), Bitmap.Config.RGB_565);
         new Canvas(o).drawBitmap(b, 0, 0, DITHER);
         b.recycle();
         return o;
+    }
+
+    /**
+     * A 16-bit image with an odd width has rows of an odd number of 2-byte pixels, not a multiple of 4 bytes: some old
+     * TVs' GPUs (a weak TCL, Android 9, at 720p) read each row a little off and draw it slanted. Those stay 32-bit.
+     */
+    private static boolean rowsAligned(int width) {
+        return (width & 1) == 0;
+    }
+
+    /** A 16-bit image just decoded (a saved card or banner): as 32-bit when its width is odd (rowsAligned). */
+    static Bitmap aligned(Bitmap b) {
+        if (b == null || b.getConfig() != Bitmap.Config.RGB_565 || rowsAligned(b.getWidth())) return b;
+        Bitmap full = b.copy(Bitmap.Config.ARGB_8888, false);
+        if (full == null) return b;
+        b.recycle();
+        return full;
     }
 
     /** Copies it to GPU memory (cheap to draw; the process doesn't keep the pixels). */

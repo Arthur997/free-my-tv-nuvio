@@ -14,7 +14,8 @@ import android.os.PersistableBundle;
  */
 public class ModeJob extends JobService {
     static final String APPLY = "apply", VERIFY = "verify", REVERT = "revert", MEMORY = "memory", REMOTE = "remote",
-            DREAM = "dream";
+            DREAM = "dream", FREE_MEMORY = "freememory", TRIM = "trim", CLEAR_CACHE = "clearcache",
+            FORCE_STOP = "forcestop";
 
     @Override public boolean onStartJob(JobParameters params) {
         PersistableBundle extras = params.getExtras();
@@ -30,6 +31,10 @@ public class ModeJob extends JobService {
                     case MEMORY: HomeMode.measureMemoryNow(app, mode); break;
                     case REMOTE: HomeMode.ensureRemoteServiceNow(app); break;
                     case DREAM: HomeMode.screensaverNow(app, "own".equals(mode)); break;
+                    case FREE_MEMORY: HomeMode.freeMemoryNow(app); break;
+                    case TRIM: HomeMode.trimBackgroundNow(app); break;
+                    case FORCE_STOP: HomeMode.forceStopNow(app, appOf(mode), nameOf(mode)); break;
+                    case CLEAR_CACHE: HomeMode.clearCacheNow(app, appOf(mode), nameOf(mode)); break;
                     default: break;
                 }
             } catch (Throwable t) {
@@ -38,6 +43,17 @@ public class ModeJob extends JobService {
             jobFinished(params, false);
         }, "free-my-tv-" + action).start();
         return true;
+    }
+
+    // An app's job carries "package|name" (the name for the notice).
+    private static String appOf(String target) {
+        int bar = target.indexOf('|');
+        return bar < 0 ? target : target.substring(0, bar);
+    }
+
+    private static String nameOf(String target) {
+        int bar = target.indexOf('|');
+        return bar < 0 ? target : target.substring(bar + 1);
     }
 
     @Override public boolean onStopJob(JobParameters params) {

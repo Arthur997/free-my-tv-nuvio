@@ -885,7 +885,7 @@ final class HomeApps {
     private static Bitmap decodeTile(File f) {
         BitmapFactory.Options opts = new BitmapFactory.Options();
         opts.inPreferredConfig = Bitmap.Config.RGB_565;
-        return BitmapFactory.decodeFile(f.getPath(), opts);
+        return Backdrop.aligned(BitmapFactory.decodeFile(f.getPath(), opts));
     }
 
     /** Where an app's card is kept: one file per app version (an update brings new art), or null. */
