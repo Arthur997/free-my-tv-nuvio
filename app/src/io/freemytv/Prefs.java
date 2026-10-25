@@ -305,9 +305,13 @@ final class Prefs {
     private static final String[] keyApps = new String[KEYS.length];   // null = the default
     private static long keysStamp = Long.MIN_VALUE;
 
-    /** A temporary file per process (two can start together after an update), synced before it replaces the old one. */
     private static boolean writeKeys(String text) {
-        File tmp = new File(app.getFilesDir(), "remote-keys." + android.os.Process.myPid() + ".tmp");
+        return writeSafely(keysFile(), text);
+    }
+
+    /** A temporary file per process (two can start together after an update), synced before it replaces the old one. */
+    private static boolean writeSafely(File target, String text) {
+        File tmp = new File(app.getFilesDir(), target.getName() + "." + android.os.Process.myPid() + ".tmp");
         try (FileOutputStream out = new FileOutputStream(tmp)) {
             out.write(text.getBytes(StandardCharsets.UTF_8));
             out.getFD().sync();
@@ -316,7 +320,7 @@ final class Prefs {
             tmp.delete();
             return false;
         }
-        return tmp.renameTo(keysFile());
+        return tmp.renameTo(target);
     }
 
     /** Choices saved before they moved to the file (in SharedPreferences) are copied there once. */
@@ -357,9 +361,68 @@ final class Prefs {
         }
     }
 
-    static void setKeyApp(int keyCode, String pkg) {
+    /** Saves the app a key opens; false when the file couldn't be written (the old choice stays). */
+    static boolean setKeyApp(int keyCode, String pkg) {
         StringBuilder sb = new StringBuilder();
         for (int key : KEYS) sb.append(key).append('=').append(key == keyCode ? pkg : keyApp(key)).append('\n');
-        if (writeKeys(sb.toString())) version++;
+        if (!writeKeys(sb.toString())) return false;
+        version++;
+        return true;
+    }
+
+    // The buttons this remote has: the key service notes when it last saw each one (Remote Buttons shows them).
+    private static File seenFile() {
+        return new File(app.getFilesDir(), "remote-keys-seen.txt");
+    }
+
+    private static final long[] keysSeenAt = new long[KEYS.length];
+    private static long seenStamp = Long.MIN_VALUE;
+
+    /** The key service saw this button (called on its first press): saved off the key's path, in a thread. */
+    static void keySeen(int keyCode) {
+        long now = System.currentTimeMillis();
+        new Thread(() -> {
+            synchronized (keysSeenAt) {
+                keySeenAt(keyCode);   // the file's latest
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < KEYS.length; i++) {
+                    long at = KEYS[i] == keyCode ? now : keysSeenAt[i];
+                    if (at > 0) sb.append(KEYS[i]).append('=').append(at).append('\n');
+                }
+                writeSafely(seenFile(), sb.toString());
+            }
+        }, "key-seen").start();
+    }
+
+    /** When the key service last saw this button (wall clock), or 0: not on this remote, or not pressed yet. */
+    static long keySeenAt(int keyCode) {
+        synchronized (keysSeenAt) {
+            File f = seenFile();
+            long stamp = f.lastModified() * 31 + f.length();
+            if (stamp != seenStamp) {
+                seenStamp = stamp;
+                java.util.Arrays.fill(keysSeenAt, 0);
+                if (stamp != 0) readSeen(f);
+            }
+            for (int i = 0; i < KEYS.length; i++) if (KEYS[i] == keyCode) return keysSeenAt[i];
+            return 0;
+        }
+    }
+
+    /** Lines of "key=time" into keysSeenAt (call with it held). */
+    private static void readSeen(File f) {
+        try (BufferedReader r = new BufferedReader(new FileReader(f))) {
+            String line;
+            while ((line = r.readLine()) != null) {
+                int eq = line.indexOf('=');
+                if (eq <= 0) continue;
+                String key = line.substring(0, eq);
+                for (int i = 0; i < KEYS.length; i++) {
+                    if (!key.equals(String.valueOf(KEYS[i]))) continue;
+                    try { keysSeenAt[i] = Long.parseLong(line.substring(eq + 1)); } catch (NumberFormatException ignored) {}
+                }
+            }
+        } catch (IOException ignored) {
+        }
     }
 }

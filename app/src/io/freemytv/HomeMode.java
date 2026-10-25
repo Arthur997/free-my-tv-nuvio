@@ -194,6 +194,26 @@ final class HomeMode {
         ModeJob.schedule(c, ModeJob.APPLY, mode, 0);
     }
 
+    /** Free memory now (Status, or hold OK on the home screen): the result comes back as a notice. */
+    static void requestFreeMemory(Context c) {
+        ModeJob.schedule(c, ModeJob.FREE_MEMORY, null, 0);
+    }
+
+    /** Back on the home screen in performance mode: the apps left in the background give memory back, still open. */
+    static void requestTrimBackground(Context c) {
+        ModeJob.schedule(c, ModeJob.TRIM, null, 1_500);
+    }
+
+    /** One app's cache files (hold OK > Clear cache): never its data, logins or downloads. */
+    static void requestClearCache(Context c, String pkg, String label) {
+        ModeJob.schedule(c, ModeJob.CLEAR_CACHE, pkg + "|" + label, 0);
+    }
+
+    /** Closes one app completely (hold OK > Close app): it opens again from the start. */
+    static void requestForceStop(Context c, String pkg, String label) {
+        ModeJob.schedule(c, ModeJob.FORCE_STOP, pkg + "|" + label, 0);
+    }
+
     /** Our home screen crashed 3 times in 5 minutes: give the home screen back to the TV's own (asked by :home). */
     static void requestRevertHome(Context c) {
         ModeJob.schedule(c, ModeJob.REVERT, null, 0);
@@ -887,6 +907,104 @@ final class HomeMode {
             if (m.find()) pss += Long.parseLong(m.group(1));
         }
         if (pss > 0) putMetric(c, mode, "homePssMB", pss / 1024);
+    }
+
+    // MARK: - Memory and caches (weak TVs)
+
+    /**
+     * Closes the apps in the background (only those Android would close itself when short of memory: never the one on
+     * screen, the home screen, Android's own pieces or the TV's), measuring how much came back. Nothing is lost: they
+     * open again from the start. The caches on disk stay; they make the next start faster.
+     */
+    static void freeMemoryNow(Context c) {
+        synchronized (RUN) {
+            try (Adb adb = Adb.connect(c, 10_000, null)) {
+                long before = memAvailableMB(adb);
+                List<String> background = backgroundApps(adb);
+                for (String pkg : background) adb.shell("am kill " + pkg);
+                SystemClock.sleep(1_000);   // the memory comes back as the processes end
+                long freed = Math.max(0, memAvailableMB(adb) - before);
+                AppLog.w("freed " + freed + " MB, closed " + background);
+                notice(c, Ui.trf("{n} MB of memory freed", "n", freed));
+            } catch (Exception e) {
+                AppLog.w("free memory failed: " + e.getMessage());
+                notice(c, Ui.trf("Couldn't free memory: {error}", "error", e.getMessage()));
+            }
+        }
+    }
+
+    /**
+     * Asks the apps in the background (the one just closed first) to let go of what they keep in memory, without closing
+     * them: the memory Android asks back anyway as it runs short, here before the next app opens. Silent.
+     */
+    static void trimBackgroundNow(Context c) {
+        synchronized (RUN) {
+            try (Adb adb = Adb.connect(c, 10_000, null)) {
+                for (String pkg : backgroundApps(adb)) adb.shell("am send-trim-memory " + pkg + " BACKGROUND");
+            } catch (Exception e) {
+                AppLog.w("background trim failed: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Stops every part of the app (am force-stop), as App info > Force stop does. Never Android's own pieces, the TV's
+     * (mayTurnOff) or this app: those keep the TV and the home screen working.
+     */
+    static void forceStopNow(Context c, String pkg, String label) {
+        synchronized (RUN) {
+            if (!mayTurnOff(pkg)) {
+                notice(c, Ui.trf("{app} is part of the TV and stays open", "app", label));
+                return;
+            }
+            try (Adb adb = Adb.connect(c, 10_000, null)) {
+                adb.shell("am force-stop " + pkg);
+                AppLog.w("force-stopped " + pkg);
+                notice(c, Ui.trf("{app} closed", "app", label));
+            } catch (Exception e) {
+                AppLog.w("force stop failed: " + e.getMessage());
+                notice(c, Ui.trf("Couldn't close {app}", "app", label));
+            }
+        }
+    }
+
+    /** Deletes one app's cache files with Android's own command (Android 14+); its data and logins stay. */
+    static void clearCacheNow(Context c, String pkg, String label) {
+        synchronized (RUN) {
+            try (Adb adb = Adb.connect(c, 10_000, null)) {
+                String out = adb.shell("pm clear --cache-only " + pkg);
+                AppLog.w("clear cache " + pkg + ": " + out.trim());
+                notice(c, out.contains("Success") ? Ui.trf("{app}'s cache cleared", "app", label)
+                        : Ui.trf("Couldn't clear {app}'s cache", "app", label));
+            } catch (Exception e) {
+                AppLog.w("clear cache failed: " + e.getMessage());
+                notice(c, Ui.trf("Couldn't clear {app}'s cache", "app", label));
+            }
+        }
+    }
+
+    /**
+     * The apps whose processes are in the background ("prev", the app just left; "svcb", background services; and the
+     * cached ones), that may be touched: none of Android's, the TV's or ours (mayTurnOff).
+     */
+    private static List<String> backgroundApps(Adb adb) throws IOException {
+        Set<String> out = new java.util.LinkedHashSet<>();
+        // "Proc # 9: prev  B/ /SVC  trm: 0 23628:com.app/u0a65": the state, then pid:process (Android 9 to 14).
+        Matcher m = Pattern.compile("Proc #\\s*\\d+: (prev|svcb|cch)\\S*\\s.*?\\s\\d+:([A-Za-z0-9_.]+)(?::[\\w.]+)?/")
+                .matcher(adb.shell("dumpsys activity processes"));
+        while (m.find()) out.add(m.group(2));
+        // Only apps a person opens (they have a TV launcher entry): the TV's own background services (updates, setup,
+        // the tuner) are left alone, even when Android itself could stop them.
+        String launchable = adb.shell("cmd package query-activities --brief -a android.intent.action.MAIN"
+                + " -c android.intent.category.LEANBACK_LAUNCHER");
+        List<String> list = new ArrayList<>();
+        for (String pkg : out) if (mayTurnOff(pkg) && launchable.contains(pkg + "/")) list.add(pkg);
+        return list;
+    }
+
+    private static long memAvailableMB(Adb adb) throws IOException {
+        Matcher avail = Pattern.compile("MemAvailable:\\s+(\\d+) kB").matcher(adb.shell("cat /proc/meminfo"));
+        return avail.find() ? Long.parseLong(avail.group(1)) / 1024 : 0;
     }
 
     private static void putMetric(Context c, String mode, String key, long value) throws JSONException {

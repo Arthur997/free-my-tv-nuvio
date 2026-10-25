@@ -15,6 +15,7 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.media.tv.TvInputManager;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -401,6 +402,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (tvInputs != null) tvInputs.registerCallback(inputCallback, handler);
         handler.postDelayed(tick, 15_000);
         checkNotices();
+        trimBackground();
         reload();
         askWatchPermission();
         loadWatching();
@@ -414,6 +416,22 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         invalidateAll();
         wake();
         spoken.readAgain();
+    }
+
+    private static final long TRIM_EVERY_MS = 3 * 60_000L;
+    private static long trimmedAt = -TRIM_EVERY_MS;
+
+    /**
+     * Performance mode, back from an app: the apps left in the background give back the memory they keep (still open),
+     * at most every few minutes. Only in Free My TV mode, where the TV already allowed this app's debugging.
+     */
+    private void trimBackground() {
+        long now = SystemClock.elapsedRealtime();
+        if (!Prefs.performance() || now - trimmedAt < TRIM_EVERY_MS) return;
+        JSONObject s = HomeMode.state(getContext());
+        if (!HomeMode.FREE.equals(s.optString("mode")) || !s.optBoolean("adbAuthorized")) return;
+        trimmedAt = now;
+        HomeMode.requestTrimBackground(getContext());
     }
 
     void pause() {
@@ -1786,7 +1804,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     // MARK: - App options (hold OK on an app): a rounded panel that slides out at its side
 
     private static final int MENU_OPEN = 0, MENU_INFO = 1, MENU_UNINSTALL = 2, MENU_LEFT = 3, MENU_RIGHT = 4,
-            MENU_SHELF_ADD = 5, MENU_SHELF_REMOVE = 6;
+            MENU_SHELF_ADD = 5, MENU_SHELF_REMOVE = 6, MENU_CLEAR_CACHE = 7, MENU_FREE_MEMORY = 8, MENU_OPEN_IN = 9,
+            MENU_REFRESH = 10, MENU_FORCE_STOP = 11;
+    /** Open in…: the menu lists where the pick can open, as MENU_TARGET + its index in menuTargets. */
+    private static final int MENU_TARGET = 100;
     // The rows' corners are concentric with the panel's (panel radius = row radius + padding).
     private static final float MENU_ROW = 72, MENU_PAD = 12, MENU_HEADER = 58, MENU_GAP = 28, MENU_ROW_RADIUS = 22;
     private static final float MENU_MIN_W = 380, MENU_MAX_W = 560, MENU_TEXT_X = 22, MENU_LABEL_X = 54;
@@ -1797,30 +1818,49 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private String[] menuLabels = new String[0];
     private String menuTitle = "";
     private HomeApps.Item menuApp;
+    private Recs.Pick menuPick;                 // the menu is a recommendation's (a card or the hero), else null
+    private List<HomeApps.Item> menuTargets;    // while choosing where it opens (Open in…), else null
     private boolean menuOpen, menuDirty, menuOnRight, menuFromShelf;
     private int menuIndex;
     private Paint menuText, menuHeader;
     private float menuTextHalfCap, menuHeaderHalfCap;
 
-    /** Opens the options of the focused app (shelf or All Apps); false when the focus isn't on an app. */
+    /** Opens the options of the focused app (shelf or All Apps) or pick; false when the focus is on neither. */
     private boolean openMenu() {
         HomeApps.Item it = focusedApp();
         if (it == null) return false;
         menuApp = it;
-        menuFromShelf = !sheetOpen;
+        menuTargets = null;
+        menuFromShelf = !sheetOpen && zone == Z_SHELF;
         buildMenu(MENU_OPEN);
         menuRow.snap(menuIndex);
         menuOpen = true;
         menu.target = 1;
         menuDirty = true;
         click.open();
-        announceForAccessibility(it.label + ". " + TextUtils.join(", ", menuLabels));
+        announceForAccessibility(menuName() + ". " + TextUtils.join(", ", menuLabels));
         return true;
     }
 
-    /** The app under the focus, with the rectangle it's drawn in (menuAnchor); null for anything that isn't an app. */
+    /** What the menu's header shows: the pick's title, or the app's name. */
+    private String menuName() {
+        return menuPick != null ? menuPick.title : menuApp.label;
+    }
+
+    /**
+     * The app or pick under the focus, with the rectangle it's drawn in (menuAnchor); a pick also sets menuPick. null for
+     * anything else (inputs, Live TV, a pick nothing can open).
+     */
     private HomeApps.Item focusedApp() {
         HomeApps.Item it;
+        menuPick = null;
+        if (!sheetOpen && (zone == Z_CARDS || zone == Z_HERO)) {
+            Recs.Pick p = zone == Z_HERO ? currentPick() : cardIndex < cards.size() ? cards.get(cardIndex) : null;
+            if (p == null || p.pkg == null) return null;
+            menuPick = p;
+            menuAnchor.set(zone == Z_HERO ? heroButton : cardRects[cardIndex]);
+            return Recs.item(p);
+        }
         if (sheetOpen) {
             if (others.isEmpty()) return null;
             it = others.get(gridIndex);
@@ -1841,15 +1881,29 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      * uninstall (apps the person installed). The focus stays on `keep` when it's still there (after a move).
      */
     private void buildMenu(int keep) {
-        List<String> order = HomeApps.shelfPackages(getContext());
         menuActions.clear();
-        menuActions.add(MENU_OPEN);
-        if (menuFromShelf && shelfIndex > 0) menuActions.add(MENU_LEFT);
-        if (menuFromShelf && shelfIndex < shelf.size() - 1) menuActions.add(MENU_RIGHT);
-        if (order.contains(menuApp.pkg)) menuActions.add(MENU_SHELF_REMOVE);
-        else if (order.size() < HomeApps.MAX_SHELF) menuActions.add(MENU_SHELF_ADD);
-        menuActions.add(MENU_INFO);
-        if (HomeApps.removable(getContext(), menuApp.pkg)) menuActions.add(MENU_UNINSTALL);
+        if (menuTargets != null) {
+            for (int i = 0; i < menuTargets.size(); i++) menuActions.add(MENU_TARGET + i);
+        } else if (menuPick != null) {
+            // A pick: open it (here or, just this once, elsewhere), fetch this card again, and the app's cache.
+            menuActions.add(MENU_OPEN);
+            if (!recs.openChoices(menuPick).isEmpty()) menuActions.add(MENU_OPEN_IN);
+            menuActions.add(MENU_REFRESH);
+            if (cacheClearable(menuApp.pkg)) menuActions.add(MENU_CLEAR_CACHE);
+            menuActions.add(MENU_FREE_MEMORY);
+        } else {
+            List<String> order = HomeApps.shelfPackages(getContext());
+            menuActions.add(MENU_OPEN);
+            if (menuFromShelf && shelfIndex > 0) menuActions.add(MENU_LEFT);
+            if (menuFromShelf && shelfIndex < shelf.size() - 1) menuActions.add(MENU_RIGHT);
+            if (order.contains(menuApp.pkg)) menuActions.add(MENU_SHELF_REMOVE);
+            else if (order.size() < HomeApps.MAX_SHELF) menuActions.add(MENU_SHELF_ADD);
+            menuActions.add(MENU_INFO);
+            if (!menuApp.pkg.equals(HomeMode.PKG)) menuActions.add(MENU_FORCE_STOP);
+            if (cacheClearable(menuApp.pkg)) menuActions.add(MENU_CLEAR_CACHE);
+            menuActions.add(MENU_FREE_MEMORY);
+            if (HomeApps.removable(getContext(), menuApp.pkg)) menuActions.add(MENU_UNINSTALL);
+        }
         menuLabels = new String[menuActions.size()];
         for (int i = 0; i < menuLabels.length; i++) menuLabels[i] = menuLabel(menuActions.get(i));
         int at = menuActions.indexOf(keep);
@@ -1860,9 +1914,20 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         layoutMenu();
     }
 
-    private static String menuLabel(int action) {
+    /** Only the apps the person installed: Android's and the TV's own are left alone, and so is this one. */
+    private boolean cacheClearable(String pkg) {
+        return pkg != null && !pkg.equals(HomeMode.PKG) && HomeApps.removable(getContext(), pkg);
+    }
+
+    private String menuLabel(int action) {
+        if (action >= MENU_TARGET) return menuTargets.get(action - MENU_TARGET).label;
         switch (action) {
             case MENU_OPEN: return Ui.tr("Abrir", "Open");
+            case MENU_OPEN_IN: return Ui.tr("Abrir em…", "Open in…", "Abrir en…");
+            case MENU_REFRESH: return Ui.tr("Atualizar este card", "Refresh this card", "Actualizar esta tarjeta");
+            case MENU_FORCE_STOP: return Ui.tr("Encerrar o app", "Close app", "Cerrar la app");
+            case MENU_CLEAR_CACHE: return Ui.tr("Limpar cache", "Clear cache", "Borrar caché");
+            case MENU_FREE_MEMORY: return Ui.tr("Liberar memória", "Free memory", "Liberar memoria");
             case MENU_LEFT: return Ui.tr("Mover para a esquerda", "Move left", "Mover a la izquierda");
             case MENU_RIGHT: return Ui.tr("Mover para a direita", "Move right", "Mover a la derecha");
             case MENU_SHELF_ADD: return Ui.tr("Pôr na prateleira", "Add to shelf", "Agregar al estante");
@@ -1873,8 +1938,14 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private static String menuSymbol(int action) {
+        if (action >= MENU_TARGET) return "play";
         switch (action) {
             case MENU_OPEN: return "play";
+            case MENU_OPEN_IN: return "chevron_right";
+            case MENU_REFRESH: return "sync";
+            case MENU_FORCE_STOP: return "bedtime";
+            case MENU_CLEAR_CACHE: return "sparkles";
+            case MENU_FREE_MEMORY: return "apps";
             case MENU_LEFT: return "arrow_back";
             case MENU_RIGHT: return "arrow_forward";
             case MENU_SHELF_ADD: return "add";
@@ -1896,7 +1967,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float top = Math.max(60 * k, Math.min(h - 60 * k - height, menuAnchor.centerY() - height / 2));
         menuRect.set(left, top, left + width, top + height);
         float room = width - 2 * (pad + MENU_TEXT_X * k);
-        menuTitle = TextUtils.ellipsize(menuApp.label, new TextPaint(menuHeader), room, TextUtils.TruncateAt.END).toString();
+        String name = menuTargets != null ? Ui.tr("Abrir em", "Open in", "Abrir en") : menuName();
+        menuTitle = TextUtils.ellipsize(name, new TextPaint(menuHeader), room, TextUtils.TruncateAt.END).toString();
         menuLayer.setPivotX(menuOnRight ? menuRect.left : menuRect.right);
         menuLayer.setPivotY(menuRect.centerY());
     }
@@ -1949,12 +2021,45 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             moveOnShelf(action == MENU_LEFT ? -1 : 1, action);   // the panel stays: press again to keep moving
             return;
         }
+        if (action == MENU_OPEN_IN) {
+            // The same panel lists the places it can open (the default in More Settings doesn't change).
+            menuTargets = recs.openChoices(menuPick);
+            buildMenu(MENU_TARGET);
+            menuRow.snap(menuIndex);
+            menuDirty = true;
+            click.open();
+            announceForAccessibility(TextUtils.join(", ", menuLabels));
+            return;
+        }
         closeMenu();
+        if (action >= MENU_TARGET) {
+            openNow(menuTargets.get(action - MENU_TARGET), openRect(menuAnchor));
+            return;
+        }
         if (action == MENU_OPEN) {
             activate();
             return;
         }
         click.open();
+        if (action == MENU_REFRESH) {
+            recs.refresh(menuPick);
+            showToast(Ui.tr("Atualizando o card…", "Refreshing the card…", "Actualizando la tarjeta…"));
+            return;
+        }
+        if (action == MENU_FREE_MEMORY) {
+            HomeMode.requestFreeMemory(getContext());
+            showToast(Ui.tr("Liberando memória…", "Freeing memory…", "Liberando memoria…"));
+            return;
+        }
+        if (action == MENU_CLEAR_CACHE) {
+            clearCache(it);
+            return;
+        }
+        if (action == MENU_FORCE_STOP) {
+            HomeMode.requestForceStop(getContext(), it.pkg, it.label);
+            showToast(Ui.trf("Closing {app}…", "app", it.label));
+            return;
+        }
         if (action == MENU_SHELF_ADD || action == MENU_SHELF_REMOVE) {
             putOnShelf(it, action == MENU_SHELF_ADD);
             return;
@@ -1963,6 +2068,21 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             if (!HomeApps.openInfo(activity, it.pkg)) showToast(Ui.tr("Não deu para abrir as informações do app.", "Couldn't open the app's info."));
         } else if (!HomeApps.uninstall(activity, it.pkg)) {
             showToast(Ui.tr("Não dá para desinstalar este app por aqui.", "Couldn't uninstall this app here."));
+        }
+    }
+
+    /**
+     * Clears the app's cache files (Android 14 and newer have the command); before that, its page in the TV's settings,
+     * where Storage > Clear cache does it. Its data and logins stay either way.
+     */
+    private void clearCache(HomeApps.Item it) {
+        if (Build.VERSION.SDK_INT >= 34) {
+            HomeMode.requestClearCache(getContext(), it.pkg, it.label);
+            showToast(Ui.trf("Clearing {app}'s cache…", "app", it.label));
+        } else if (HomeApps.openInfo(activity, it.pkg)) {
+            showToast(Ui.tr("Storage › Clear cache"));
+        } else {
+            showToast(Ui.tr("Não deu para abrir as informações do app.", "Couldn't open the app's info."));
         }
     }
 
@@ -2817,10 +2937,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void selectTab(int index) {
+        selectTab(index, index > tab ? 1 : -1);
+    }
+
+    /** `dir`: the side the new tab comes from (1: the right), also when going round from the last tab to the first. */
+    private void selectTab(int index, int dir) {
         if (index == tab) return;
         // The cards on screen leave toward the old tab's side; the new tab's come in from the other, one by one.
         tabFrom = new ArrayList<>(cards);
-        tabDir = index > tab ? 1 : -1;
+        tabDir = dir;
         tabAnimAt = SystemClock.uptimeMillis();
         wake();
         tab = index;
@@ -3271,6 +3396,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                         zone = Z_CARDS;
                         cardIndex = nearestCard(topRects[topIndex].centerX(), false);
                     }
+                } else if (topIndex < 3 && !lightButtons.isEmpty()) {
+                    topIndex = 3;   // ↑ from a tab: the buttons at the top right (the tab stays selected)
                 } else {
                     return true;
                 }
@@ -3291,10 +3418,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private boolean moveCards(int dx, int dy) {
         int next = cardIndex;
         if (dx > 0) {
-            if (cardIndex >= 3) return slideCards(Math.min(2, allCards.size() - SLOTS - cardOffset));
+            // The right column, or nothing to the right (fewer than five titles): the list slides, or the next tab comes.
+            if (cardIndex >= 3 || cardIndex + (cardIndex == 0 ? 1 : 2) >= cards.size()) {
+                return slideCards(Math.max(0, Math.min(2, allCards.size() - SLOTS - cardOffset))) || nextTab(1);
+            }
             next = cardIndex == 0 ? 1 : cardIndex + 2;
         } else if (dx < 0) {
-            if (cardIndex == 0) return slideCards(-Math.min(2, cardOffset));
+            if (cardIndex == 0) return slideCards(-Math.min(2, cardOffset)) || nextTab(-1);
             next = cardIndex <= 2 ? 0 : cardIndex - 2;
         } else if (dy < 0) {
             if (cardIndex == 0 || cardIndex % 2 == 1) {
@@ -3315,6 +3445,27 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         while (next >= cards.size() && next > 0) next--;
         if (next == cardIndex) return false;
         cardIndex = next;
+        return true;
+    }
+
+    /**
+     * Past the last card the next tab comes in (after the last tab, the first), its first card focused; before the first
+     * card, the previous tab (before the first, the last) at its end. A tab with no titles leaves the focus on the tabs.
+     */
+    private boolean nextTab(int dir) {
+        int count = tabs().length, to = (tab + dir + count) % count;
+        if (to == tab) return false;
+        selectTab(to, dir);
+        if (dir < 0 && allCards.size() > SLOTS) {
+            cardOffset = shiftFrom = shiftTo = allCards.size() - SLOTS;
+            updateCards();
+        }
+        if (cards.isEmpty()) {
+            zone = Z_TOP;
+            topIndex = tab;
+        } else {
+            cardIndex = dir > 0 ? 0 : cards.size() - 1;
+        }
         return true;
     }
 

@@ -246,6 +246,9 @@ public class SettingsActivity extends Activity {
                 state = HomeMode.state(getContext());
                 hasKey = Recs.hasKey(getContext());
                 recs = Recs.status(getContext());
+                String services = android.provider.Settings.Secure.getString(getContext().getContentResolver(),
+                        android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+                keysServiceOn = services != null && services.contains(HomeMode.PKG + "/");
                 boolean nowBusy = !HomeMode.busyText(state).isEmpty();
                 if (nowBusy) pendingAt = 0;
                 // A switch just ended: TalkBack reads how it went (the newest notice).
@@ -336,10 +339,25 @@ public class SettingsActivity extends Activity {
             p.rows.add(choice(() -> Ui.tr("Modo desempenho", "Performance mode"),
                     () -> list(Ui.tr("Desligado", "Off"), Ui.tr("Ligado (sem vidro)", "On (no glass)")),
                     () -> Prefs.performance() ? 1 : 0, at -> Prefs.setPerformance(at == 1)));
+            p.rows.add(new Row(() -> Ui.tr("Liberar memória", "Free memory", "Liberar memoria"), this::freeMemoryValue, () -> {
+                freeMemoryAt = System.currentTimeMillis();
+                HomeMode.requestFreeMemory(getContext());
+            }, null, null));
             p.rows.add(choice(() -> Ui.tr("Volume dos sons", "Sound volume", "Volumen de los sonidos"), SettingsView::soundLevels,
                     Prefs::soundLevel, Prefs::setSoundLevel));
             p.hint = () -> Ui.tr("OK abre as opções; ← e → mudam direto.", "OK opens the choices; ← and → change it right away.");
             return p;
+        }
+
+        private long freeMemoryAt;   // when Free memory was pressed (0: not on this screen)
+
+        /** "Free now", then "Freeing…" until the result arrives as the newest notice (the poll reads it). */
+        private String freeMemoryValue() {
+            if (freeMemoryAt == 0) return Ui.tr("Liberar agora", "Free now", "Liberar ahora");
+            JSONArray notices = state.optJSONArray("notices");
+            JSONObject newest = notices == null ? null : notices.optJSONObject(0);
+            if (newest != null && newest.optLong("at") >= freeMemoryAt) return newest.optString("text");
+            return Ui.tr("Liberando…", "Freeing…", "Liberando…");
         }
 
         /** The picks: which list, how big the top is, where they open, the TMDB key, and Continue Watching's apps. */
@@ -415,21 +433,67 @@ public class SettingsActivity extends Activity {
             for (int i = 0; i < Prefs.KEYS.length && i < labels.length; i++) {
                 int key = Prefs.KEYS[i];
                 String label = labels[i];
-                p.rows.add(new Row(() -> label, () -> {
+                p.rows.add(new Row(() -> onRemote(key) ? label : label + " · " + Ui.tr("não visto", "not seen yet", "no visto"), () -> {
                     int at = appPkgs.indexOf(Prefs.keyApp(key));
                     return at >= 0 ? appLabels.get(at) : Ui.tr("Não instalado", "Not installed");
-                }, () -> openPicker(label, appLabels, appPkgs.indexOf(Prefs.keyApp(key)), at -> Prefs.setKeyApp(key, appPkgs.get(at))),
+                }, () -> openPicker(label, appLabels, appPkgs.indexOf(Prefs.keyApp(key)), at -> setKeyApp(key, appPkgs.get(at))),
                         dir -> {
                             int n = appPkgs.size(), at = appPkgs.indexOf(Prefs.keyApp(key));
-                            Prefs.setKeyApp(key, appPkgs.get(at < 0 ? (dir > 0 ? 0 : n - 1) : (at + dir + n) % n));
+                            setKeyApp(key, appPkgs.get(at < 0 ? (dir > 0 ? 0 : n - 1) : (at + dir + n) % n));
                         }, null));
             }
-            p.hint = () -> Ui.tr("OK abre a lista de apps.", "OK opens the list of apps.");
+            p.hint = () -> keysHint(labels);
             p.hint2 = () -> RemoteKeys.supported() ? Ui.tr("Disney e Globoplay: a própria TV controla esses botões.",
                     "Disney and Globoplay: the TV itself controls those buttons.")
                     : Ui.tr("Esses são os botões do controle da TCL: nesta TV, os botões funcionam como sempre.",
                     "These are the TCL remote's buttons: on this TV, the buttons work as they always did.");
             return p;
+        }
+
+        private boolean keysServiceOn = true;   // read by the poll: the TV's list of enabled accessibility services
+        private String keysError = "";
+
+        /** Saves a button's app; if it didn't save, says so; and makes sure the key service is on to use it. */
+        private void setKeyApp(int key, String pkg) {
+            keysError = Prefs.setKeyApp(key, pkg) ? ""
+                    : Ui.tr("Não deu para salvar a escolha. Tente de novo.", "Couldn't save the choice. Try again.",
+                    "No se pudo guardar la elección. Inténtalo de nuevo.");
+            if (!keysServiceOn) HomeMode.ensureRemoteService(getContext(), 0);
+        }
+
+        // Asked once per button (a call to the input service): the rows are read on every frame.
+        private final java.util.Map<Integer, Boolean> keyOnDevice = new java.util.HashMap<>();
+
+        /** The remote has this button: the key service saw it, or a connected remote says it has it. */
+        private boolean onRemote(int key) {
+            if (Prefs.keySeenAt(key) > 0) return true;
+            Boolean has = keyOnDevice.get(key);
+            if (has == null) {
+                // Sony's buttons share key codes and are told apart by scan code: only seeing them counts.
+                has = key < Prefs.SONY_KEY && android.view.KeyCharacterMap.deviceHasKey(key);
+                keyOnDevice.put(key, has);
+            }
+            return has;
+        }
+
+        /** What's wrong, else the button just pressed and what it opens, else how to test one. */
+        private String keysHint(String[] labels) {
+            if (!keysError.isEmpty()) return keysError;
+            // The service runs only in Free My TV mode (Original turns it off on purpose).
+            if (!keysServiceOn && RemoteKeys.supported() && HomeMode.FREE.equals(state.optString("mode"))) {
+                return Ui.tr("O serviço dos botões está desligado. Ligando…", "The buttons' service is off. Turning it on…",
+                        "El servicio de los botones está apagado. Encendiéndolo…");
+            }
+            long now = System.currentTimeMillis();
+            for (int i = 0; i < Prefs.KEYS.length && i < labels.length; i++) {
+                if (now - Prefs.keySeenAt(Prefs.KEYS[i]) > 15_000) continue;
+                int at = appPkgs.indexOf(Prefs.keyApp(Prefs.KEYS[i]));
+                String app = at >= 0 ? appLabels.get(at) : Ui.tr("Não instalado", "Not installed");
+                return Ui.trf("{button} works: it opens {app}.", "button", labels[i], "app", app);
+            }
+            return Ui.tr("OK abre a lista de apps. Aperte um botão do controle para testar.",
+                    "OK opens the list of apps. Press a button on the remote to test it.",
+                    "OK abre la lista de apps. Pulsa un botón del control para probarlo.");
         }
 
         /** A row that opens a page (a chevron instead of a value). */
