@@ -20,6 +20,7 @@ MAP = {
     "live_tv": ("live_tv", 1), "bitcoin": ("currency_bitcoin", 0),
     "info": ("info", 1), "delete": ("delete", 1), "search": ("search", 0), "add": ("add", 0),
     "remove": ("remove", 0), "arrow_back": ("arrow_back", 0), "arrow_forward": ("arrow_forward", 0),
+    "clean": ("cleaning_services", 1),
 }
 
 

@@ -475,11 +475,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         motionDirty = true;
     }
 
-    /** The three corner buttons, with their names in the current language. */
+    /** The corner buttons, with their names in the current language. */
     private void makeLightButtons() {
         lightButtons.clear();
         lightButtons.add(HomeApps.action(HomeApps.SEARCH, "search", Ui.tr("Buscar", "Search", "Buscar"), "search"));
-        lightButtons.add(HomeApps.action(HomeApps.LIVE_TV, "live", Ui.tr("TV aberta", "Live TV"), "live_tv"));
+        // Live TV stays on the shelf and in the inputs drawer; here, the broom frees memory (weak TVs).
+        lightButtons.add(HomeApps.action(HomeApps.FREE_MEMORY, "free-memory", Ui.tr("Liberar memória", "Free memory", "Liberar memoria"), "clean"));
         lightButtons.add(HomeApps.action(HomeApps.INPUTS, "inputs", Ui.tr("Entradas HDMI", "HDMI Inputs"), "hdmi"));
         // The gear opens the TV's settings; Free My TV's own are first in More Apps.
         lightButtons.add(HomeApps.action(HomeApps.ANDROID_SETTINGS, "settings", Ui.tr("Ajustes da TV", "TV Settings"), "settings"));
@@ -1804,7 +1805,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     // MARK: - App options (hold OK on an app): a rounded panel that slides out at its side
 
     private static final int MENU_OPEN = 0, MENU_INFO = 1, MENU_UNINSTALL = 2, MENU_LEFT = 3, MENU_RIGHT = 4,
-            MENU_SHELF_ADD = 5, MENU_SHELF_REMOVE = 6, MENU_CLEAR_CACHE = 7, MENU_FREE_MEMORY = 8, MENU_OPEN_IN = 9,
+            MENU_SHELF_ADD = 5, MENU_SHELF_REMOVE = 6, MENU_CLEAR_CACHE = 7, MENU_OPEN_IN = 9,
             MENU_REFRESH = 10, MENU_FORCE_STOP = 11;
     /** Open in…: the menu lists where the pick can open, as MENU_TARGET + its index in menuTargets. */
     private static final int MENU_TARGET = 100;
@@ -1885,12 +1886,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (menuTargets != null) {
             for (int i = 0; i < menuTargets.size(); i++) menuActions.add(MENU_TARGET + i);
         } else if (menuPick != null) {
-            // A pick: open it (here or, just this once, elsewhere), fetch this card again, and the app's cache.
-            menuActions.add(MENU_OPEN);
+            // A pick: open it elsewhere just this once, or fetch this card again.
             if (!recs.openChoices(menuPick).isEmpty()) menuActions.add(MENU_OPEN_IN);
             menuActions.add(MENU_REFRESH);
-            if (cacheClearable(menuApp.pkg)) menuActions.add(MENU_CLEAR_CACHE);
-            menuActions.add(MENU_FREE_MEMORY);
         } else {
             List<String> order = HomeApps.shelfPackages(getContext());
             menuActions.add(MENU_OPEN);
@@ -1901,7 +1899,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             menuActions.add(MENU_INFO);
             if (!menuApp.pkg.equals(HomeMode.PKG)) menuActions.add(MENU_FORCE_STOP);
             if (cacheClearable(menuApp.pkg)) menuActions.add(MENU_CLEAR_CACHE);
-            menuActions.add(MENU_FREE_MEMORY);
             if (HomeApps.removable(getContext(), menuApp.pkg)) menuActions.add(MENU_UNINSTALL);
         }
         menuLabels = new String[menuActions.size()];
@@ -1927,7 +1924,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             case MENU_REFRESH: return Ui.tr("Atualizar este card", "Refresh this card", "Actualizar esta tarjeta");
             case MENU_FORCE_STOP: return Ui.tr("Encerrar o app", "Close app", "Cerrar la app");
             case MENU_CLEAR_CACHE: return Ui.tr("Limpar cache", "Clear cache", "Borrar caché");
-            case MENU_FREE_MEMORY: return Ui.tr("Liberar memória", "Free memory", "Liberar memoria");
             case MENU_LEFT: return Ui.tr("Mover para a esquerda", "Move left", "Mover a la izquierda");
             case MENU_RIGHT: return Ui.tr("Mover para a direita", "Move right", "Mover a la derecha");
             case MENU_SHELF_ADD: return Ui.tr("Pôr na prateleira", "Add to shelf", "Agregar al estante");
@@ -1945,7 +1941,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             case MENU_REFRESH: return "sync";
             case MENU_FORCE_STOP: return "bedtime";
             case MENU_CLEAR_CACHE: return "sparkles";
-            case MENU_FREE_MEMORY: return "apps";
             case MENU_LEFT: return "arrow_back";
             case MENU_RIGHT: return "arrow_forward";
             case MENU_SHELF_ADD: return "add";
@@ -2044,11 +2039,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (action == MENU_REFRESH) {
             recs.refresh(menuPick);
             showToast(Ui.tr("Atualizando o card…", "Refreshing the card…", "Actualizando la tarjeta…"));
-            return;
-        }
-        if (action == MENU_FREE_MEMORY) {
-            HomeMode.requestFreeMemory(getContext());
-            showToast(Ui.tr("Liberando memória…", "Freeing memory…", "Liberando memoria…"));
             return;
         }
         if (action == MENU_CLEAR_CACHE) {
@@ -2666,6 +2656,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             r = tileRects[shelfIndex];
         }
         click.open();
+        if (it.kind == HomeApps.FREE_MEMORY) {
+            HomeMode.requestFreeMemory(getContext());
+            showToast(Ui.tr("Liberando memória…", "Freeing memory…", "Liberando memoria…"));
+            return;
+        }
         if (it.kind == HomeApps.ALL_APPS) {
             openSheet();
             return;
