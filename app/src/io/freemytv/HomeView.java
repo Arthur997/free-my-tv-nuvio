@@ -99,7 +99,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** Card slots: 0 = the big one; 1 and 2 = the first column of small ones (top, bottom); 3 and 4 = the second. */
     private static final int SLOTS = Recs.ON_SCREEN;
     private static final float L_PLATTER_TOP = 814, L_TILE_H = 126;
-    private static final int L_INK = 0xFF1D1D1F, L_DIM = 0xFF6E6E73, L_FAINT = 0xFF8E8E93;
+    private static final int L_INK = 0xFF1D1D1F, L_DIM = 0xFF6E6E73;
     // The first tab is what to continue (the apps' Watch Next lists, WatchNext); the others, the picks (Recs).
     private static final String[] TABS = {"Continuar assistindo", "Filmes", "Séries"};
     private static final String[] TABS_EN = {"Continue Watching", "Movies", "Shows"};
@@ -186,7 +186,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
     private final android.graphics.PorterDuffColorFilter whiteLogo =
             new android.graphics.PorterDuffColorFilter(0xFFFFFFFF, android.graphics.PorterDuff.Mode.SRC_IN);
-    private final RectF platterRect = new RectF();
+    private final RectF platterRect = new RectF(), tabBar = new RectF();
     private int shelfIndex;
 
     // Corner capsule
@@ -607,7 +607,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         badgeWidth = badgePaint.measureText(badgeText);
         cardTexts.clear();
         lCardMeta = Ui.text(Ui.medium, 25 * k, L_DIM);
-        lQuote = Ui.numbers(Ui.regular, 21 * k, L_FAINT);
+        lQuote = Ui.numbers(Ui.regular, 21 * k, L_DIM);
         lTip = Ui.text(Ui.semibold, 25 * k, L_INK);
         lTip.setTextAlign(Paint.Align.CENTER);
         menuText = Ui.text(Ui.medium, 29 * k, L_INK);
@@ -981,10 +981,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lTab.setColor(tone(L_DIM, 0xFF8E8E93));
         lTabOn.setColor(tone(L_INK, WHITE));
         lCardMeta.setColor(tone(L_DIM, 0xFF98989D));
-        lQuote.setColor(tone(L_FAINT, 0xB8FFFFFF));
+        lQuote.setColor(tone(L_DIM, 0xB8FFFFFF));
         lTopRight.setColor(tone(L_DIM, 0xFF8E8E93));   // as the tabs that aren't selected
         lTip.setColor(tone(L_INK, WHITE));
-        staleQuote.setColor(tone(L_FAINT, 0x99FFFFFF));
+        staleQuote.setColor(tone(L_DIM, 0x99FFFFFF));
     }
 
     private boolean tickBackgroundFade(long up) {
@@ -1170,8 +1170,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (shelf.isEmpty()) return;
         float radius = (TILE_RADIUS + SHELF_PAD) * k;
         tmp.set(platterRect);
-        tmp.offset(0, 18 * k);
-        shadow.setColor(tone(0x1F000000, 0x52000000));
+        tmp.offset(0, 10 * k);
+        shadow.setColor(tone(0x12000000, 0x52000000));
         shadows.draw(c, tmp, radius, SHADOW_BLUR * k, shadow);
         // White glass by day; smoked glass at night.
         scene.liquid(c, platterRect, radius, tone(0xFFFFFFFF, SMOKE), tone(0.42f, 0.12f), tone(0.03f, 0.08f),
@@ -1292,7 +1292,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         c.scale(s, s);
         tmp.set(-bw / 2, -bh / 2, bw / 2, bh / 2);
         tmp.offset(0, (4 + 14 * f) * k);
-        shadowDeep.setColor(Ui.alpha(0xFF000000, tone(0.14f, 0.3f) + tone(0.18f, 0.3f) * fc));
+        shadowDeep.setColor(Ui.alpha(0xFF000000, tone(0.08f, 0.3f) + tone(0.24f, 0.3f) * fc));
         shadows.draw(c, tmp, r0, DEEP_BLUR * k, shadowDeep);
         c.restore();
         int[] style = TILE_STYLE.get(it.key);
@@ -1482,7 +1482,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void drawerCard(Canvas c, RectF r) {
-        drawerGlass(c, r, 30 * k, 0.72f, 0x1A000000, 10 * k);
+        drawerGlass(c, r, 30 * k, 0.72f, 0x0D000000, 6 * k);
     }
 
     private void drawDrawer(Canvas c) {
@@ -1491,7 +1491,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         cardTitle.setColor(tone(L_DIM, 0xB3FFFFFF));
         cardText.setColor(drawerInk(0.95f));
         cardDim.setColor(tone(L_DIM, 0xADFFFFFF));
-        cardDimRight.setColor(tone(L_FAINT, 0x99FFFFFF));
+        cardDimRight.setColor(tone(L_DIM, 0x99FFFFFF));
         bigTemp.setColor(drawerInk(1));
         hourPaint.setColor(tone(L_DIM, 0xADFFFFFF));
         hourTemp.setColor(drawerInk(0.95f));
@@ -1521,7 +1521,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             shadow.setColor(Ui.alpha(0xFF000000, 0.45f * f));
             shadows.draw(c, tmp, r, SHADOW_BLUR * k, shadow);
         }
-        if (f < 0.99f) drawerGlass(c, cell, r, 0.7f, 0x14000000, 6 * k);
+        if (f < 0.99f) drawerGlass(c, cell, r, 0.7f, 0x0A000000, 4 * k);
         if (f > 0.01f) {
             fill.setShader(null);
             fill.setColor(Ui.alpha(WHITE, f));
@@ -2991,6 +2991,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void drawLightTop(Canvas c) {
         applyTone();
         c.drawText(heading, MARGIN * k - headingBearing, L_TITLE_BASE * k, lTitle);
+        drawTabBar(c);
         // Text tabs (the selected one in bold, in the main text color); with focus on the tabs, the selected one gets
         // the white pill with a shadow and grows a little (the tvOS focus).
         float focus = Ui.clamp(topFocus[tab].value);
@@ -3024,6 +3025,25 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         if (showClock) drawTopClock(c);
         else if (HomeData.coinCount() > 0) drawQuotes(c);
+    }
+
+    /**
+     * The tvOS tab bar: one glass capsule holding the tabs (the same glass as the corner buttons), with a faint pill on
+     * the selected tab while the focus is elsewhere; the focus pill covers it.
+     */
+    private void drawTabBar(Canvas c) {
+        float inset = 6 * k;
+        tabBar.set(topRects[0].left - inset, topRects[0].top - inset, topRects[2].right + inset, topRects[0].bottom + inset);
+        float rr = tabBar.height() / 2;
+        scene.liquid(c, tabBar, rr, tone(0xFFFFFFFF, SMOKE), tone(0.5f, 0.5f), tone(0.02f, 0.01f), 12 * k, 8 * k,
+                tone(0.6f, 0.45f), 1);
+        float rest = 1 - Ui.clamp(topFocus[tab].value);
+        if (rest > 0.01f) {
+            RectF r = topRects[tab];
+            fill.setShader(null);
+            fill.setColor(Ui.alpha(tone(0xFF000000, 0xFFFFFFFF), tone(0.06f, 0.12f) * rest));
+            c.drawRoundRect(r, r.height() / 2, r.height() / 2, fill);
+        }
     }
 
     /** Brasília's time, whatever zone the TV is set to. */
@@ -3341,8 +3361,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             float f = Ui.clamp(topFocus[3 + i].value), s = 1 + 0.1f * f, rad = r.width() / 2 * s;
             cell.set(r.centerX() - rad, r.centerY() - rad, r.centerX() + rad, r.centerY() + rad);
             tmp.set(cell);
-            tmp.offset(0, (6 + 8 * f) * k);
-            shadow.setColor(Ui.alpha(0xFF000000, tone(0.1f, 0.3f) + tone(0.14f, 0.2f) * f));
+            tmp.offset(0, (4 + 10 * f) * k);
+            shadow.setColor(Ui.alpha(0xFF000000, tone(0.06f, 0.3f) + tone(0.18f, 0.2f) * f));
             shadows.draw(c, tmp, rad, SHADOW_BLUR * k, shadow);
             scene.liquid(c, cell, rad, tone(0xFFFFFFFF, SMOKE), tone(0.55f, 0.5f), tone(0.02f, 0.01f), 12 * k, 8 * k,
                     tone(0.6f, 0.45f), 1 - f);
