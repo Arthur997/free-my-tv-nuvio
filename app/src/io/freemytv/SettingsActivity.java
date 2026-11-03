@@ -428,44 +428,13 @@ public class SettingsActivity extends Activity {
                             setKeyApp(key, appPkgs.get(at < 0 ? (dir > 0 ? 0 : n - 1) : (at + dir + n) % n));
                         }, null));
             }
-            p.rows.add(shortcutRow(() -> Ui.tr("Apps recentes", "Recent apps", "Apps recientes"), Prefs.SHORTCUT_RECENTS));
-            p.rows.add(shortcutRow(() -> Ui.tr("Central de controle", "Control Center", "Centro de control"), Prefs.SHORTCUT_CONTROL));
             p.hint = () -> keysHint(labels);
-            p.hint2 = () -> Prefs.shortcutKey(Prefs.SHORTCUT_RECENTS) != 0 || Prefs.shortcutKey(Prefs.SHORTCUT_CONTROL) != 0
-                    ? Ui.tr("Os botões de mídia escolhidos abrem por cima de qualquer app e deixam de controlar a reprodução.",
-                            "The media buttons picked here open over any app and no longer control playback.",
-                            "Los botones multimedia elegidos abren sobre cualquier app y dejan de controlar la reproducción.")
-                    : RemoteKeys.supported() ? Ui.tr("Disney e Globoplay: a própria TV controla esses botões.",
-                    "Disney and Globoplay: the TV itself controls those buttons.")
+            p.hint2 = () -> RemoteKeys.supported() ? Ui.tr("Em Nada, a TV cuida do botão. A Central de controle e os Apps recentes abrem por cima de qualquer app.",
+                    "On Nothing, the TV handles the button. The Control Center and Recent apps open over any app.",
+                    "En Nada, la TV se encarga del botón. El Centro de control y las Apps recientes abren sobre cualquier app.")
                     : Ui.tr("Esses são os botões do controle da TCL: nesta TV, os botões funcionam como sempre.",
                     "These are the TCL remote's buttons: on this TV, the buttons work as they always did.");
             return p;
-        }
-
-        /** A shortcut (Recent apps, the Control Center) and the media button that opens it. */
-        private Row shortcutRow(java.util.function.Supplier<String> label, int which) {
-            return choice(label, SettingsView::shortcutKeyNames, () -> shortcutKeyIndex(which),
-                    at -> setShortcutKey(which, Prefs.SHORTCUT_KEYS[at]));
-        }
-
-        /** The names of Prefs.SHORTCUT_KEYS, in its order. */
-        private static List<String> shortcutKeyNames() {
-            return list(Ui.tr("Nada", "Nothing", "Nada"), Ui.tr("Play/Pause", "Play/Pause", "Reproducir/Pausa"), Ui.tr("Play", "Play", "Reproducir"), Ui.tr("Pause", "Pause", "Pausa"), Ui.tr("Parar", "Stop", "Detener"),
-                    Ui.tr("Avançar", "Fast-forward", "Avanzar"), Ui.tr("Retroceder", "Rewind", "Retroceder"), Ui.tr("Próximo", "Next", "Siguiente"), Ui.tr("Anterior", "Previous", "Anterior"), Ui.tr("Gravar", "Record", "Grabar"));
-        }
-
-        private static int shortcutKeyIndex(int which) {
-            int key = Prefs.shortcutKey(which);
-            for (int i = 0; i < Prefs.SHORTCUT_KEYS.length; i++) if (Prefs.SHORTCUT_KEYS[i] == key) return i;
-            return 0;
-        }
-
-        /** Saves a shortcut's button; from inside other apps it needs the key service, as the app buttons. */
-        private void setShortcutKey(int which, int key) {
-            keysError = Prefs.setShortcutKey(which, key) ? ""
-                    : Ui.tr("Não deu para salvar a escolha. Tente de novo.", "Couldn't save the choice. Try again.",
-                    "No se pudo guardar la elección. Inténtalo de nuevo.");
-            if (!keysServiceOn) HomeMode.ensureRemoteService(getContext(), 0);
         }
 
         private boolean keysServiceOn = true;   // read by the poll: the TV's list of enabled accessibility services
@@ -1242,8 +1211,12 @@ public class SettingsActivity extends Activity {
                     Ui.tr("Botão Netflix", "Netflix button"), Ui.tr("Botão Disney+", "Disney+ button"),
                     Ui.tr("Botão Prime Video", "Prime Video button"), Ui.tr("Botão YouTube", "YouTube button"),
                     Ui.tr("Botão Crunchyroll", "Crunchyroll button"), Ui.tr("Botão Google Play", "Google Play button")};
-            return new String[] {Ui.tr("Botão Netflix", "Netflix button"), Ui.tr("Botão YouTube", "YouTube button"),
-                    Ui.tr("Botão Prime Video", "Prime Video button"), Ui.tr("Botão TCL Channel", "TCL Channel button")};
+            // The same order as Prefs.KEYS (the remote's).
+            return new String[] {Ui.tr("Botão Netflix", "Netflix button"), Ui.tr("Botão Prime Video", "Prime Video button"),
+                    Ui.tr("Botão YouTube", "YouTube button"), Ui.tr("Botão Globoplay", "Globoplay button", "Botón Globoplay"),
+                    Ui.tr("Botão TCL tv+", "TCL tv+ button", "Botón TCL tv+"), Ui.tr("Botão Disney+", "Disney+ button"),
+                    Ui.tr("Botão ≡", "≡ button", "Botón ≡"), Ui.tr("Botão 123", "123 button", "Botón 123"),
+                    Ui.tr("Botão ⓘ", "ⓘ button", "Botón ⓘ")};
         }
 
         /** Installed TV apps, by name, after "Nothing": what a remote button can open. */
@@ -1263,6 +1236,11 @@ public class SettingsActivity extends Activity {
             appPkgs.add("");
             // On Sony, "nothing" leaves the key to the TV, which opens its usual app.
             appLabels.add(RemoteKeys.SONY ? Ui.tr("Sony default") : Ui.tr("Nada", "Nothing"));
+            // Free My TV's own, over any app.
+            appPkgs.add(Prefs.OPEN_CONTROL);
+            appLabels.add(Ui.tr("Central de controle", "Control Center", "Centro de control"));
+            appPkgs.add(Prefs.OPEN_RECENTS);
+            appLabels.add(Ui.tr("Apps recentes", "Recent apps", "Apps recientes"));
             for (String[] f : found) {
                 appPkgs.add(f[0]);
                 appLabels.add(f[1]);

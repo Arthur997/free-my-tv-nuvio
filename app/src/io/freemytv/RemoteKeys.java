@@ -10,7 +10,8 @@ import android.view.KeyEvent;
 /**
  * The remote's app buttons on TCL TVs. The stock home screen opens the apps for Netflix, YouTube and Prime (and TCL
  * Channel); with it off, the keys still arrive, so we open the app the person picked (Settings > Remote Buttons).
- * Disney and Globoplay are opened by the system itself, so they are not listed. The YouTube button (BUTTON_3) never
+ * The system opens Disney+ and Globoplay itself, and ≡, 123 and ⓘ are the TV's: they're ours only once given an app,
+ * the Control Center or Recent apps (until then "Nothing" leaves them to the TV). The YouTube button (BUTTON_3) never
  * reaches an app's window; only the accessibility service's key filter (RemoteKeyService) sees it.
  * On Vestel TVs and Formovie (Xiaomi) projectors only the Netflix button is ours: the system opens Netflix itself (a
  * global key, after the filter).
@@ -42,7 +43,6 @@ final class RemoteKeys {
 
     /** Opens the app for this key on its first press. True if the key is ours and in use (it is then consumed). */
     static boolean onKey(Context c, KeyEvent e) {
-        if (onShortcutKey(c, e)) return true;
         if (!supported()) return false;
         // BUTTON_3 is also a game controller's button: keys from a gamepad or a joystick are left alone.
         int source = e.getSource();
@@ -62,28 +62,26 @@ final class RemoteKeys {
         String pkg = Prefs.keyApp(keyCode);
         if (pkg.isEmpty()) return false;   // "Nothing": the key goes on as if we weren't here
         if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) {
-            Intent intent = launchIntent(c.getPackageManager(), pkg);
-            AppLog.w("remote key " + e.getKeyCode() + " -> " + pkg + (intent == null ? " (not installed)" : ""));
-            if (intent != null) c.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            AppLog.w("remote key " + e.getKeyCode() + " -> " + pkg);
+            open(c, pkg);
         }
         return true;
     }
 
     /**
-     * The media buttons picked for Recent apps and the Control Center (Remote Buttons) open them over any app, or close
-     * them when they're open. Any brand: from other apps it takes the key service (the brands above); on the home
-     * screen the window's own keys are enough.
+     * What the button was given: the Control Center or Recent apps over any app (the same button again closes them), or
+     * an app.
      */
-    private static boolean onShortcutKey(Context c, KeyEvent e) {
-        int code = e.getKeyCode();
-        boolean recents = code == Prefs.shortcutKey(Prefs.SHORTCUT_RECENTS);
-        if (code == 0 || !recents && code != Prefs.shortcutKey(Prefs.SHORTCUT_CONTROL)) return false;
-        if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) {
-            AppLog.w("remote key " + code + (recents ? " -> recent apps" : " -> control center"));
-            if (recents) RecentsActivity.open(c);
-            else ControlActivity.open(c);
+    private static void open(Context c, String target) {
+        if (Prefs.OPEN_CONTROL.equals(target)) {
+            ControlActivity.open(c);
+        } else if (Prefs.OPEN_RECENTS.equals(target)) {
+            RecentsActivity.open(c);
+        } else {
+            Intent intent = launchIntent(c.getPackageManager(), target);
+            if (intent == null) AppLog.w("remote key: " + target + " is not installed");
+            else c.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         }
-        return true;
     }
 
     /** The app's TV launcher, or its plain one (kept here, not in HomeApps, so the key process stays small). */

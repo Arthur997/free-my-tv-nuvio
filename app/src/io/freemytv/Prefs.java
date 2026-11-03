@@ -23,6 +23,15 @@ final class Prefs {
 
     /** Remote keys we handle, with the app each opens until the user picks another. Codes read from the TCL's log. */
     static final int KEY_NETFLIX = 4062, KEY_YOUTUBE = 190, KEY_PRIME = 4099, KEY_TCL_CHANNEL = 4020;
+    /**
+     * More buttons of TCL's BT_RC813A remote (C6K, Android 14), read from TclKeyLayoutMap in its log: Globoplay
+     * (usage 0x0c0077), Disney+ (0x0c004d), ≡ (0x0c0050), 123 (0x0c0052) and ⓘ (0x0c0076, Android's INFO). Until a
+     * choice is made the TV keeps them ("Nothing").
+     */
+    static final int KEY_GLOBOPLAY = 4097, KEY_DISNEY = 4141, KEY_TCL_MENU = 4514, KEY_TCL_123 = 4056,
+            KEY_INFO = KeyEvent.KEYCODE_INFO;
+    /** Besides an app, a button can open these (Remote Buttons): the Control Center or Recent apps, over any app. */
+    static final String OPEN_CONTROL = "@control", OPEN_RECENTS = "@recents";
     /** The Netflix button on Vestel TVs and Formovie projectors: STEM_1, which the TV hands to its Netflix key receiver (dumpsys window policy). */
     static final int KEY_STEM_NETFLIX = KeyEvent.KEYCODE_STEM_1;
     /** KTC's (NextStar) Tabii button: BUTTON_8, which the TV hands to its hot-key receiver (its log: "keycode = 195"). */
@@ -37,7 +46,9 @@ final class Prefs {
                     KEY_SONY_PLAY}
             : RemoteKeys.STEM_NETFLIX ? new int[] {KEY_STEM_NETFLIX}
             : RemoteKeys.KTC ? new int[] {KEY_KTC_TABII}
-            : new int[] {KEY_NETFLIX, KEY_YOUTUBE, KEY_PRIME, KEY_TCL_CHANNEL};
+            // In the remote's order: the app buttons, then ≡, 123 and ⓘ.
+            : new int[] {KEY_NETFLIX, KEY_PRIME, KEY_YOUTUBE, KEY_GLOBOPLAY, KEY_TCL_CHANNEL, KEY_DISNEY, KEY_TCL_MENU,
+                    KEY_TCL_123, KEY_INFO};
 
     /** Bumped by every change: screens compare it to know when to redraw. */
     static volatile int version;
@@ -366,61 +377,6 @@ final class Prefs {
         StringBuilder sb = new StringBuilder();
         for (int key : KEYS) sb.append(key).append('=').append(key == keyCode ? pkg : keyApp(key)).append('\n');
         if (!writeKeys(sb.toString())) return false;
-        version++;
-        return true;
-    }
-
-    // MARK: - Shortcut buttons: Recent apps and the Control Center
-
-    static final int SHORTCUT_RECENTS = 0, SHORTCUT_CONTROL = 1;
-    private static final String[] SHORTCUT_NAMES = {"recents", "control"};
-    /** The media buttons that can open a shortcut (Remote Buttons); 0 = none, the default. */
-    static final int[] SHORTCUT_KEYS = {0, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY,
-            KeyEvent.KEYCODE_MEDIA_PAUSE, KeyEvent.KEYCODE_MEDIA_STOP, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD,
-            KeyEvent.KEYCODE_MEDIA_REWIND, KeyEvent.KEYCODE_MEDIA_NEXT, KeyEvent.KEYCODE_MEDIA_PREVIOUS,
-            KeyEvent.KEYCODE_MEDIA_RECORD};
-    private static final int[] shortcutKeys = new int[SHORTCUT_NAMES.length];
-    private static long shortcutsStamp = Long.MIN_VALUE;
-
-    /** Its own tiny file ("recents=85"), read by the key service (:keys) on every key; again only when it changes. */
-    private static File shortcutsFile() {
-        return new File(app.getFilesDir(), "shortcut-keys.txt");
-    }
-
-    /** The key code that opens this shortcut, or 0. */
-    static int shortcutKey(int which) {
-        synchronized (shortcutKeys) {
-            File f = shortcutsFile();
-            long stamp = f.lastModified() * 31 + f.length();
-            if (stamp != shortcutsStamp) {
-                shortcutsStamp = stamp;
-                java.util.Arrays.fill(shortcutKeys, 0);
-                if (stamp != 0) {
-                    try (BufferedReader r = new BufferedReader(new FileReader(f))) {
-                        String line;
-                        while ((line = r.readLine()) != null) {
-                            for (int i = 0; i < SHORTCUT_NAMES.length; i++) {
-                                String prefix = SHORTCUT_NAMES[i] + "=";
-                                if (line.startsWith(prefix)) shortcutKeys[i] = Integer.parseInt(line.substring(prefix.length()).trim());
-                            }
-                        }
-                    } catch (IOException | NumberFormatException ignored) {
-                    }
-                }
-            }
-            return shortcutKeys[which];
-        }
-    }
-
-    /** One button, one shortcut: picking a button the other shortcut had takes it from that one. */
-    static boolean setShortcutKey(int which, int keyCode) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < SHORTCUT_NAMES.length; i++) {
-            int key = i == which ? keyCode : shortcutKey(i);
-            if (i != which && key == keyCode) key = 0;
-            sb.append(SHORTCUT_NAMES[i]).append('=').append(key).append('\n');
-        }
-        if (!writeSafely(shortcutsFile(), sb.toString())) return false;
         version++;
         return true;
     }
