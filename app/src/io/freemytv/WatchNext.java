@@ -25,6 +25,12 @@ final class WatchNext {
     private WatchNext() {}
 
     static final String PERMISSION = "android.permission.READ_TV_LISTINGS";
+    /**
+     * Never shown: YouTube's apps. On Google TV 14 (TCL C6K) YouTube writes nothing to the list, and on an older Android
+     * TV it wrote a row once and never updated it (the same watched video forever). Its history needs a Google sign-in.
+     */
+    private static final Set<String> LEFT_OUT = new HashSet<>(java.util.Arrays.asList("com.google.android.youtube.tv",
+            "com.google.android.youtube.tvkids", "com.google.android.youtube.tvmusic", "com.google.android.youtube.tvunplugged"));
     /** The most titles on the tab: two more columns than fit on screen. */
     private static final int MAX = Recs.ON_SCREEN + 6;
     private static final String[] COLUMNS = {
@@ -73,7 +79,7 @@ final class WatchNext {
         Set<String> seen = new HashSet<>();
         for (Row r : rows) {
             if (out.size() >= MAX) break;
-            if (r.pkg == null || r.title == null || r.intent == null || Prefs.watchNextOff(r.pkg)) continue;
+            if (r.pkg == null || r.title == null || r.intent == null || LEFT_OUT.contains(r.pkg) || Prefs.watchNextOff(r.pkg)) continue;
             String app = appName(pm, r.pkg);
             // One card per title, even when two apps keep it (Nuvio and Nuvio Legacy): the most recent wins.
             if (app == null || !seen.add(r.title.trim().toLowerCase(java.util.Locale.ROOT))) continue;
@@ -94,7 +100,7 @@ final class WatchNext {
     }
 
     /** Video apps that may keep a list, listed in More Settings even before they have anything in it. */
-    private static final String[] VIDEO_APPS = {"com.google.android.youtube.tv", "com.netflix.ninja",
+    private static final String[] VIDEO_APPS = {"com.netflix.ninja",
         "com.amazon.amazonvideo.livingroom", "com.disney.disneyplus", "com.wbd.stream", "com.apple.atve.androidtv.appletv",
         "com.globo.globotv", "com.hulu.livingroomplus", "com.cbs.ott", "com.peacocktv.peacockandroid", "com.nuvio.tv",
         "space.nuvio.nativelegacy", "com.stremio.one", "tv.pluto.android", "com.crunchyroll.crunchyroid"};
@@ -119,7 +125,7 @@ final class WatchNext {
                 new String[] {TvContract.WatchNextPrograms.COLUMN_PACKAGE_NAME}, null, null, null)) {
             while (q != null && q.moveToNext()) {
                 String pkg = q.getString(0);
-                String name = pkg == null ? null : appName(pm, pkg);
+                String name = pkg == null || LEFT_OUT.contains(pkg) ? null : appName(pm, pkg);
                 if (name != null && seen.add(pkg)) out.add(new String[] {pkg, name});
             }
         } catch (RuntimeException e) {
@@ -160,7 +166,7 @@ final class WatchNext {
                 p.progress = (float) o.optDouble("progress", 0);
                 p.meta = o.optString("meta");
                 p.detailed = true;
-                out.add(p);
+                if (!LEFT_OUT.contains(p.pkg)) out.add(p);   // a list saved before they were left out
             }
         } catch (org.json.JSONException ignored) {
         }
