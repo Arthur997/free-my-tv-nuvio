@@ -309,6 +309,7 @@ public class SettingsActivity extends Activity {
             p.rows.add(opens(() -> Ui.tr("Clima e cotações", "Weather and prices", "Clima y cotizaciones"), () -> open(weatherPage())));
             p.rows.add(opens(() -> Ui.tr("Tela de descanso", "Screensaver"), () -> open(screensaverPage())));
             p.rows.add(opens(() -> Ui.tr("Prateleira", "Shelf"), this::openShelfEditor));
+            p.rows.add(opens(() -> Ui.tr("Apps da TV", "TV Apps", "Apps de la TV"), this::openTvApps));
             p.rows.add(opens(() -> Ui.tr("Botões do Controle", "Remote Buttons"), () -> {
                 HomeMode.ensureRemoteService(getContext(), 0);   // the buttons work from inside other apps through this service
                 loadApps();
@@ -427,12 +428,44 @@ public class SettingsActivity extends Activity {
                             setKeyApp(key, appPkgs.get(at < 0 ? (dir > 0 ? 0 : n - 1) : (at + dir + n) % n));
                         }, null));
             }
+            p.rows.add(shortcutRow(() -> Ui.tr("Apps recentes", "Recent apps", "Apps recientes"), Prefs.SHORTCUT_RECENTS));
+            p.rows.add(shortcutRow(() -> Ui.tr("Central de controle", "Control Center", "Centro de control"), Prefs.SHORTCUT_CONTROL));
             p.hint = () -> keysHint(labels);
-            p.hint2 = () -> RemoteKeys.supported() ? Ui.tr("Disney e Globoplay: a própria TV controla esses botões.",
+            p.hint2 = () -> Prefs.shortcutKey(Prefs.SHORTCUT_RECENTS) != 0 || Prefs.shortcutKey(Prefs.SHORTCUT_CONTROL) != 0
+                    ? Ui.tr("Os botões de mídia escolhidos abrem por cima de qualquer app e deixam de controlar a reprodução.",
+                            "The media buttons picked here open over any app and no longer control playback.",
+                            "Los botones multimedia elegidos abren sobre cualquier app y dejan de controlar la reproducción.")
+                    : RemoteKeys.supported() ? Ui.tr("Disney e Globoplay: a própria TV controla esses botões.",
                     "Disney and Globoplay: the TV itself controls those buttons.")
                     : Ui.tr("Esses são os botões do controle da TCL: nesta TV, os botões funcionam como sempre.",
                     "These are the TCL remote's buttons: on this TV, the buttons work as they always did.");
             return p;
+        }
+
+        /** A shortcut (Recent apps, the Control Center) and the media button that opens it. */
+        private Row shortcutRow(java.util.function.Supplier<String> label, int which) {
+            return choice(label, SettingsView::shortcutKeyNames, () -> shortcutKeyIndex(which),
+                    at -> setShortcutKey(which, Prefs.SHORTCUT_KEYS[at]));
+        }
+
+        /** The names of Prefs.SHORTCUT_KEYS, in its order. */
+        private static List<String> shortcutKeyNames() {
+            return list(Ui.tr("Nada", "Nothing", "Nada"), Ui.tr("Play/Pause", "Play/Pause", "Reproducir/Pausa"), Ui.tr("Play", "Play", "Reproducir"), Ui.tr("Pause", "Pause", "Pausa"), Ui.tr("Parar", "Stop", "Detener"),
+                    Ui.tr("Avançar", "Fast-forward", "Avanzar"), Ui.tr("Retroceder", "Rewind", "Retroceder"), Ui.tr("Próximo", "Next", "Siguiente"), Ui.tr("Anterior", "Previous", "Anterior"), Ui.tr("Gravar", "Record", "Grabar"));
+        }
+
+        private static int shortcutKeyIndex(int which) {
+            int key = Prefs.shortcutKey(which);
+            for (int i = 0; i < Prefs.SHORTCUT_KEYS.length; i++) if (Prefs.SHORTCUT_KEYS[i] == key) return i;
+            return 0;
+        }
+
+        /** Saves a shortcut's button; from inside other apps it needs the key service, as the app buttons. */
+        private void setShortcutKey(int which, int key) {
+            keysError = Prefs.setShortcutKey(which, key) ? ""
+                    : Ui.tr("Não deu para salvar a escolha. Tente de novo.", "Couldn't save the choice. Try again.",
+                    "No se pudo guardar la elección. Inténtalo de nuevo.");
+            if (!keysServiceOn) HomeMode.ensureRemoteService(getContext(), 0);
         }
 
         private boolean keysServiceOn = true;   // read by the poll: the TV's list of enabled accessibility services
@@ -1291,6 +1324,164 @@ public class SettingsActivity extends Activity {
                     if (!message.isEmpty()) handler.postDelayed(() -> { cityStatus = ""; invalidate(); }, 4000);
                 });
             }).start();
+        }
+
+        // MARK: - TV Apps: any app on or off, the system's too
+
+        private static final int APPS_INSTALLED = 0, APPS_SYSTEM = 1, APPS_OFF = 2;
+        private List<HomeMode.TvApp> tvApps;   // null until read
+        private final java.util.Map<String, String> tvAppLabels = new java.util.HashMap<>();
+        private final java.util.Map<String, Boolean> tvAppsPending = new java.util.HashMap<>();   // asked: on or off
+        private String tvAppsStatus = "";
+        private boolean readingTvApps;
+
+        private void openTvApps() {
+            Page p = new Page(Ui.tr("Apps da TV", "TV Apps", "Apps de la TV"));
+            p.rows.add(tvAppsGroup(() -> Ui.tr("Apps instalados", "Installed apps", "Apps instaladas"), APPS_INSTALLED));
+            p.rows.add(tvAppsGroup(() -> Ui.tr("Apps do sistema", "System apps", "Apps del sistema"), APPS_SYSTEM));
+            p.rows.add(tvAppsGroup(() -> Ui.tr("Desligados", "Turned off", "Apagadas"), APPS_OFF));
+            p.hint = this::tvAppsHint;
+            open(p);
+            readTvApps();
+        }
+
+        private Row tvAppsGroup(java.util.function.Supplier<String> label, int which) {
+            Row r = new Row(label, () -> tvApps == null ? "…" : String.valueOf(tvAppsIn(which).size()), () -> open(tvAppsPage(label.get(), which)), null, null);
+            r.opens = true;
+            return r;
+        }
+
+        private List<HomeMode.TvApp> tvAppsIn(int which) {
+            List<HomeMode.TvApp> out = new ArrayList<>();
+            if (tvApps == null) return out;
+            for (HomeMode.TvApp app : tvApps) {
+                if (which == APPS_OFF ? !app.enabled : which == APPS_SYSTEM ? app.system : !app.system) out.add(app);
+            }
+            return out;
+        }
+
+        /** One app per row: OK turns it on or off; a locked one says why it stays. */
+        private Page tvAppsPage(String title, int which) {
+            Page p = new Page(title);
+            p.rebuild = () -> {
+                List<String> before = tvAppsShown(p);
+                String focused = page == p && focus < before.size() ? before.get(focus) : null;   // the focus stays on its app
+                p.rows.clear();
+                List<String> shown = new ArrayList<>();
+                for (HomeMode.TvApp app : tvAppsIn(which)) {
+                    shown.add(app.pkg);
+                    String name = tvAppLabels.containsKey(app.pkg) ? tvAppLabels.get(app.pkg) : app.pkg;
+                    p.rows.add(new Row(() -> name, () -> tvAppState(app), () -> toggleTvApp(app, name), null,
+                            () -> !app.locked.isEmpty()));
+                }
+                if (p.rows.isEmpty()) {
+                    p.rows.add(new Row(() -> tvApps == null ? Ui.tr("Lendo os apps…", "Reading the apps…", "Leyendo las apps…") : Ui.tr("Nenhum.", "None.", "Ninguna."), () -> "", () -> {}, null, () -> true));
+                }
+                tvAppsShownByPage.put(p, shown);
+                for (int i = 0; focused != null && i < shown.size(); i++) if (shown.get(i).equals(focused)) focus = i;
+                keepVisible(false);
+            };
+            p.hint = this::tvAppsHint;
+            p.rebuild.run();
+            return p;
+        }
+
+        private final java.util.Map<Page, List<String>> tvAppsShownByPage = new java.util.WeakHashMap<>();
+
+        private List<String> tvAppsShown(Page p) {
+            List<String> shown = tvAppsShownByPage.get(p);
+            return shown == null ? new ArrayList<>() : shown;
+        }
+
+        private String tvAppState(HomeMode.TvApp app) {
+            Boolean asked = tvAppsPending.get(app.pkg);
+            if (asked != null) return asked ? Ui.tr("Ligando…", "Turning on…", "Encendiendo…") : Ui.tr("Desligando…", "Turning off…", "Apagando…");
+            if (!app.enabled) return Ui.tr("Desligado", "Off");
+            return app.locked.isEmpty() ? Ui.tr("Ligado", "On") : Ui.tr("Protegido", "Protected", "Protegida");
+        }
+
+        private String tvAppsHint() {
+            if (!tvAppsStatus.isEmpty()) return tvAppsStatus;
+            return Ui.tr("Nada é desinstalado: o modo Original liga todos os apps de volta.", "Nothing is uninstalled: Original turns every app back on.", "Nada se desinstala: el modo Original vuelve a encender todas las apps.");
+        }
+
+        private void toggleTvApp(HomeMode.TvApp app, String name) {
+            if (!app.locked.isEmpty()) {
+                tvAppsStatus = Ui.trf(Ui.tr("{app} fica como está: {reason}.", "{app} stays as it is: {reason}.", "{app} queda como está: {reason}."), "app", name, "reason", app.locked);
+                return;
+            }
+            if (tvAppsPending.containsKey(app.pkg)) return;
+            if (app.enabled && app.system) {
+                // A system app: asked first, it can be a piece the TV uses.
+                openPicker(Ui.trf(Ui.tr("Desligar {app}?", "Turn off {app}?", "¿Apagar {app}?"), "app", name),
+                        list(Ui.tr("Desligar", "Turn off", "Apagar"), Ui.tr("Cancelar", "Cancel")), 1, at -> { if (at == 0) askTvApp(app.pkg, false); });
+                return;
+            }
+            askTvApp(app.pkg, !app.enabled);
+        }
+
+        private void askTvApp(String pkg, boolean on) {
+            tvAppsStatus = "";
+            tvAppsPending.put(pkg, on);
+            HomeMode.requestAppEnabled(getContext(), pkg, on);
+            // The job runs in the main process; the list is read again once it's done (the checks take a few seconds).
+            handler.postDelayed(this::readTvApps, 3000);
+            handler.postDelayed(() -> {
+                tvAppsPending.remove(pkg);
+                readTvApps();
+            }, 8000);
+            invalidate();
+        }
+
+        /** The apps, through the TV's shell, on a thread; the pages on screen are rebuilt with them. */
+        private void readTvApps() {
+            if (readingTvApps) return;
+            readingTvApps = true;
+            new Thread(() -> {
+                List<HomeMode.TvApp> list = null;
+                String error = "";
+                java.util.Map<String, String> labels = new java.util.HashMap<>();
+                try {
+                    list = HomeMode.tvApps(getContext());
+                    java.util.Map<String, Integer> seen = new java.util.HashMap<>();
+                    for (HomeMode.TvApp app : list) {
+                        String label = HomeApps.label(getContext(), app.pkg);
+                        labels.put(app.pkg, label);
+                        seen.put(label, seen.containsKey(label) ? seen.get(label) + 1 : 1);
+                    }
+                    // Several "Android System": the package tells them apart.
+                    for (HomeMode.TvApp app : list) {
+                        String label = labels.get(app.pkg);
+                        if (seen.get(label) > 1 && !label.equals(app.pkg)) labels.put(app.pkg, label + " · " + app.pkg);
+                    }
+                    // By name; the ones with only a package name (no label) after them.
+                    Collections.sort(list, (a, b) -> {
+                        String la = labels.get(a.pkg), lb = labels.get(b.pkg);
+                        boolean na = la.equals(a.pkg), nb = lb.equals(b.pkg);
+                        if (na != nb) return na ? 1 : -1;
+                        return la.toLowerCase(Locale.ROOT).compareTo(lb.toLowerCase(Locale.ROOT));
+                    });
+                } catch (java.io.IOException e) {
+                    AppLog.w("tv apps: " + e.getMessage());
+                    error = Ui.trf(Ui.tr("Não deu para ler os apps: {error}", "Couldn't read the apps: {error}", "No se pudieron leer las apps: {error}"), "error", e.getMessage());
+                }
+                List<HomeMode.TvApp> result = list;
+                String message = error;
+                handler.post(() -> {
+                    readingTvApps = false;
+                    if (result != null) {
+                        tvApps = result;
+                        tvAppLabels.putAll(labels);
+                        for (HomeMode.TvApp app : result) {
+                            Boolean asked = tvAppsPending.get(app.pkg);
+                            if (asked != null && asked == app.enabled) tvAppsPending.remove(app.pkg);
+                        }
+                    }
+                    if (!message.isEmpty()) tvAppsStatus = message;
+                    if (page != null && page.rebuild != null) page.rebuild.run();
+                    invalidate();
+                });
+            }, "tv-apps").start();
         }
 
         // MARK: - Shelf editor

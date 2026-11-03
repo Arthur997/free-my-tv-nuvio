@@ -87,7 +87,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static final long TOAST_MS = 6000, FADE_MS = 800;
     /** Blur radii of the shadow and shadowDeep paints (Shadows needs them to draw the same blur on older TVs). */
     private static final float SHADOW_BLUR = 26, DEEP_BLUR = 30;
-    private static final int SKY = 0, HERO = 1, STATUS = 2, PLATTER = 3, TILES = 4, DRAWER = 5, SHEET = 6, TOAST = 7, MENU = 8;
+    private static final int SKY = 0, HERO = 1, STATUS = 2, PLATTER = 3, TILES = 4, DRAWER = 5, SHEET = 6, TOAST = 7, MENU = 8, CONTROL = 9;
     private static final int Z_STATUS = 0, Z_HERO = 1, Z_SHELF = 2, Z_DRAWER = 3;
     private static final ExecutorService LOADER = Executors.newSingleThreadExecutor();
     // Light design (the L_ constants): title, tab bar, three recommendation cards and the shelf.
@@ -124,7 +124,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         @Override public void click(int id) { press(); }
     });
     private final RectF a11yRect = new RectF();
-    private final Layer sky, heroLayer, status, platter, tiles, drawerLayer, sheetLayer, menuLayer, toastLayer;
+    private final Layer sky, heroLayer, status, platter, tiles, drawerLayer, sheetLayer, menuLayer, controlLayer, toastLayer;
     private int zone = Z_SHELF;
 
     // Night look (like Apple's "Automatic" appearance): darker from 18:00 to 6:00, with a 2 s transition.
@@ -150,7 +150,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private int cardOffset;
     private String cardCounter = "";
     // The top row: the three tabs, then the icon-only buttons (Search, Live TV, HDMI Inputs, TV Settings).
-    private static final int BUTTONS = 4, TOP_ITEMS = 3 + BUTTONS;
+    private static final int BUTTONS = 2, TOP_ITEMS = 3 + BUTTONS;
     private final Spring[] topFocus = new Spring[TOP_ITEMS];
     private final RectF[] topRects = new RectF[TOP_ITEMS];
     private final Spring[] cardFocus = new Spring[SLOTS];
@@ -253,6 +253,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final Paint shadowDeep = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint halo = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Shadows shadows = new Shadows();
+    private final FocusRing focusRing = new FocusRing(shadows);
     private final Map<Bitmap, BitmapShader> imageShaders = new WeakHashMap<>();
     private final Matrix imageMatrix = new Matrix();
     private final Paint imageFill = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
@@ -302,6 +303,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 case DRAWER: drawDrawer(c); break;
                 case SHEET: drawSheet(c); break;
                 case MENU: drawMenu(c); break;
+                case CONTROL: controlCenter.draw(c); break;
                 default: drawToast(c); break;
             }
             scene.setOffset(0, 0);
@@ -347,13 +349,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         drawerLayer = new Layer(a, DRAWER);
         sheetLayer = new Layer(a, SHEET);
         menuLayer = new Layer(a, MENU);
+        controlCenter = makeControlCenter(a);
+        controlLayer = new Layer(a, CONTROL);
         toastLayer = new Layer(a, TOAST);
         // Hardware layers on the GPU: only the one that changed is redrawn; moving, fading and scaling stay cheap.
         // Not on Android 9 to 11: on older GPUs (a Mi Box 3's Mali-450) redrawing and compositing a big layer on every
         // frame cost more than drawing straight to the screen (measured: focus on the picks 33 → 12 ms a frame, the
         // drawer 19 → 17 ms).
-        for (View v : new View[] {heroLayer, status, platter, tiles, drawerLayer, sheetLayer, menuLayer}) v.setLayerType(Ui.LEGACY ? LAYER_TYPE_NONE : LAYER_TYPE_HARDWARE, null);
-        for (View v : new View[] {sky, heroLayer, status, platter, tiles, drawerLayer, sheetLayer, menuLayer, toastLayer}) {
+        for (View v : new View[] {heroLayer, status, platter, tiles, drawerLayer, sheetLayer, menuLayer, controlLayer}) v.setLayerType(Ui.LEGACY ? LAYER_TYPE_NONE : LAYER_TYPE_HARDWARE, null);
+        for (View v : new View[] {sky, heroLayer, status, platter, tiles, drawerLayer, sheetLayer, menuLayer, controlLayer, toastLayer}) {
             v.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);   // TalkBack reads the items (Spoken)
             addView(v);
         }
@@ -372,6 +376,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         checkNight(false);
         sheetLayer.setVisibility(INVISIBLE);
         menuLayer.setVisibility(INVISIBLE);
+        controlLayer.setVisibility(INVISIBLE);
         scene.setMotion(0.6f, 0f);
         updatePalette();
         // First time: the shelf right away (a cold start opens with the apps already there; their art comes from disk);
@@ -410,6 +415,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         updatePalette();
         updatePicks();
         hideMenu();   // back from App info or the uninstall question
+        hideControl();
         if (sheetOpen) closeSheet();
         sheet.snap(sheet.target);
         motionDirty = true;
@@ -455,6 +461,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** Starting state (Home pressed while the home screen is showing): first app focused, drawer and sheet closed. */
     void reset(boolean animated) {
         hideMenu();
+        hideControl();
         zone = Z_SHELF;
         shelfIndex = 0;
         sheetOpen = false;
@@ -478,12 +485,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** The corner buttons, with their names in the current language. */
     private void makeLightButtons() {
         lightButtons.clear();
-        lightButtons.add(HomeApps.action(HomeApps.SEARCH, "search", Ui.tr("Buscar", "Search", "Buscar"), "search"));
-        // Live TV stays on the shelf and in the inputs drawer; here, the broom frees memory (weak TVs).
-        lightButtons.add(HomeApps.action(HomeApps.FREE_MEMORY, "free-memory", Ui.tr("Liberar memória", "Free memory", "Liberar memoria"), "clean"));
         lightButtons.add(HomeApps.action(HomeApps.INPUTS, "inputs", Ui.tr("Entradas HDMI", "HDMI Inputs"), "hdmi"));
-        // The gear opens the TV's settings; Free My TV's own are first in More Apps.
-        lightButtons.add(HomeApps.action(HomeApps.ANDROID_SETTINGS, "settings", Ui.tr("Ajustes da TV", "TV Settings"), "settings"));
+        // The rest (Wi-Fi, Bluetooth, the speed test, memory, recent apps, both settings) is in the Control Center.
+        lightButtons.add(HomeApps.action(HomeApps.CONTROL, "control", Ui.tr("Central de controle", "Control Center", "Centro de control"), "control"));
     }
 
     /** The title at the top left: "Sua TCL" (the TV's brand, never its model), or "Para você" when it has none. */
@@ -529,6 +533,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         measure(drawerLayer, width, Math.round(600 * kk));
         measure(sheetLayer, width, height);
         measure(menuLayer, width, height);
+        measure(controlLayer, width, height);
         measure(toastLayer, Math.round(1000 * kk), Math.round(220 * kk));
         setMeasuredDimension(width, height);
     }
@@ -550,6 +555,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         sheetLayer.setPivotX(width / 2f);
         sheetLayer.setPivotY(height / 2f);
         menuLayer.layout(0, 0, width, height);
+        controlLayer.layout(0, 0, width, height);
         place(toastLayer, (width - toastLayer.getMeasuredWidth()) / 2, 0);
     }
 
@@ -571,6 +577,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         layoutStatus();
         layoutDrawer();
         layoutLight();
+        layoutControl();
         hero = null;
         heroFrom = null;
         updatePicks();
@@ -682,6 +689,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         boolean bgFading = tickBackgroundFade(up);
         boolean nightMoving = tickNight(up);
         boolean menuMoving = menu.step(dt), menuRowMoving = menuRow.step(dt);
+        boolean controlMoving = control.step(dt), controlTilesMoving = controlCenter.step(dt);
 
         if (drawerMoving || sheetMoving || motionDirty) updateMotion();
         // Opening and closing the drawer only moves the cached layers: redrawing the glass on every frame made the TV
@@ -697,9 +705,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (bgFading || (drawerWasMoving && !drawerMoving)) platter.invalidate();
         if (menuMoving || menuDirty) updateMenuMotion();
         if (menuRowMoving || menuDirty) menuLayer.invalidate();
+        if (controlMoving || controlDirty) updateControlMotion();
+        if (controlTilesMoving || controlDirty) controlLayer.invalidate();
         drawerWasMoving = drawerMoving;
-        tilesDirty = statusDirty = heroDirty = drawerDirty = gridDirty = motionDirty = menuDirty = false;
+        tilesDirty = statusDirty = heroDirty = drawerDirty = gridDirty = motionDirty = menuDirty = controlDirty = false;
         if (updateClock()) {
+            controlCenter.minuteTick();   // the sleep timer's time
             layoutStatus();
             status.invalidate();
             if (showClock) heroLayer.invalidate();   // the clock at the top right
@@ -712,7 +723,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         // Busy: something is moving, or the sheet or the drawer is open.
         boolean busy = tilesMoving || statusMoving || heroMoving || drawerItemsMoving || gridMoving || drawerMoving
                 || sheetMoving || toastFading || heroFading || bgFading || nightMoving || sheetOpen || sheet.value > 0.001f
-                || drawerOpen || drawer.value > 0.001f || menuMoving || menuRowMoving || extras;
+                || drawerOpen || drawer.value > 0.001f || menuMoving || menuRowMoving || controlMoving || controlTilesMoving
+                || extras;
         // Still: no frames until something happens (a key, new data, a toast wakes it at once); a slow check meanwhile
         // catches the minute of the clock and anything that changed without waking it.
         if (frameQueued) return;   // something in this frame already woke the next one
@@ -1271,8 +1283,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /**
      * App icon like the ones in the tvOS 27 Dock: the brand color edge to edge (a soft gradient) with the logo.
-     * Focused: it grows 20% from the center, with a deep shadow (it "rises" toward the viewer) and a subtle glow at the
-     * top. No border and no reflection, as Apple does it.
+     * Focused: it grows 20% from the center, with a deep shadow (it "rises" toward the viewer), a subtle glow at the
+     * top and the focus ring (FocusRing): growth alone was hard to tell from across the room.
      */
     private void drawShelfTile(Canvas c, int i) {
         HomeApps.Item it = shelf.get(i);
@@ -1295,6 +1307,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         shadowDeep.setColor(Ui.alpha(0xFF000000, tone(0.08f, 0.3f) + tone(0.24f, 0.3f) * fc));
         shadows.draw(c, tmp, r0, DEEP_BLUR * k, shadowDeep);
         c.restore();
+        focusRing.glow(c, cell, r, fc, k, ringGlow());
         int[] style = TILE_STYLE.get(it.key);
         if (it.logo != null && style != null) {
             LinearGradient brand = tileGradients.get(it.key);
@@ -1313,6 +1326,17 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         } else {
             if (it.tile != null) roundImage(c, it.tile, cell, r);
         }
+        focusRing.ring(c, cell, r, fc, k, ringInk());
+    }
+
+    /** The focus ring's line: dark on the day glass, white at night. */
+    private int ringInk() {
+        return tone(0xD91D1D1F, 0xF2FFFFFF);
+    }
+
+    /** The glow behind the focused app: a light bloom on the day glass, a soft white one at night. */
+    private int ringGlow() {
+        return tone(0xE6FFFFFF, 0x59FFFFFF);
     }
 
     /**
@@ -1772,7 +1796,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
     }
 
-    /** 16:9 sheet card. Focused (the shelf's subtle focus): it grows, with a shadow, a soft sheen and a thin border. */
+    /** 16:9 sheet card. Focused (the shelf's focus): it grows, with a shadow, a soft sheen and the focus ring. */
     private void drawCard(Canvas c, Bitmap image, RectF base, float radius, float f, float grow) {
         float s = 1 + grow * f;
         float cx = base.centerX(), cy = base.centerY();
@@ -1785,6 +1809,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             shadow.setColor(Ui.alpha(0xFF000000, 0.55f * fc));
             shadows.draw(c, tmp, r, SHADOW_BLUR * k, shadow);
         }
+        focusRing.glow(c, cell, r, fc, k, 0x4DFFFFFF);   // over the sheet's dark scrim: white in either look
         if (image != null) roundImage(c, image, cell, r);
         if (f > 0.01f) drawUnitShader(c, cell, r, sheen, GRID_SHEEN, fc);
         if (fc < 0.99f) {
@@ -1793,13 +1818,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         border.setColor(0x14FFFFFF);
         c.drawRoundRect(cell, r, r, border);
-        if (f > 0.01f) {
-            rim.setShader(null);
-            rim.setColor(Ui.alpha(0xFFFFFFFF, 0.4f * fc));
-            rim.setStrokeWidth(1.5f * k);
-            c.drawRoundRect(cell, r, r, rim);
-            rim.setStrokeWidth(2.5f * k);
-        }
+        focusRing.ring(c, cell, r, fc, k, 0xF2FFFFFF);
     }
 
     // MARK: - App options (hold OK on an app): a rounded panel that slides out at its side
@@ -2175,6 +2194,68 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
     }
 
+    // MARK: - Control Center (the button at the top right): the panel (ControlCenter) below it
+
+    private static final float CC_TOP_GAP = 92;   // under the button and its name, which titles the panel
+    private final Spring control = new Spring(0.22f, 0.86f, 0);
+    private final ControlCenter controlCenter;
+    private boolean controlOpen, controlDirty;
+
+    private ControlCenter makeControlCenter(Activity a) {
+        return new ControlCenter(a, new ControlCenter.Host() {
+            @Override public View view() { return HomeView.this; }
+            @Override public void redraw() {
+                controlDirty = true;
+                wake();
+            }
+            @Override public void toast(String text) { showToast(text); }
+            @Override public void close(boolean opened) {
+                // Something opened over the home screen: gone at once (the home screen stops drawing while hidden).
+                if (opened) hideControl();
+                else closeControl();
+            }
+            @Override public float dark() { return HomeView.this.dark(); }
+        });
+    }
+
+    /** Below the button, its right edge on the content's. */
+    private void layoutControl() {
+        controlCenter.layout(k, CONTENT_R * k, (L_BUTTON_CY + L_BUTTON / 2 + CC_TOP_GAP) * k);
+        controlLayer.setPivotX(controlCenter.bounds().right);
+        controlLayer.setPivotY(controlCenter.bounds().top);
+    }
+
+    private void openControl() {
+        controlOpen = true;
+        controlCenter.open();
+        control.target = 1;
+        controlDirty = true;
+    }
+
+    private void closeControl() {
+        controlOpen = false;
+        controlCenter.stop();
+        control.target = 0;
+        spoken.focusMoved();
+    }
+
+    /** Closed at once (the home screen comes back, or Home was pressed). */
+    private void hideControl() {
+        closeControl();
+        control.snap(0);
+        updateControlMotion();
+    }
+
+    /** The panel's fade, drop and growth from the button (view properties only, as the menu's). */
+    private void updateControlMotion() {
+        float v = control.value, a = Ui.clamp(v), s = 0.92f + 0.08f * v;
+        controlLayer.setAlpha(a);
+        controlLayer.setVisibility(a > 0.002f ? VISIBLE : INVISIBLE);
+        controlLayer.setScaleX(s);
+        controlLayer.setScaleY(s);
+        controlLayer.setTranslationY(-(1 - v) * 16 * k);
+    }
+
     // MARK: - Focus on a card: the background, a light sweep and a preview follow it
 
     /** The card under the focus (an index in the tab's list), or -1. */
@@ -2483,12 +2564,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /** OK: the menu's focused option while it's open, otherwise the focused item. */
     private void press() {
-        if (menuOpen) chooseMenu();
+        if (controlOpen) controlCenter.press();
+        else if (menuOpen) chooseMenu();
         else activate();
     }
 
     private void back() {
-        if (menuOpen) {
+        if (controlOpen) {
+            closeControl();
+        } else if (menuOpen) {
             closeMenu();
         } else if (sheetOpen) {
             closeSheet();
@@ -2505,6 +2589,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void move(int dx, int dy) {
+        if (controlOpen) {
+            controlCenter.move(dx, dy);
+            return;
+        }
         if (menuOpen) {
             moveMenu(dx, dy);
             return;
@@ -2656,9 +2744,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             r = tileRects[shelfIndex];
         }
         click.open();
-        if (it.kind == HomeApps.FREE_MEMORY) {
-            HomeMode.requestFreeMemory(getContext());
-            showToast(Ui.tr("Liberando memória…", "Freeing memory…", "Liberando memoria…"));
+        if (it.kind == HomeApps.CONTROL) {
+            openControl();
             return;
         }
         if (it.kind == HomeApps.ALL_APPS) {

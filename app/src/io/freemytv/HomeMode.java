@@ -368,11 +368,14 @@ final class HomeMode {
             }
             String homePkg = packageOf(home);
             boolean setupOn = setupHome && present.contains(GOOGLE_SETUP) && !keptOff.contains(GOOGLE_SETUP);
+            // Turned back on by hand (Settings > TV Apps): the switch leaves it on.
+            List<String> keptOn = stringList(state(c), "keptOn");
             int done = 0;
             for (String pkg : targets) {
                 done++;
                 busy(c, Ui.trf("Turning off apps ({done}/{total})…", "done", done, "total", targets.size()));
-                if (!candidates.contains(pkg) || needed.contains(pkg) || owners.contains(pkg) || keptOff.contains(pkg)) continue;
+                if (!candidates.contains(pkg) || needed.contains(pkg) || owners.contains(pkg) || keptOff.contains(pkg)
+                        || keptOn.contains(pkg)) continue;
                 // The TV's home screen only once Google TV's setup app is off: its recovery screen would take Home.
                 if (pkg.equals(homePkg) && setupOn) {
                     AppLog.w("kept the TV's home screen on: Google TV's setup app is still on");
@@ -634,8 +637,10 @@ final class HomeMode {
                 if (!back.isEmpty()) notice(app, Ui.trf("Turned back on {list}: the TV's inputs or remote need it.", "list", String.join(", ", back)));
                 boolean setupOn = present.contains(GOOGLE_SETUP) && !disabledNow.contains(GOOGLE_SETUP)
                         && s.optBoolean("setupHome", true);
+                List<String> keptOn = stringList(s, "keptOn");
                 for (String pkg : order) {
-                    if (!mayTurnOff(pkg) || !present.contains(pkg) || owners.contains(pkg) || wait.contains(pkg)) continue;
+                    if (!mayTurnOff(pkg) || !present.contains(pkg) || owners.contains(pkg) || wait.contains(pkg)
+                            || keptOn.contains(pkg)) continue;
                     if (disabledNow.contains(pkg)) {
                         if (!keptOff.contains(pkg)) disabled.add(pkg);
                         continue;
@@ -912,20 +917,26 @@ final class HomeMode {
     // MARK: - Memory and caches (weak TVs)
 
     /**
-     * Closes the apps in the background (only those Android would close itself when short of memory: never the one on
-     * screen, the home screen, Android's own pieces or the TV's), measuring how much came back. Nothing is lost: they
-     * open again from the start. The caches on disk stay; they make the next start faster.
+     * Closes the apps left open in the background, all of each one (am force-stop, as App info > Force stop), except
+     * one still doing something for you (music, a cast) and never Android's, the TV's or this app. `am kill` closed only
+     * what Android already counted as disposable, and MemAvailable barely moved even then (it already counts the file
+     * cache, and cached apps sit compressed in zram): "10 MB freed" every time. Now it reports what the closed apps were
+     * using (their PSS). They open again from the start; their caches on disk stay.
      */
     static void freeMemoryNow(Context c) {
         synchronized (RUN) {
             try (Adb adb = Adb.connect(c, 10_000, null)) {
-                long before = memAvailableMB(adb);
-                List<String> background = backgroundApps(adb);
-                for (String pkg : background) adb.shell("am kill " + pkg);
-                SystemClock.sleep(1_000);   // the memory comes back as the processes end
-                long freed = Math.max(0, memAvailableMB(adb) - before);
-                AppLog.w("freed " + freed + " MB, closed " + background);
-                notice(c, Ui.trf("{n} MB of memory freed", "n", freed));
+                List<String> apps = openApps(adb);
+                apps.removeAll(busyApps(adb));
+                if (apps.isEmpty()) {
+                    AppLog.w("free memory: nothing open in the background");
+                    notice(c, Ui.tr("Nenhum app aberto em segundo plano.", "No apps open in the background.", "Ninguna app abierta en segundo plano."));
+                    return;
+                }
+                long mb = closeApps(adb, apps, appMemoryMB(adb));
+                AppLog.w("free memory: closed " + apps + ", " + mb + " MB");
+                notice(c, Ui.plural(Ui.tr("plural|one:{n} app encerrado, {mb} MB liberados|other:{n} apps encerrados, {mb} MB liberados", "plural|one:Closed {n} app, {mb} MB freed|other:Closed {n} apps, {mb} MB freed", "plural|one:{n} app cerrada, {mb} MB liberados|other:{n} apps cerradas, {mb} MB liberados"),
+                        apps.size()).replace("{mb}", String.valueOf(mb)));
             } catch (Exception e) {
                 AppLog.w("free memory failed: " + e.getMessage());
                 notice(c, Ui.trf("Couldn't free memory: {error}", "error", e.getMessage()));
@@ -1002,9 +1013,227 @@ final class HomeMode {
         return list;
     }
 
-    private static long memAvailableMB(Adb adb) throws IOException {
-        Matcher avail = Pattern.compile("MemAvailable:\\s+(\\d+) kB").matcher(adb.shell("cat /proc/meminfo"));
-        return avail.find() ? Long.parseLong(avail.group(1)) / 1024 : 0;
+    // MARK: - Sleep timer
+
+    /**
+     * The sleep timer ended: the TV goes to standby, as its power button does (SLEEP; some TVs only answer POWER, so
+     * that one when the screen is still on a moment later).
+     */
+    static void sleepNow(Context c) {
+        try (Adb adb = Adb.connect(c, 10_000, null)) {
+            adb.shell("input keyevent KEYCODE_SLEEP");
+            SystemClock.sleep(2_000);
+            if (adb.shell("dumpsys power | grep -m 1 mWakefulness=").contains("Awake")) {
+                adb.shell("input keyevent KEYCODE_POWER");
+            }
+            AppLog.w("sleep timer: the TV went to sleep");
+        } catch (IOException e) {
+            AppLog.w("sleep timer: couldn't turn the TV off: " + e.getMessage());
+        }
+    }
+
+    // MARK: - TV Apps (Settings): turning any app on or off by hand
+
+    /** One app of the TV: its package, a system app or not, on or off, and why it must stay as it is ("" = it may change). */
+    static final class TvApp {
+        final String pkg;
+        final boolean system, enabled;
+        final String locked;
+
+        TvApp(String pkg, boolean system, boolean enabled, String locked) {
+            this.pkg = pkg;
+            this.system = system;
+            this.enabled = enabled;
+            this.locked = locked;
+        }
+    }
+
+    /** Every app the TV has, through the shell (it sees them all). Takes a few seconds: never on the UI thread. */
+    static List<TvApp> tvApps(Context c) throws IOException {
+        try (Adb adb = Adb.connect(c, 30_000, null)) {
+            Set<String> all = packages(adb, ""), system = packages(adb, "-s"), off = packages(adb, "-d");
+            Set<String> homes = homePackages(adb, state(c));
+            String keyboard = keyboardPackage(adb);
+            Set<String> owners = wifiOwners(adb);
+            List<TvApp> list = new ArrayList<>();
+            for (String pkg : sorted(all)) {
+                list.add(new TvApp(pkg, system.contains(pkg), !off.contains(pkg), lockReason(pkg, homes, keyboard, owners)));
+            }
+            return list;
+        }
+    }
+
+    /** More Settings > TV Apps: turns one app on or off in the main process; the result comes back as a notice. */
+    static void requestAppEnabled(Context c, String pkg, boolean on) {
+        ModeJob.scheduleOne(c, ModeJob.APP_STATE, pkg + "|" + (on ? "on" : "off"));
+    }
+
+    /**
+     * Turns the app off (pm disable-user, never uninstalled or cleared) unless the TV needs it (lockReason, and the
+     * inputs' and remote's check), or back on. What goes off joins the list Original turns back on; one turned on by
+     * hand stays on, the switch won't turn it off again (keptOn).
+     */
+    static void setAppEnabledNow(Context c, String pkg, boolean on) {
+        synchronized (RUN) {
+            String label = HomeApps.label(c, pkg);
+            try (Adb adb = Adb.connect(c, 10_000, null)) {
+                JSONObject s = state(c);
+                String why = lockReason(pkg, homePackages(adb, s), keyboardPackage(adb), on ? new HashSet<>() : wifiOwners(adb));
+                if (!why.isEmpty()) {
+                    notice(c, Ui.trf(Ui.tr("{app} fica como está: {reason}.", "{app} stays as it is: {reason}.", "{app} queda como está: {reason}."), "app", label, "reason", why));
+                    return;
+                }
+                Set<String> disabled = new HashSet<>(stringList(s, "disabled"));
+                Set<String> keptOn = new HashSet<>(stringList(s, "keptOn")), keptOff = new HashSet<>(stringList(s, "keptOff"));
+                boolean done;
+                if (on) {
+                    done = adb.shell("pm enable " + pkg).contains("new state: enabled");
+                    if (done) {
+                        disabled.remove(pkg);
+                        keptOff.remove(pkg);
+                        keptOn.add(pkg);
+                    }
+                } else {
+                    Set<String> needed = neededByTv(adb, Collections.singleton(pkg));
+                    if (needed == null || needed.contains(pkg)) {
+                        notice(c, Ui.trf(Ui.tr("{app} continua ligado: as entradas ou o controle da TV precisam dele.", "{app} stays on: the TV's inputs or remote need it.", "{app} sigue encendida: las entradas o el control de la TV la necesitan."), "app", label));
+                        return;
+                    }
+                    done = adb.shell("pm disable-user --user 0 " + pkg).contains("disabled-user");
+                    if (done) {
+                        disabled.add(pkg);
+                        keptOn.remove(pkg);
+                    }
+                }
+                if (done) {
+                    record(adb, disabled);
+                    JSONObject latest = state(c);
+                    latest.put("disabled", new JSONArray(sorted(disabled))).put("keptOn", new JSONArray(sorted(keptOn)))
+                            .put("keptOff", new JSONArray(sorted(keptOff)));
+                    save(c, latest);
+                }
+                AppLog.w((on ? "turned on " : "turned off ") + pkg + (done ? "" : " (refused)"));
+                notice(c, done ? (on ? Ui.trf(Ui.tr("{app} está ligado", "{app} is on", "{app} está encendida"), "app", label) : Ui.trf(Ui.tr("{app} está desligado", "{app} is off", "{app} está apagada"), "app", label))
+                        : on ? Ui.trf(Ui.tr("Não deu para ligar {app}", "Couldn't turn on {app}", "No se pudo encender {app}"), "app", label) : Ui.trf(Ui.tr("Não deu para desligar {app}", "Couldn't turn off {app}", "No se pudo apagar {app}"), "app", label));
+            } catch (Exception e) {
+                AppLog.w("app state " + pkg + ": " + e.getMessage());
+                notice(c, on ? Ui.trf(Ui.tr("Não deu para ligar {app}", "Couldn't turn on {app}", "No se pudo encender {app}"), "app", label) : Ui.trf(Ui.tr("Não deu para desligar {app}", "Couldn't turn off {app}", "No se pudo apagar {app}"), "app", label));
+            }
+        }
+    }
+
+    /**
+     * Why an app may not change by hand ("" = it may). Home screens and Google TV's setup app either way: their order
+     * matters (the setup app's recovery screen takes Home), so only the switch and Original move them. To turn off, also
+     * Android's and the TV's own pieces, the keyboard, and an app that saved a Wi-Fi network (off, Android erases it;
+     * `owners` null = nobody could tell, so none).
+     */
+    private static String lockReason(String pkg, Set<String> homes, String keyboard, Set<String> owners) {
+        if (pkg.equals(PKG)) return Ui.tr("é o Free My TV", "it's Free My TV", "es Free My TV");
+        if (pkg.equals(GOOGLE_SETUP) || homes.contains(pkg)) return Ui.tr("é uma tela inicial, a troca de modo cuida dela", "a home screen, the switch handles it", "es una pantalla de inicio, el cambio de modo se encarga");
+        if (!mayTurnOff(pkg)) return Ui.tr("faz parte da TV", "part of the TV", "es parte de la TV");
+        if (pkg.equals(keyboard)) return Ui.tr("é o teclado", "the keyboard", "es el teclado");
+        if (owners == null) return Ui.tr("não deu para checar o Wi-Fi", "couldn't check the Wi-Fi", "no se pudo revisar el Wi-Fi");
+        if (owners.contains(pkg)) return Ui.tr("ele guardou o Wi-Fi", "it saved the Wi-Fi", "guardó el Wi-Fi");
+        return "";
+    }
+
+    /** Every home screen: the ones the TV has now, the original one (off in Free My TV mode) and Google TV's. */
+    private static Set<String> homePackages(Adb adb, JSONObject s) throws IOException {
+        Set<String> homes = new HashSet<>();
+        Matcher m = Pattern.compile("^\\s*([\\w.]+)/", Pattern.MULTILINE).matcher(adb.shell(
+                "cmd package query-activities --brief -a android.intent.action.MAIN -c android.intent.category.HOME"));
+        while (m.find()) homes.add(m.group(1));
+        String original = packageOf(originalHome(s));
+        if (original != null) homes.add(original);
+        homes.add(GOOGLE_HOME.substring(0, GOOGLE_HOME.indexOf('/')));
+        homes.add(TV_LAUNCHER);
+        return homes;
+    }
+
+    private static String keyboardPackage(Adb adb) throws IOException {
+        String ime = adb.shell("settings get secure default_input_method").trim();
+        String pkg = packageOf(ime);
+        return pkg == null ? "" : pkg;
+    }
+
+    // MARK: - Open apps (Recent apps and Free memory)
+
+    private static final Pattern TASK_APP = Pattern.compile("(?:mActivityComponent|realActivity)=\\{?([\\w.]+)/");
+    // "Proc # 6: vis    F/S/FGS ... 930:com.app/u0a83": a state that means the person still gets something from it.
+    private static final Pattern BUSY = Pattern.compile("Proc #\\s*\\d+: (?:fg|vis|prcp|pers|psvc)\\s.*?\\s\\d+:([\\w.]+)(?::[\\w.]+)?/");
+
+    /**
+     * The apps open now (with a live process), the most recent first (Android's recent tasks), then any other app with
+     * a launcher entry still running (music in the background). Only apps a person opens and this app may close: never
+     * a home screen, Android's or the TV's own pieces (mayTurnOff), or this app.
+     */
+    static List<String> openApps(Adb adb) throws IOException {
+        Set<String> processes = new HashSet<>();
+        for (String line : adb.shell("ps -A -o NAME").split("\n")) {
+            String name = line.trim();
+            int colon = name.indexOf(':');
+            if (!name.isEmpty()) processes.add(colon < 0 ? name : name.substring(0, colon));
+        }
+        String launchable = adb.shell("cmd package query-activities --brief -a android.intent.action.MAIN"
+                + " -c android.intent.category.LEANBACK_LAUNCHER");
+        String homes = adb.shell("cmd package query-activities --brief -a android.intent.action.MAIN"
+                + " -c android.intent.category.HOME");
+        Set<String> order = new java.util.LinkedHashSet<>();
+        for (String task : adb.shell("dumpsys activity recents").split("\\* Recent #")) {
+            if (task.contains(" type=home")) continue;
+            Matcher m = TASK_APP.matcher(task);
+            if (m.find()) order.add(m.group(1));
+        }
+        Matcher launcher = Pattern.compile("^\\s*([\\w.]+)/", Pattern.MULTILINE).matcher(launchable);
+        while (launcher.find()) order.add(launcher.group(1));
+        List<String> open = new ArrayList<>();
+        for (String pkg : order) {
+            if (processes.contains(pkg) && launchable.contains(pkg + "/") && !homes.contains(pkg + "/")
+                    && !pkg.equals(PKG) && mayTurnOff(pkg)) {
+                open.add(pkg);
+            }
+        }
+        return open;
+    }
+
+    /** The open apps still on screen or doing something you'd notice stopping (music, a cast, a foreground service). */
+    private static Set<String> busyApps(Adb adb) throws IOException {
+        Set<String> busy = new HashSet<>();
+        Matcher m = BUSY.matcher(adb.shell("dumpsys activity processes"));
+        while (m.find()) busy.add(m.group(1));
+        return busy;
+    }
+
+    /** What each app's processes are using now, in MB (PSS, all its processes together). Takes a few seconds. */
+    static java.util.Map<String, Long> appMemoryMB(Adb adb) throws IOException {
+        java.util.Map<String, Long> kb = new java.util.HashMap<>();
+        String out = adb.shell("dumpsys meminfo");
+        int from = out.indexOf("Total PSS by process");
+        if (from < 0) return kb;
+        int to = out.indexOf("\n\n", from);
+        // "    101,283K: io.freemytv:home (pid 1250 / activities)"
+        Matcher m = Pattern.compile("([\\d,]+)K: ([\\w.]+)(?::[\\w.]+)? \\(pid").matcher(out.substring(from, to < 0 ? out.length() : to));
+        while (m.find()) {
+            long v = Long.parseLong(m.group(1).replace(",", ""));
+            Long sum = kb.get(m.group(2));
+            kb.put(m.group(2), sum == null ? v : sum + v);
+        }
+        java.util.Map<String, Long> mb = new java.util.HashMap<>();
+        for (java.util.Map.Entry<String, Long> e : kb.entrySet()) mb.put(e.getKey(), Math.round(e.getValue() / 1024.0));
+        return mb;
+    }
+
+    /** Force-stops these apps (each checked again with mayTurnOff); returns the MB they were using (`memory`, by app). */
+    static long closeApps(Adb adb, List<String> pkgs, java.util.Map<String, Long> memory) throws IOException {
+        long mb = 0;
+        for (String pkg : pkgs) {
+            if (pkg.equals(PKG) || !mayTurnOff(pkg)) continue;
+            adb.shell("am force-stop " + pkg);
+            Long used = memory.get(pkg);
+            if (used != null) mb += used;
+        }
+        return mb;
     }
 
     private static void putMetric(Context c, String mode, String key, long value) throws JSONException {

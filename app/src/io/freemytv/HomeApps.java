@@ -58,10 +58,8 @@ final class HomeApps {
     static final int APP = 0, LIVE_TV = 1, INPUT = 2, ALL_APPS = 3, SETTINGS = 4, ANDROID_SETTINGS = 5;
     /** The "HDMI Inputs" button: opens the bottom drawer on the inputs (the home screen handles it). */
     static final int INPUTS = 7;
-    /** The search button: the TV's own search (by voice, like the remote's mic), which the stock home screen had. */
-    static final int SEARCH = 8;
-    /** The broom button: frees memory (HomeMode.freeMemoryNow); the home screen handles it, nothing opens. */
-    static final int FREE_MEMORY = 9;
+    /** The Control Center button: the home screen opens its panel, nothing opens. */
+    static final int CONTROL = 10;
     /** Image size of each card (16:9; on screen it shows up to ~330 px wide). */
     static final int TILE_W = 384, TILE_H = 216;
 
@@ -388,6 +386,21 @@ final class HomeApps {
         return items;
     }
 
+    /** An app's All Apps card (its TV art, or its icon on a dark card), for the Recent apps panel. */
+    static Bitmap tile(Context c, String pkg) {
+        return appTile(c, null, pkg, 0);
+    }
+
+    /** An app's name as the TV shows it; its package when it has none. */
+    static String label(Context c, String pkg) {
+        PackageManager pm = c.getPackageManager();
+        try {
+            return pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString();
+        } catch (PackageManager.NameNotFoundException e) {
+            return pkg;
+        }
+    }
+
     private static Item special(Context c, int kind, String key, String label, String symbol) {
         Item it = shortcut(kind, key, label, symbol);
         it.tile = symbolTile(c, key, symbol);
@@ -434,9 +447,6 @@ final class HomeApps {
             case ANDROID_SETTINGS:
                 intent = new Intent(Settings.ACTION_SETTINGS);
                 break;
-            case SEARCH:
-                intent = search(a.getPackageManager());
-                break;
             default:
                 return false;
         }
@@ -469,12 +479,14 @@ final class HomeApps {
         return ActivityOptions.makeClipRevealAnimation(from, x, y, Math.max(w, 1), Math.max(h, 1));
     }
 
-    /** The TV's search: the Assistant listening (as the remote's mic), else the system's text search, else none. */
-    private static Intent search(PackageManager pm) {
-        Intent[] choices = {new Intent(Intent.ACTION_ASSIST), new Intent("android.search.action.GLOBAL_SEARCH"),
-                new Intent(Intent.ACTION_WEB_SEARCH)};
-        for (Intent i : choices) if (i.resolveActivity(pm) != null) return i;
-        return null;
+    /**
+     * A page of the TV's settings (Wi-Fi, Bluetooth), or its main page when this TV doesn't have that one. Only opens
+     * it: what changes there is the person's choice.
+     */
+    static boolean openSettings(Activity a, String action) {
+        Intent page = new Intent(action);
+        if (page.resolveActivity(a.getPackageManager()) != null && start(a, page)) return true;
+        return start(a, new Intent(Settings.ACTION_SETTINGS));
     }
 
     /** The app's page in the TV's settings (storage, permissions, force stop). */

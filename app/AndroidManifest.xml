@@ -12,6 +12,11 @@
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <!-- "Continue watching": reads the Watch Next lists the TV's apps keep in Android's TV provider. -->
     <uses-permission android:name="android.permission.READ_TV_LISTINGS" />
+    <!-- Settings > TV Apps: the names of every app on the TV, the system's too (the shell lists only packages). -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <!-- The sleep timer turns the TV off on the minute (Android 12 asks for the first, 13 and newer grant the second). -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <!-- Android 11+: without this list the app can't "see" the other apps (getLeanbackLaunchIntentForPackage
          returns null). The shelf and streaming apps, the live TV apps and, through the <intent>, every TV app
@@ -113,6 +118,37 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <!-- Recent apps (Control Center, or the remote button picked in Remote Buttons): over whatever is on screen. -->
+        <activity
+            android:name=".RecentsActivity"
+            android:process=":home"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity="io.freemytv.recents"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:screenOrientation="landscape"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|fontScale|locale|layoutDirection"
+            android:theme="@style/FreeMyTV.Overlay" />
+
+        <!-- The Control Center over any app (the remote button picked in Remote Buttons). -->
+        <activity
+            android:name=".ControlActivity"
+            android:process=":home"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity="io.freemytv.control"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:screenOrientation="landscape"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|fontScale|locale|layoutDirection"
+            android:theme="@style/FreeMyTV.Overlay" />
+
+        <!-- The sleep timer's alarm (Control Center): the TV goes to sleep, from the main process. -->
+        <receiver
+            android:name=".SleepTimer$Fire"
+            android:exported="false" />
 
         <service
             android:name=".Screensaver"

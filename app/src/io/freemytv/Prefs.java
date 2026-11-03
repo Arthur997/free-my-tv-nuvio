@@ -370,6 +370,61 @@ final class Prefs {
         return true;
     }
 
+    // MARK: - Shortcut buttons: Recent apps and the Control Center
+
+    static final int SHORTCUT_RECENTS = 0, SHORTCUT_CONTROL = 1;
+    private static final String[] SHORTCUT_NAMES = {"recents", "control"};
+    /** The media buttons that can open a shortcut (Remote Buttons); 0 = none, the default. */
+    static final int[] SHORTCUT_KEYS = {0, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY,
+            KeyEvent.KEYCODE_MEDIA_PAUSE, KeyEvent.KEYCODE_MEDIA_STOP, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD,
+            KeyEvent.KEYCODE_MEDIA_REWIND, KeyEvent.KEYCODE_MEDIA_NEXT, KeyEvent.KEYCODE_MEDIA_PREVIOUS,
+            KeyEvent.KEYCODE_MEDIA_RECORD};
+    private static final int[] shortcutKeys = new int[SHORTCUT_NAMES.length];
+    private static long shortcutsStamp = Long.MIN_VALUE;
+
+    /** Its own tiny file ("recents=85"), read by the key service (:keys) on every key; again only when it changes. */
+    private static File shortcutsFile() {
+        return new File(app.getFilesDir(), "shortcut-keys.txt");
+    }
+
+    /** The key code that opens this shortcut, or 0. */
+    static int shortcutKey(int which) {
+        synchronized (shortcutKeys) {
+            File f = shortcutsFile();
+            long stamp = f.lastModified() * 31 + f.length();
+            if (stamp != shortcutsStamp) {
+                shortcutsStamp = stamp;
+                java.util.Arrays.fill(shortcutKeys, 0);
+                if (stamp != 0) {
+                    try (BufferedReader r = new BufferedReader(new FileReader(f))) {
+                        String line;
+                        while ((line = r.readLine()) != null) {
+                            for (int i = 0; i < SHORTCUT_NAMES.length; i++) {
+                                String prefix = SHORTCUT_NAMES[i] + "=";
+                                if (line.startsWith(prefix)) shortcutKeys[i] = Integer.parseInt(line.substring(prefix.length()).trim());
+                            }
+                        }
+                    } catch (IOException | NumberFormatException ignored) {
+                    }
+                }
+            }
+            return shortcutKeys[which];
+        }
+    }
+
+    /** One button, one shortcut: picking a button the other shortcut had takes it from that one. */
+    static boolean setShortcutKey(int which, int keyCode) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < SHORTCUT_NAMES.length; i++) {
+            int key = i == which ? keyCode : shortcutKey(i);
+            if (i != which && key == keyCode) key = 0;
+            sb.append(SHORTCUT_NAMES[i]).append('=').append(key).append('\n');
+        }
+        if (!writeSafely(shortcutsFile(), sb.toString())) return false;
+        version++;
+        return true;
+    }
+
     // The buttons this remote has: the key service notes when it last saw each one (Remote Buttons shows them).
     private static File seenFile() {
         return new File(app.getFilesDir(), "remote-keys-seen.txt");

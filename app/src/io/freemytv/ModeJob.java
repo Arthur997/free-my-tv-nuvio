@@ -15,7 +15,7 @@ import android.os.PersistableBundle;
 public class ModeJob extends JobService {
     static final String APPLY = "apply", VERIFY = "verify", REVERT = "revert", MEMORY = "memory", REMOTE = "remote",
             DREAM = "dream", FREE_MEMORY = "freememory", TRIM = "trim", CLEAR_CACHE = "clearcache",
-            FORCE_STOP = "forcestop";
+            FORCE_STOP = "forcestop", APP_STATE = "appstate", SLEEP = "sleep";
 
     @Override public boolean onStartJob(JobParameters params) {
         PersistableBundle extras = params.getExtras();
@@ -35,6 +35,8 @@ public class ModeJob extends JobService {
                     case TRIM: HomeMode.trimBackgroundNow(app); break;
                     case FORCE_STOP: HomeMode.forceStopNow(app, appOf(mode), nameOf(mode)); break;
                     case CLEAR_CACHE: HomeMode.clearCacheNow(app, appOf(mode), nameOf(mode)); break;
+                    case SLEEP: HomeMode.sleepNow(app); break;
+                    case APP_STATE: HomeMode.setAppEnabledNow(app, appOf(mode), "on".equals(nameOf(mode))); break;
                     default: break;
                 }
             } catch (Throwable t) {
@@ -62,13 +64,21 @@ public class ModeJob extends JobService {
 
     /** Schedules a job (one pending per action: a new request replaces the old one). */
     static void schedule(Context c, String action, String mode, long delayMs) {
+        schedule(c, 1000 + Math.abs(action.hashCode() % 1000), action, mode, delayMs);
+    }
+
+    /** One job per target (each app turned on or off): quick requests for several apps don't replace each other. */
+    static void scheduleOne(Context c, String action, String target) {
+        schedule(c, 3000 + Math.abs((action + "|" + appOf(target)).hashCode() % 1000), action, target, 0);
+    }
+
+    private static void schedule(Context c, int id, String action, String mode, long delayMs) {
         JobScheduler scheduler = c.getSystemService(JobScheduler.class);
         if (scheduler == null) return;
         PersistableBundle extras = new PersistableBundle();
         extras.putString("action", action);
         extras.putString("mode", mode == null ? "" : mode);
-        JobInfo.Builder job = new JobInfo.Builder(1000 + Math.abs(action.hashCode() % 1000),
-                new ComponentName(c, ModeJob.class)).setExtras(extras);
+        JobInfo.Builder job = new JobInfo.Builder(id, new ComponentName(c, ModeJob.class)).setExtras(extras);
         if (delayMs > 0) job.setMinimumLatency(delayMs);
         job.setOverrideDeadline(delayMs + 2_000);
         scheduler.schedule(job.build());

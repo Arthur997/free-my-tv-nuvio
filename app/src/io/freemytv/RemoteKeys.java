@@ -42,6 +42,7 @@ final class RemoteKeys {
 
     /** Opens the app for this key on its first press. True if the key is ours and in use (it is then consumed). */
     static boolean onKey(Context c, KeyEvent e) {
+        if (onShortcutKey(c, e)) return true;
         if (!supported()) return false;
         // BUTTON_3 is also a game controller's button: keys from a gamepad or a joystick are left alone.
         int source = e.getSource();
@@ -64,6 +65,23 @@ final class RemoteKeys {
             Intent intent = launchIntent(c.getPackageManager(), pkg);
             AppLog.w("remote key " + e.getKeyCode() + " -> " + pkg + (intent == null ? " (not installed)" : ""));
             if (intent != null) c.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        }
+        return true;
+    }
+
+    /**
+     * The media buttons picked for Recent apps and the Control Center (Remote Buttons) open them over any app, or close
+     * them when they're open. Any brand: from other apps it takes the key service (the brands above); on the home
+     * screen the window's own keys are enough.
+     */
+    private static boolean onShortcutKey(Context c, KeyEvent e) {
+        int code = e.getKeyCode();
+        boolean recents = code == Prefs.shortcutKey(Prefs.SHORTCUT_RECENTS);
+        if (code == 0 || !recents && code != Prefs.shortcutKey(Prefs.SHORTCUT_CONTROL)) return false;
+        if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) {
+            AppLog.w("remote key " + code + (recents ? " -> recent apps" : " -> control center"));
+            if (recents) RecentsActivity.open(c);
+            else ControlActivity.open(c);
         }
         return true;
     }
