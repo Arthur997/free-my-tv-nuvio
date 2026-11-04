@@ -67,6 +67,12 @@ public class ModeJob extends JobService {
         schedule(c, 1000 + Math.abs(action.hashCode() % 1000), action, mode, delayMs);
     }
 
+    /** Drops the action's pending job (the sleep timer turned off). */
+    static void cancel(Context c, String action) {
+        JobScheduler scheduler = c.getSystemService(JobScheduler.class);
+        if (scheduler != null) scheduler.cancel(1000 + Math.abs(action.hashCode() % 1000));
+    }
+
     /** One job per target (each app turned on or off): quick requests for several apps don't replace each other. */
     static void scheduleOne(Context c, String action, String target) {
         schedule(c, 3000 + Math.abs((action + "|" + appOf(target)).hashCode() % 1000), action, target, 0);

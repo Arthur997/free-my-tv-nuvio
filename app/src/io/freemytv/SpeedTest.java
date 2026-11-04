@@ -15,8 +15,8 @@ import java.util.concurrent.Executors;
 
 /**
  * The connection's speed and ping, measured against Cloudflare's speed test (speed.cloudflare.com, no key): ping is the
- * median of a few tiny requests on a warm connection, then a few seconds of download and of upload. One buffer for the
- * whole test (weak TVs), and one test at a time; the Control Center tile shows the phase and the result.
+ * median of a few tiny requests on a warm connection, then a few seconds of download and of upload (measure). One test
+ * at a time; the Control Center tile shows the phase and the result.
  */
 final class SpeedTest {
     interface Listener { void onSpeed(); }
@@ -24,8 +24,9 @@ final class SpeedTest {
     static final int IDLE = 0, PING = 1, DOWNLOAD = 2, UPLOAD = 3, DONE = 4, FAILED = 5;
     private static final String BASE = "https://speed.cloudflare.com/";
     private static final int PINGS = 5;
-    private static final long DOWNLOAD_MS = 7000, UPLOAD_MS = 5000;
-    private static final long DOWNLOAD_BYTES = 25_000_000L, UPLOAD_BYTES = 50_000_000L;
+    private static final int STREAMS = 4;
+    private static final long WARMUP_MS = 1000, DOWNLOAD_MS = 6000, UPLOAD_MS = 6000;
+    private static final long DOWNLOAD_BYTES = 25_000_000L, UPLOAD_BYTES = 256 * 1024L;
     private static final SpeedTest INSTANCE = new SpeedTest();
 
     volatile int phase = IDLE;
@@ -67,10 +68,10 @@ final class SpeedTest {
             pingMs = ping();
             phase = DOWNLOAD;
             notifyNow();
-            downMbps = download();
+            downMbps = measure(false, DOWNLOAD_MS, 0.1f, 0.5f);
             phase = UPLOAD;
             notifyNow();
-            upMbps = upload();
+            upMbps = measure(true, UPLOAD_MS, 0.6f, 0.4f);
             progress = 1;
             phase = DONE;
         } catch (IOException e) {
@@ -108,49 +109,84 @@ final class SpeedTest {
         }
     }
 
-    /** Blocks one after another for a few seconds (the server refuses more than ~25 MB in one request). */
-    private double download() throws IOException {
-        long start = SystemClock.elapsedRealtime(), bytes = 0, elapsed = 0;
-        while (elapsed < DOWNLOAD_MS) {
-            HttpURLConnection c = open(BASE + "__down?bytes=" + DOWNLOAD_BYTES);
-            try {
-                check(c);
-                try (InputStream in = c.getInputStream()) {
-                    int n;
-                    while (elapsed < DOWNLOAD_MS && (n = in.read(buffer)) > 0) {
-                        bytes += n;
-                        elapsed = SystemClock.elapsedRealtime() - start;
-                        progress = 0.1f + 0.5f * Math.min(1, elapsed / (float) DOWNLOAD_MS);
-                        notifySometimes();
+    /**
+     * Download and upload are measured the same way, as speed tests do: STREAMS connections at once (one alone can't
+     * fill a fast line: TCP's slow start and window), the first WARMUP_MS left out, then the bytes that went through
+     * in the next `ms`. Downloads count what arrived; uploads count a body only once the server answered for it.
+     */
+    private double measure(boolean upload, long ms, float from, float span) throws IOException {
+        final long start = SystemClock.elapsedRealtime(), counted = start + WARMUP_MS, end = counted + ms;
+        final java.util.concurrent.atomic.AtomicLong bytes = new java.util.concurrent.atomic.AtomicLong();
+        final IOException[] failed = new IOException[1];
+        Thread[] workers = new Thread[STREAMS];
+        for (int i = 0; i < STREAMS; i++) {
+            workers[i] = new Thread(() -> {
+                byte[] own = new byte[64 * 1024];
+                try {
+                    while (SystemClock.elapsedRealtime() < end) {
+                        if (upload) uploadOnce(own, bytes, counted, end);
+                        else downloadOnce(own, bytes, counted, end);
+                    }
+                } catch (IOException e) {
+                    synchronized (failed) {
+                        if (failed[0] == null) failed[0] = e;
                     }
                 }
-            } finally {
-                c.disconnect();   // past the time: stops the rest of the block
+            }, upload ? "speed-up" : "speed-down");
+            workers[i].start();
+        }
+        while (SystemClock.elapsedRealtime() < end) {
+            SystemClock.sleep(100);
+            progress = from + span * Math.min(1, (SystemClock.elapsedRealtime() - start) / (float) (end - start));
+            notifySometimes();
+        }
+        for (Thread t : workers) {
+            try {
+                t.join(10_000);
+            } catch (InterruptedException ignored) {
             }
         }
-        return mbps(bytes, elapsed);
+        if (bytes.get() == 0 && failed[0] != null) throw failed[0];
+        return mbps(bytes.get(), ms);
     }
 
-    private double upload() throws IOException {
+    /** One block (the server refuses more than ~25 MB in one request), read until it ends or the time is up. */
+    private static void downloadOnce(byte[] own, java.util.concurrent.atomic.AtomicLong bytes, long counted, long end) throws IOException {
+        HttpURLConnection c = open(BASE + "__down?bytes=" + DOWNLOAD_BYTES);
+        try {
+            check(c);
+            try (InputStream in = c.getInputStream()) {
+                int n;
+                long now;
+                while ((now = SystemClock.elapsedRealtime()) < end && (n = in.read(own)) > 0) {
+                    if (now >= counted) bytes.addAndGet(n);
+                }
+            }
+        } finally {
+            c.disconnect();
+        }
+    }
+
+    /**
+     * One body of UPLOAD_BYTES. It counts only once the server answered for it, and only for the part of its time inside
+     * the window (a slow line still gets a fair number: a body in flight at the end is waited for and counted pro rata).
+     */
+    private static void uploadOnce(byte[] own, java.util.concurrent.atomic.AtomicLong bytes, long counted, long end) throws IOException {
+        long began = SystemClock.elapsedRealtime();
         HttpURLConnection c = open(BASE + "__up");
         c.setDoOutput(true);
         c.setRequestMethod("POST");
-        c.setChunkedStreamingMode(buffer.length);
+        c.setFixedLengthStreamingMode(UPLOAD_BYTES);
         c.setRequestProperty("Content-Type", "application/octet-stream");
         try {
-            long start = SystemClock.elapsedRealtime(), bytes = 0, elapsed = 0;
             try (OutputStream out = c.getOutputStream()) {
-                while (elapsed < UPLOAD_MS && bytes < UPLOAD_BYTES) {
-                    out.write(buffer);
-                    bytes += buffer.length;
-                    elapsed = SystemClock.elapsedRealtime() - start;
-                    progress = 0.6f + 0.4f * Math.min(1, elapsed / (float) UPLOAD_MS);
-                    notifySometimes();
+                for (long sent = 0; sent < UPLOAD_BYTES; sent += own.length) {
+                    out.write(own, 0, (int) Math.min(own.length, UPLOAD_BYTES - sent));
                 }
             }
-            check(c);   // the server got it all: only now the time counts
-            elapsed = SystemClock.elapsedRealtime() - start;
-            return mbps(bytes, elapsed);
+            check(c);
+            long done = SystemClock.elapsedRealtime(), inside = Math.min(done, end) - Math.max(began, counted);
+            if (inside > 0) bytes.addAndGet(UPLOAD_BYTES * inside / Math.max(1, done - began));
         } finally {
             c.disconnect();
         }

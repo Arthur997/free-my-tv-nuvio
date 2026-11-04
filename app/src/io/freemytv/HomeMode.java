@@ -1020,13 +1020,20 @@ final class HomeMode {
      * that one when the screen is still on a moment later).
      */
     static void sleepNow(Context c) {
+        if (!SleepTimer.takeDue(c)) {
+            AppLog.w("sleep timer: not due (turned off, moved, or already done)");
+            return;
+        }
         try (Adb adb = Adb.connect(c, 10_000, null)) {
             adb.shell("input keyevent KEYCODE_SLEEP");
             SystemClock.sleep(2_000);
-            if (adb.shell("dumpsys power | grep -m 1 mWakefulness=").contains("Awake")) {
+            String power = adb.shell("dumpsys power | grep -m 1 mWakefulness=").trim();
+            AppLog.w("sleep timer: SLEEP sent, " + power);
+            if (power.contains("Awake")) {
                 adb.shell("input keyevent KEYCODE_POWER");
+                SystemClock.sleep(2_000);
+                AppLog.w("sleep timer: POWER sent, " + adb.shell("dumpsys power | grep -m 1 mWakefulness=").trim());
             }
-            AppLog.w("sleep timer: the TV went to sleep");
         } catch (IOException e) {
             AppLog.w("sleep timer: couldn't turn the TV off: " + e.getMessage());
         }

@@ -68,8 +68,14 @@ final class SleepTimer {
         PendingIntent fire = PendingIntent.getBroadcast(c, 0, new Intent(c, Fire.class),
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         alarms.cancel(fire);
-        AppLog.w(minutes > 0 ? "sleep timer: " + minutes + " min" : "sleep timer: off");
-        if (at == 0) return;
+        AppLog.w(minutes > 0 ? "sleep timer: " + minutes + " min, at " + at : "sleep timer: off");
+        if (at == 0) {
+            ModeJob.cancel(c, ModeJob.SLEEP);
+            return;
+        }
+        // Two ways to wake up, in case the TV holds one back (TCL limits what starts in the background): the job too.
+        // Whichever comes first turns the TV off; the other finds the timer gone (sleepDue).
+        ModeJob.schedule(c, ModeJob.SLEEP, null, at - System.currentTimeMillis());
         // Exact when the TV lets us (Android 12+ asks for it); otherwise Android may run it a little late.
         if (Build.VERSION.SDK_INT < 31 || alarms.canScheduleExactAlarms()) {
             alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, fire);
@@ -78,13 +84,23 @@ final class SleepTimer {
         }
     }
 
-    /** The alarm, in the main process: the timer is over, the TV goes to sleep. */
+    /**
+     * The timer is over (within a minute): true once, and the timer is cleared. False when it was turned off or a newer
+     * choice put it later.
+     */
+    static synchronized boolean takeDue(Context c) {
+        long[] v = read(c);
+        if (v[0] == 0 || v[0] > System.currentTimeMillis() + 60_000L) return false;
+        File f = file(c);
+        //noinspection ResultOfMethodCallIgnored
+        f.delete();
+        return true;
+    }
+
+    /** The alarm, in the main process: the timer is over, the TV goes to sleep (in a job: it may take a few seconds). */
     public static class Fire extends BroadcastReceiver {
         @Override public void onReceive(Context c, Intent intent) {
-            long[] v = read(c);
-            // A newer choice replaced it (the file holds a later time) or turned it off: nothing to do yet.
-            if (v[0] == 0 || v[0] > System.currentTimeMillis() + 60_000L) return;
-            set(c, 0);
+            AppLog.w("sleep timer: alarm");
             ModeJob.schedule(c, ModeJob.SLEEP, null, 0);
         }
     }

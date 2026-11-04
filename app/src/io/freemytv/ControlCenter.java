@@ -57,10 +57,10 @@ final class ControlCenter {
     private final String[] chipLabels = new String[SleepTimer.OPTIONS.length];
     private final String[] titles = new String[TILES.length], details = new String[TILES.length], symbols = new String[TILES.length];
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG), border = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint shadow = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint shadow = new Paint(Paint.ANTI_ALIAS_FLAG), cursor = new Paint(Paint.ANTI_ALIAS_FLAG);
     private Paint title, detail, chipText, status;
     private float k = 1, chipHalfCap, titleHalfCap;
-    private int index, sleepAt;
+    private int index, sleepAt, sleepCursor;
     private boolean open;
     private final Runnable memoryRead = () -> {
         if (!open) return;
@@ -102,6 +102,8 @@ final class ControlCenter {
         titleHalfCap = Ui.halfCap(title);
         shadow.setMaskFilter(new BlurMaskFilter(SHADOW_BLUR * k, BlurMaskFilter.Blur.NORMAL));
         border.setStrokeWidth(2 * k);
+        cursor.setStyle(Paint.Style.STROKE);
+        cursor.setStrokeWidth(2.5f * k);
         float pad = PAD * k, tw = TILE_W * k, th = TILE_H * k, gap = GAP * k;
         panel.set(right - width(k), top, right, top + height(k));
         for (int i = 0; i < TILES.length; i++) {
@@ -323,12 +325,16 @@ final class ControlCenter {
     // MARK: - Keys
 
     /**
-     * The arrows go to the nearest tile that way; on the sleep timer ← → pick its time right there (no list opens).
-     * ↑ from the top row closes the panel.
+     * The arrows go to the nearest tile that way; on the sleep timer ← → move along its times (nothing changes yet, no
+     * list opens) and OK picks the one under the cursor. ↑ from the top row closes the panel.
      */
     void move(int dx, int dy) {
         if (dx != 0 && TILES[index][0] == SLEEP) {
-            setSleep(Math.max(0, Math.min(SleepTimer.OPTIONS.length - 1, sleepAt + dx)));
+            int next = Math.max(0, Math.min(SleepTimer.OPTIONS.length - 1, sleepCursor + dx));
+            if (next == sleepCursor) return;
+            sleepCursor = next;
+            hostRedraw();
+            host.view().announceForAccessibility(chipLabels[next]);
             return;
         }
         RectF from = rects[index];
@@ -351,17 +357,26 @@ final class ControlCenter {
             return;
         }
         index = best;
+        if (TILES[index][0] == SLEEP) sleepCursor = sleepAt;   // the cursor starts on the time in use
         aim(false);
         host.view().announceForAccessibility(titles[best] + ", " + details[best]);
     }
 
-    /** The sleep timer at choice `at` (0 = off), kept by SleepTimer, which turns the TV off when it ends. */
+    /**
+     * The sleep timer at choice `at` (0 = off), from now (picking the same time again starts it over), kept by
+     * SleepTimer, which turns the TV off when it ends. Said in a notice, as Free memory's.
+     */
     private void setSleep(int at) {
-        if (at == sleepAt) return;
-        SleepTimer.set(activity, SleepTimer.OPTIONS[at]);
+        int minutes = SleepTimer.OPTIONS[at];
+        SleepTimer.set(activity, minutes);
         updateTexts();
         hostRedraw();
-        host.view().announceForAccessibility(details[index]);
+        String said = minutes == 0 ? Ui.tr("Timer desligado. A TV fica ligada.", "Sleep timer off. The TV stays on.",
+                "Temporizador apagado. La TV sigue encendida.")
+                : Ui.trf(Ui.tr("A TV desliga em {n} min, às {time}.", "The TV turns off in {n} min, at {time}.",
+                        "La TV se apaga en {n} min, a las {time}."), "n", minutes, "time", Ui.clock(SleepTimer.endsAt(activity)));
+        host.toast(said);
+        host.view().announceForAccessibility(said);
     }
 
     void press() {
@@ -372,7 +387,7 @@ final class ControlCenter {
                 SpeedTest.get().start();
                 return;
             case SLEEP:
-                setSleep((sleepAt + 1) % SleepTimer.OPTIONS.length);   // OK steps through the times too
+                setSleep(sleepCursor);
                 return;
             case MEMORY:
                 HomeMode.requestFreeMemory(activity);
@@ -451,7 +466,7 @@ final class ControlCenter {
             }
             float x = r.left + TEXT_X * k;
             if (TILES[i][0] == SLEEP) {
-                drawSleep(c, i, r, x, ink, dim);
+                drawSleep(c, i, r, x, ink, dim, f);
             } else {
                 Symbols.draw(activity, c, symbols[i], x + 17 * k, r.top + 36 * k, 30 * k, ink);
                 title.setColor(ink);
@@ -463,8 +478,11 @@ final class ControlCenter {
         }
     }
 
-    /** The sleep timer: symbol, title and when the TV turns off on top; the times below, the chosen one filled. */
-    private void drawSleep(Canvas c, int i, RectF r, float x, int ink, int dim) {
+    /**
+     * The sleep timer: symbol, title and when the TV turns off on top; the times below, the one in use filled and, while
+     * the tile has the focus, a ring around the one OK would pick.
+     */
+    private void drawSleep(Canvas c, int i, RectF r, float x, int ink, int dim, float f) {
         float line = r.top + 46 * k;
         Symbols.draw(activity, c, symbols[i], x + 17 * k, line - titleHalfCap, 28 * k, ink);
         title.setColor(ink);
@@ -478,6 +496,13 @@ final class ControlCenter {
             c.drawRoundRect(chips[j], h / 2, h / 2, fill);
             chipText.setColor(chosen ? contrast(ink) : ink);
             c.drawText(chipLabels[j], chips[j].centerX(), chips[j].centerY() + chipHalfCap, chipText);
+            if (j == sleepCursor && f > 0.01f) {
+                float out = 4 * k;
+                tmp.set(chips[j]);
+                tmp.inset(-out, -out);
+                cursor.setColor(Ui.alpha(ink, f));
+                c.drawRoundRect(tmp, h / 2 + out, h / 2 + out, cursor);
+            }
         }
     }
 
