@@ -934,18 +934,7 @@ final class HomeApps {
 
     /** The app's official TV art (the Android TV banner), at the highest density the app has. */
     private static Bitmap bannerTile(Context c, String pkg) {
-        PackageManager pm = c.getPackageManager();
-        Drawable d = null;
-        try {
-            Intent launch = launchIntent(pm, pkg);
-            if (launch != null && launch.getComponent() != null) {
-                ActivityInfo ai = pm.getActivityInfo(launch.getComponent(), 0);
-                int res = ai.getBannerResource();
-                if (res != 0) d = pm.getResourcesForApplication(ai.applicationInfo).getDrawableForDensity(res, DisplayMetrics.DENSITY_XXXHIGH, null);
-            }
-            if (d == null) d = pm.getApplicationBanner(pkg);
-        } catch (PackageManager.NameNotFoundException | RuntimeException ignored) {
-        }
+        Drawable d = bannerDrawable(c, pkg);
         if (d == null) return null;
         Bitmap b = Bitmap.createBitmap(TILE_W, TILE_H, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(b);
@@ -955,10 +944,8 @@ final class HomeApps {
         return b;
     }
 
-    /** No banner: the app's icon (in its proper shape, with some margin) on a dark card. */
-    private static Bitmap iconTile(Context c, String pkg) {
-        Bitmap b = darkTile();
-        Canvas canvas = new Canvas(b);
+    /** The app's icon at the highest density it has, or null. */
+    private static Drawable icon(Context c, String pkg) {
         Drawable icon = null;
         try {
             PackageManager pm = c.getPackageManager();
@@ -972,11 +959,15 @@ final class HomeApps {
             if (icon == null) icon = pm.getApplicationIcon(ai);
         } catch (PackageManager.NameNotFoundException ignored) {
         }
-        if (icon == null) return b;
-        int size = Math.round(TILE_H * 0.56f);
-        float left = (TILE_W - size) / 2f, top = (TILE_H - size) / 2f;
+        return icon;
+    }
+
+    /**
+     * The icon in a `size` square at (left, top): an adaptive icon's layers clipped to a squircle, like an Apple icon; a
+     * legacy one (a free-form drawing with transparency) smaller, with no frame.
+     */
+    private static void drawIcon(Canvas canvas, Drawable icon, float left, float top, int size) {
         if (icon instanceof AdaptiveIconDrawable) {
-            // Adaptive icon: the layers clipped to a squircle, like an Apple icon.
             AdaptiveIconDrawable a = (AdaptiveIconDrawable) icon;
             Path clip = new Path();
             clip.addRoundRect(new RectF(left, top, left + size, top + size), size * 0.2237f, size * 0.2237f, Path.Direction.CW);
@@ -990,11 +981,52 @@ final class HomeApps {
             }
             canvas.restore();
         } else {
-            // Legacy icon (a free-form drawing with transparency): smaller, no frame.
-            int s = Math.round(TILE_H * 0.46f);
-            icon.setBounds((TILE_W - s) / 2, (TILE_H - s) / 2, (TILE_W + s) / 2, (TILE_H + s) / 2);
+            int s = Math.round(size * 0.82f), x = Math.round(left + (size - s) / 2f), y = Math.round(top + (size - s) / 2f);
+            icon.setBounds(x, y, x + s, y + s);
             icon.draw(canvas);
         }
+    }
+
+    /** No banner: the app's icon (in its proper shape, with some margin) on a dark card. */
+    private static Bitmap iconTile(Context c, String pkg) {
+        Bitmap b = darkTile();
+        Drawable icon = icon(c, pkg);
+        if (icon == null) return b;
+        int size = Math.round(TILE_H * 0.56f);
+        drawIcon(new Canvas(b), icon, (TILE_W - size) / 2f, (TILE_H - size) / 2f, size);
+        return b;
+    }
+
+    /**
+     * The app's card drawn straight at `w` × `h` (Recent apps' big cards: the 384 px card scaled up would be soft): its
+     * banner, else its icon on the dark card. Opaque, 16 bits: half the memory.
+     */
+    static Bitmap art(Context c, String pkg, int w, int h) {
+        Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565);
+        Canvas canvas = new Canvas(b);
+        Drawable d = bannerDrawable(c, pkg);
+        if (d != null) {
+            canvas.drawColor(0xFF15161C);
+            d.setBounds(0, 0, w, h);
+            d.draw(canvas);
+            return b;
+        }
+        Paint bg = new Paint();
+        bg.setShader(new LinearGradient(0, 0, 0, h, 0xFF2B2E3A, 0xFF17191F, Shader.TileMode.CLAMP));
+        canvas.drawRect(0, 0, w, h, bg);
+        Drawable icon = icon(c, pkg);
+        if (icon != null) {
+            int size = Math.round(h * 0.4f);
+            drawIcon(canvas, icon, (w - size) / 2f, (h - size) / 2f, size);
+        }
+        return b;
+    }
+
+    /** The app's icon alone, `size` px square with transparency (Recent apps, above each card). */
+    static Bitmap iconBitmap(Context c, String pkg, int size) {
+        Bitmap b = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Drawable icon = icon(c, pkg);
+        if (icon != null) drawIcon(new Canvas(b), icon, 0, 0, size);
         return b;
     }
 

@@ -16,6 +16,7 @@
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowContentOverlay">@null</item>
         <item name="android:backgroundDimEnabled">false</item>
-        <item name="android:windowAnimationStyle">@android:style/Animation.Translucent</item>
+        <!-- No window animation: the view animates itself (the system fade over a video looked odd). -->
+        <item name="android:windowAnimationStyle">@null</item>
     </style>
 </resources>

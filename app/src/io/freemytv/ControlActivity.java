@@ -14,7 +14,7 @@ import android.view.View;
 
 /**
  * The Control Center over whatever is on screen, opened by the remote button picked in Remote Buttons (that button
- * again closes it). The same panel as the home screen's (ControlCenter), at the top right, in the night look so it
+ * again closes it). The same panel as the home screen's (ControlCenter), in the middle, in the night look so it
  * reads over a video. In the :home process, translucent, out of the recent tasks itself.
  */
 public class ControlActivity extends Activity {
@@ -58,14 +58,15 @@ public class ControlActivity extends Activity {
         return super.dispatchKeyEvent(event);
     }
 
-    /** The veil, the panel (growing in from its corner) and a line for what just happened under it. */
+    /** The panel alone (no veil over the app), growing in from the middle, and a line for what just happened under it. */
     private static final class Panel extends View implements ControlCenter.Host, Choreographer.FrameCallback {
         private static final long TOAST_MS = 4000;
         private final Activity activity;
         private final ControlCenter cc;
         private final Spring appear = new Spring(0.22f, 0.86f, 0);
         private final Handler handler = new Handler(Looper.getMainLooper());
-        private final Paint toastPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint toastPaint = new Paint(Paint.ANTI_ALIAS_FLAG), pillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final android.graphics.RectF pill = new android.graphics.RectF();
         private float k = 1;
         private String toast = "";
         private long toastAt;
@@ -103,11 +104,13 @@ public class ControlActivity extends Activity {
 
         @Override protected void onSizeChanged(int w, int h, int oldW, int oldH) {
             k = w / 1920f;
-            cc.layout(k, 1840 * k, 80 * k);
+            // In the middle of the screen, over whatever is playing.
+            cc.layout(k, (w + ControlCenter.width(k)) / 2f, (h - ControlCenter.height(k)) / 2f);
             toastPaint.setTypeface(Ui.medium);
             toastPaint.setTextSize(24 * k);
             toastPaint.setColor(0xE6FFFFFF);
-            toastPaint.setTextAlign(Paint.Align.RIGHT);
+            toastPaint.setTextAlign(Paint.Align.CENTER);
+            pillPaint.setColor(0xE62C2C2E);
         }
 
         boolean onKey(KeyEvent e) {
@@ -195,19 +198,21 @@ public class ControlActivity extends Activity {
 
         @Override protected void onDraw(Canvas c) {
             float v = appear.value, a = Ui.clamp(v), s = 0.92f + 0.08f * v;
-            c.drawColor(Ui.alpha(0x80000000, a));
             if (a > 0.999f) {
                 cc.draw(c);   // at rest: no offscreen layer (a weak GPU feels a full-screen one)
             } else {
                 int layer = c.saveLayerAlpha(cc.bounds().left - 60 * k, cc.bounds().top - 60 * k, cc.bounds().right + 60 * k,
                         cc.bounds().bottom + 80 * k, Math.round(255 * a));
-                c.scale(s, s, cc.bounds().right, cc.bounds().top);
-                c.translate(0, -(1 - v) * 16 * k);
+                c.scale(s, s, cc.bounds().centerX(), cc.bounds().centerY());
                 cc.draw(c);
                 c.restoreToCount(layer);
             }
             if (!toast.isEmpty() && System.currentTimeMillis() - toastAt < TOAST_MS) {
-                c.drawText(toast, cc.bounds().right - 8 * k, cc.bounds().bottom + 48 * k, toastPaint);
+                // On its own dark pill: with no veil, the app's picture is right behind it.
+                float cx = cc.bounds().centerX(), base = cc.bounds().bottom + 56 * k, half = toastPaint.measureText(toast) / 2 + 28 * k;
+                pill.set(cx - half, base - 38 * k, cx + half, base + 18 * k);
+                c.drawRoundRect(pill, pill.height() / 2, pill.height() / 2, pillPaint);
+                c.drawText(toast, cx, base, toastPaint);
             }
         }
     }
