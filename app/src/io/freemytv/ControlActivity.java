@@ -14,8 +14,8 @@ import android.view.View;
 
 /**
  * The Control Center over whatever is on screen, opened by the remote button picked in Remote Buttons (that button
- * again closes it). The same panel as the home screen's (ControlCenter), in the middle, in the night look so it
- * reads over a video. In the :home process, translucent, out of the recent tasks itself.
+ * again closes it). The same panel as the home screen's (ControlCenter), in the middle, in the home screen's look (light or
+ * dark, as its theme). In the :home process, translucent, out of the recent tasks itself.
  */
 public class ControlActivity extends Activity {
     private Panel panel;
@@ -97,6 +97,7 @@ public class ControlActivity extends Activity {
 
         void resume() {
             running = true;
+            applyTheme();
             cc.open();
             appear.target = 1;
             handler.postDelayed(minute, 30_000);
@@ -117,11 +118,22 @@ public class ControlActivity extends Activity {
             cc.layout(k, (w + ControlCenter.width(k)) / 2f, (h - ControlCenter.height(k)) / 2f);
             toastPaint.setTypeface(Ui.medium);
             toastPaint.setTextSize(24 * k);
-            toastPaint.setColor(0xE6FFFFFF);
             toastPaint.setTextAlign(Paint.Align.CENTER);
-            pillPaint.setColor(0xE62C2C2E);
-            glassPaint.setColor(0xD91C1C1E);
+            applyTheme();
         }
+
+        /**
+         * The home screen's look (More Settings > Theme: light, dark, or by the time of day): frosted white glass with
+         * dark text, or smoked glass with white text; the notice's pill the same way.
+         */
+        private void applyTheme() {
+            night = HomeData.get(activity).isNight(System.currentTimeMillis());
+            glassPaint.setColor(night ? 0xD91C1C1E : 0xE6F5F5F7);
+            pillPaint.setColor(night ? 0xE62C2C2E : 0xF2FFFFFF);
+            toastPaint.setColor(night ? 0xE6FFFFFF : 0xFF1D1D1F);
+        }
+
+        private boolean night = true;
 
         boolean onKey(KeyEvent e) {
             wake();
@@ -181,7 +193,7 @@ public class ControlActivity extends Activity {
         }
 
         @Override public float dark() {
-            return 1;
+            return night ? 1 : 0;
         }
 
         /** Smoked glass: over another app there's no backdrop to bend, only the picture behind the window. */
