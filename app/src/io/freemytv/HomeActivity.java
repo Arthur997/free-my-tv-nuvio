@@ -60,10 +60,29 @@ public class HomeActivity extends Activity {
         super.onPause();
     }
 
-    /** Home button pressed on the home screen: back to the entry state (focus on the first app, sheet closed). */
+    /**
+     * Home button pressed on the home screen: back to the entry state (focus on the first app, sheet closed). From the
+     * remote's Control Center button (ControlActivity, with OPEN_CONTROL): the panel under its button opens or closes.
+     */
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        if (home != null) home.reset(true);
+        if (home == null) return;
+        if (intent.getBooleanExtra(OPEN_CONTROL, false)) home.toggleControl();
+        else home.reset(true);
+    }
+
+    static final String OPEN_CONTROL = "io.freemytv.OPEN_CONTROL";
+    /** The home screen is on screen (resumed, or only covered by a translucent window): set on resume, cleared on stop. */
+    static volatile boolean inFront;
+
+    @Override protected void onStart() {
+        super.onStart();
+        inFront = true;
+    }
+
+    @Override protected void onStop() {
+        inFront = false;
+        super.onStop();
     }
 
     @Override protected void onDestroy() {

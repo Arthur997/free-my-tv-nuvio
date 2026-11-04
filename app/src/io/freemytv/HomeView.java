@@ -415,7 +415,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         updatePalette();
         updatePicks();
         hideMenu();   // back from App info or the uninstall question
-        hideControl();
+        if (!controlByKey) hideControl();   // just opened by the remote's button (toggleControl, before this resume)
+        controlByKey = false;
         if (sheetOpen) closeSheet();
         sheet.snap(sheet.target);
         motionDirty = true;
@@ -2215,6 +2216,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 else closeControl();
             }
             @Override public float dark() { return HomeView.this.dark(); }
+            /** The shelf's glass (drawPlatter): white by day, smoked at night. */
+            @Override public void glass(Canvas c, RectF r, float radius) {
+                scene.liquid(c, r, radius, tone(0xFFFFFFFF, SMOKE), tone(0.42f, 0.12f), tone(0.03f, 0.08f),
+                        tone(30, 34) * k, tone(22, 28) * k, tone(0.65f, 0.95f), 1);
+            }
         });
     }
 
@@ -2224,6 +2230,28 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         controlLayer.setPivotX(controlCenter.bounds().right);
         controlLayer.setPivotY(controlCenter.bounds().top);
     }
+
+    /**
+     * The remote's Control Center button, pressed on the home screen: the panel under its button opens (the focus on the
+     * button, where it goes back when it closes), or closes if it's open.
+     */
+    void toggleControl() {
+        if (controlOpen) {
+            closeControl();
+        } else {
+            hideMenu();
+            if (sheetOpen) closeSheet();
+            if (drawerOpen) closeDrawer();
+            zone = Z_TOP;
+            for (int i = 0; i < lightButtons.size(); i++) if (lightButtons.get(i).kind == HomeApps.CONTROL) topIndex = 3 + i;
+            retarget(false);
+            openControl();
+            controlByKey = !running;
+        }
+        wake();
+    }
+
+    private boolean controlByKey;
 
     private void openControl() {
         controlOpen = true;

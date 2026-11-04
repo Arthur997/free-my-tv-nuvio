@@ -16,7 +16,12 @@
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowContentOverlay">@null</item>
         <item name="android:backgroundDimEnabled">false</item>
-        <!-- No window animation: the view animates itself (the system fade over a video looked odd). -->
+        <item name="android:windowAnimationStyle">@android:style/Animation.Translucent</item>
+    </style>
+
+    <!-- The Control Center over another app: no window animation, the panel animates itself (the system's fade of
+         the window over a video looked odd). -->
+    <style name="FreeMyTV.Overlay.Still">
         <item name="android:windowAnimationStyle">@null</item>
     </style>
 </resources>

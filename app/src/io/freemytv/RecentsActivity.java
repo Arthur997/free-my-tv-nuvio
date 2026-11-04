@@ -37,12 +37,17 @@ public class RecentsActivity extends Activity {
         finish();
     }
 
+    /** On screen (the Control Center's button then opens its own panel over it, not the home screen's). */
+    static volatile boolean showing;
+
     @Override protected void onResume() {
         super.onResume();
+        showing = true;
         view.resume();
     }
 
     @Override protected void onPause() {
+        showing = false;
         view.pause();
         super.onPause();
     }

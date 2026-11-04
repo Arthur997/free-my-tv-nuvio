@@ -28,6 +28,8 @@ final class ControlCenter {
         void close(boolean opened);
         /** 0 = the day look, 1 = night (in between while it changes). */
         float dark();
+        /** The panel's glass: the shelf's on the home screen; over another app (no backdrop to bend), a smoked one. */
+        void glass(Canvas c, RectF r, float radius);
     }
 
     private static final int WIFI = 0, BLUETOOTH = 1, SPEED = 2, SLEEP = 3, MEMORY = 4, RECENTS = 5, APP_SETTINGS = 6,
@@ -41,8 +43,10 @@ final class ControlCenter {
         {APP_SETTINGS, 0, 4, 1}, {TV_SETTINGS, 1, 4, 1},
     };
     // The tiles' corners are concentric with the panel's (panel radius = tile radius + padding), as in the menu.
-    static final float TILE_W = 272, TILE_H = 124, GAP = 16, PAD = 18, TILE_RADIUS = 24;
-    private static final float TEXT_X = 22, CHIP_H = 42, CHIP_GAP = 8, SHADOW_BLUR = 26;
+    // Concentric corners everywhere (outer radius = inner radius + the padding between them): the panel around the
+    // tiles, a tile around its time chips.
+    static final float TILE_W = 272, TILE_H = 124, GAP = 16, PAD = 28, TILE_RADIUS = 30;
+    private static final float TEXT_X = 22, CHIP_H = 40, CHIP_GAP = 8, CHIP_INSET = 14, SHADOW_BLUR = 26;
     private static final int INK = 0xFF1D1D1F, DIM = 0xFF6E6E73, WHITE = 0xFFF5F5F7;
     private static final long MEMORY_SETTLE_MS = 5000;   // the cleanup runs in the background; the tile reads again after
 
@@ -116,8 +120,8 @@ final class ControlCenter {
 
     /** The sleep timer's choices, side by side along the bottom of its tile. */
     private void layoutChips(RectF r) {
-        float x = r.left + TEXT_X * k, room = r.width() - 2 * TEXT_X * k, gap = CHIP_GAP * k;
-        float w = (room - (chips.length - 1) * gap) / chips.length, bottom = r.bottom - 16 * k;
+        float inset = CHIP_INSET * k, x = r.left + inset, room = r.width() - 2 * inset, gap = CHIP_GAP * k;
+        float w = (room - (chips.length - 1) * gap) / chips.length, bottom = r.bottom - inset;
         for (int i = 0; i < chips.length; i++) {
             chips[i].set(x, bottom - CHIP_H * k, x + w, bottom);
             x += w + gap;
@@ -436,8 +440,7 @@ final class ControlCenter {
         tmp.offset(0, 12 * k);
         shadow.setColor(Ui.alpha(0xFF000000, 0.16f + 0.24f * dk));
         shadows.draw(c, tmp, radius, SHADOW_BLUR * k, shadow);
-        fill.setColor(tone(0xFAFFFFFF, 0xFA2C2C2E));
-        c.drawRoundRect(panel, radius, radius, fill);
+        host.glass(c, panel, radius);
         border.setColor(tone(0x14000000, 0x1FFFFFFF));
         c.drawRoundRect(panel, radius, radius, border);
         int restInk = tone(INK, WHITE), litInk = tone(WHITE, INK);
@@ -489,11 +492,11 @@ final class ControlCenter {
         c.drawText(titles[i], x + 48 * k, line, title);
         status.setColor(dim);
         c.drawText(details[i], r.right - TEXT_X * k, line, status);
-        float h = CHIP_H * k;
+        float h = CHIP_H * k, chipRadius = (TILE_RADIUS - CHIP_INSET) * k;
         for (int j = 0; j < chips.length; j++) {
             boolean chosen = j == sleepAt;
             fill.setColor(chosen ? ink : Ui.alpha(ink, 0.1f));
-            c.drawRoundRect(chips[j], h / 2, h / 2, fill);
+            c.drawRoundRect(chips[j], chipRadius, chipRadius, fill);
             chipText.setColor(chosen ? contrast(ink) : ink);
             c.drawText(chipLabels[j], chips[j].centerX(), chips[j].centerY() + chipHalfCap, chipText);
             if (j == sleepCursor && f > 0.01f) {
@@ -501,7 +504,7 @@ final class ControlCenter {
                 tmp.set(chips[j]);
                 tmp.inset(-out, -out);
                 cursor.setColor(Ui.alpha(ink, f));
-                c.drawRoundRect(tmp, h / 2 + out, h / 2 + out, cursor);
+                c.drawRoundRect(tmp, chipRadius + out, chipRadius + out, cursor);
             }
         }
     }

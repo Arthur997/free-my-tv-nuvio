@@ -32,6 +32,14 @@ public class ControlActivity extends Activity {
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (HomeActivity.inFront && !RecentsActivity.showing) {
+            // Over the home screen: its own panel, under its button in the corner, instead of this one in the middle.
+            startActivity(new Intent(this, HomeActivity.class).putExtra(HomeActivity.OPEN_CONTROL, true)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION));
+            finish();
+            overridePendingTransition(0, 0);
+            return;
+        }
         Ui.init(this);
         panel = new Panel(this);
         setContentView(panel);
@@ -44,17 +52,17 @@ public class ControlActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
-        panel.resume();
+        if (panel != null) panel.resume();
     }
 
     @Override protected void onPause() {
-        panel.pause();
+        if (panel != null) panel.pause();
         super.onPause();
     }
 
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         if (RemoteKeys.onKey(this, event)) return true;
-        if (panel.onKey(event)) return true;
+        if (panel != null && panel.onKey(event)) return true;
         return super.dispatchKeyEvent(event);
     }
 
@@ -66,6 +74,7 @@ public class ControlActivity extends Activity {
         private final Spring appear = new Spring(0.22f, 0.86f, 0);
         private final Handler handler = new Handler(Looper.getMainLooper());
         private final Paint toastPaint = new Paint(Paint.ANTI_ALIAS_FLAG), pillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint glassPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final android.graphics.RectF pill = new android.graphics.RectF();
         private float k = 1;
         private String toast = "";
@@ -111,6 +120,7 @@ public class ControlActivity extends Activity {
             toastPaint.setColor(0xE6FFFFFF);
             toastPaint.setTextAlign(Paint.Align.CENTER);
             pillPaint.setColor(0xE62C2C2E);
+            glassPaint.setColor(0xD91C1C1E);
         }
 
         boolean onKey(KeyEvent e) {
@@ -172,6 +182,11 @@ public class ControlActivity extends Activity {
 
         @Override public float dark() {
             return 1;
+        }
+
+        /** Smoked glass: over another app there's no backdrop to bend, only the picture behind the window. */
+        @Override public void glass(Canvas c, android.graphics.RectF r, float radius) {
+            c.drawRoundRect(r, radius, radius, glassPaint);
         }
 
         // MARK: - Frames
