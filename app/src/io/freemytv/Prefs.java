@@ -313,7 +313,8 @@ final class Prefs {
         return new File(app.getFilesDir(), "remote-keys.txt");
     }
 
-    private static final String[] keyApps = new String[KEYS.length];   // null = the default
+    /** "key=target" as in the file, in its order (the brand's buttons first, then the ones taught on this TV). */
+    private static final java.util.LinkedHashMap<Integer, String> keyApps = new java.util.LinkedHashMap<>();
     private static long keysStamp = Long.MIN_VALUE;
 
     private static boolean writeKeys(String text) {
@@ -346,39 +347,140 @@ final class Prefs {
         writeKeys(sb.toString());
     }
 
-    /** Package the key opens ("" = nothing). */
-    static String keyApp(int keyCode) {
-        synchronized (keyApps) {
-            File f = keysFile();
-            long stamp = f.lastModified() * 31 + f.length();   // 0 without the file: every key opens its default
-            if (stamp != keysStamp) {
-                keysStamp = stamp;
-                java.util.Arrays.fill(keyApps, null);
-                if (stamp != 0) {
-                    try (BufferedReader r = new BufferedReader(new FileReader(f))) {
-                        String line;
-                        while ((line = r.readLine()) != null) {
-                            for (int i = 0; i < KEYS.length; i++) {
-                                String prefix = KEYS[i] + "=";
-                                if (line.startsWith(prefix)) keyApps[i] = line.substring(prefix.length());
-                            }
-                        }
-                    } catch (IOException ignored) {
-                    }
+    /** The file again, when it changed (call with keyApps held). */
+    private static void readKeys() {
+        File f = keysFile();
+        long stamp = f.lastModified() * 31 + f.length();   // 0 without the file: every key opens its default
+        if (stamp == keysStamp) return;
+        keysStamp = stamp;
+        keyApps.clear();
+        if (stamp == 0) return;
+        try (BufferedReader r = new BufferedReader(new FileReader(f))) {
+            String line;
+            while ((line = r.readLine()) != null) {
+                int eq = line.indexOf('=');
+                if (eq <= 0) continue;
+                try {
+                    keyApps.put(Integer.parseInt(line.substring(0, eq)), line.substring(eq + 1));
+                } catch (NumberFormatException ignored) {
                 }
             }
-            for (int i = 0; i < KEYS.length; i++) if (KEYS[i] == keyCode && keyApps[i] != null) return keyApps[i];
-            return defaultApp(keyCode);
+        } catch (IOException ignored) {
         }
     }
 
-    /** Saves the app a key opens; false when the file couldn't be written (the old choice stays). */
-    static boolean setKeyApp(int keyCode, String pkg) {
+    /** What the key opens: a package, OPEN_CONTROL or OPEN_RECENTS ("" = nothing: the TV keeps the button). */
+    static String keyApp(int keyCode) {
+        synchronized (keyApps) {
+            readKeys();
+            String v = keyApps.get(keyCode);
+            return v != null ? v : defaultApp(keyCode);
+        }
+    }
+
+    /**
+     * Chosen on this TV, not just a brand default (earlier versions wrote every default into the file: one that matches
+     * its default doesn't count).
+     */
+    static boolean keyChosen(int keyCode) {
+        synchronized (keyApps) {
+            readKeys();
+            String v = keyApps.get(keyCode);
+            return v != null && !v.equals(defaultApp(keyCode));
+        }
+    }
+
+    /** The buttons that do something now, in order: the brand's (with their defaults) and then the taught ones. */
+    static List<Integer> keysInUse() {
+        List<Integer> out = new ArrayList<>();
+        for (int key : KEYS) if (!keyApp(key).isEmpty()) out.add(key);
+        synchronized (keyApps) {
+            readKeys();
+            for (java.util.Map.Entry<Integer, String> e : keyApps.entrySet()) {
+                if (!e.getValue().isEmpty() && !out.contains(e.getKey())) out.add(e.getKey());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Saves what a key opens; false when the file couldn't be written (the old choice stays). A taught button set to
+     * "" is forgotten; a brand's button keeps the "" (it overrides its default).
+     */
+    static boolean setKeyApp(int keyCode, String target) {
+        // Only what was chosen goes in the file: a brand default stays a default (and its row hidden until it's seen).
+        java.util.LinkedHashMap<Integer, String> all;
+        synchronized (keyApps) {
+            readKeys();
+            all = new java.util.LinkedHashMap<>(keyApps);
+        }
+        boolean brand = false;
+        for (int key : KEYS) brand |= key == keyCode;
+        if (target.isEmpty() && !brand) all.remove(keyCode);
+        else all.put(keyCode, target);
         StringBuilder sb = new StringBuilder();
-        for (int key : KEYS) sb.append(key).append('=').append(key == keyCode ? pkg : keyApp(key)).append('\n');
+        for (java.util.Map.Entry<Integer, String> e : all.entrySet()) sb.append(e.getKey()).append('=').append(e.getValue()).append('\n');
         if (!writeKeys(sb.toString())) return false;
         version++;
         return true;
+    }
+
+    // MARK: - Teaching a button (Remote Buttons > Identify a button)
+
+    // Remote Buttons asks for the next button; the key service (or the settings screen itself, without the service)
+    // answers with the one pressed. A tiny file again, between the processes: "wait <time>" or "got <key> <time>".
+    private static final long LEARN_MS = 60_000;
+
+    private static File learnFile() {
+        return new File(app.getFilesDir(), "remote-learn.txt");
+    }
+
+    private static final long[] learnState = new long[3];   // {waiting since, key got, file stamp}
+
+    static void startLearning() {
+        writeSafely(learnFile(), "wait " + System.currentTimeMillis() + "\n");
+    }
+
+    static void stopLearning() {
+        //noinspection ResultOfMethodCallIgnored
+        learnFile().delete();
+    }
+
+    /** Waiting for a button (for a minute at most). Read on every key: the file only when it changed. */
+    static boolean learning() {
+        readLearn();
+        synchronized (learnState) {
+            return learnState[0] > 0 && System.currentTimeMillis() - learnState[0] < LEARN_MS;
+        }
+    }
+
+    /** The button pressed while waiting, or 0. */
+    static int learnedKey() {
+        readLearn();
+        synchronized (learnState) {
+            return (int) learnState[1];
+        }
+    }
+
+    static void learned(int keyCode) {
+        writeSafely(learnFile(), "got " + keyCode + " " + System.currentTimeMillis() + "\n");
+    }
+
+    private static void readLearn() {
+        synchronized (learnState) {
+            File f = learnFile();
+            long stamp = f.lastModified() * 31 + f.length();
+            if (stamp == learnState[2]) return;
+            learnState[2] = stamp;
+            learnState[0] = learnState[1] = 0;
+            if (stamp == 0) return;
+            try (BufferedReader r = new BufferedReader(new FileReader(f))) {
+                String[] parts = r.readLine().trim().split(" ");
+                if (parts[0].equals("wait")) learnState[0] = Long.parseLong(parts[1]);
+                else if (parts[0].equals("got")) learnState[1] = Integer.parseInt(parts[1]);
+            } catch (IOException | RuntimeException ignored) {
+            }
+        }
     }
 
     // The buttons this remote has: the key service notes when it last saw each one (Remote Buttons shows them).
@@ -386,7 +488,7 @@ final class Prefs {
         return new File(app.getFilesDir(), "remote-keys-seen.txt");
     }
 
-    private static final long[] keysSeenAt = new long[KEYS.length];
+    private static final java.util.Map<Integer, Long> keysSeenAt = new java.util.HashMap<>();
     private static long seenStamp = Long.MIN_VALUE;
 
     /** The key service saw this button (called on its first press): saved off the key's path, in a thread. */
@@ -395,10 +497,10 @@ final class Prefs {
         new Thread(() -> {
             synchronized (keysSeenAt) {
                 keySeenAt(keyCode);   // the file's latest
+                keysSeenAt.put(keyCode, now);
                 StringBuilder sb = new StringBuilder();
-                for (int i = 0; i < KEYS.length; i++) {
-                    long at = KEYS[i] == keyCode ? now : keysSeenAt[i];
-                    if (at > 0) sb.append(KEYS[i]).append('=').append(at).append('\n');
+                for (java.util.Map.Entry<Integer, Long> e : keysSeenAt.entrySet()) {
+                    sb.append(e.getKey()).append('=').append(e.getValue()).append('\n');
                 }
                 writeSafely(seenFile(), sb.toString());
             }
@@ -412,11 +514,11 @@ final class Prefs {
             long stamp = f.lastModified() * 31 + f.length();
             if (stamp != seenStamp) {
                 seenStamp = stamp;
-                java.util.Arrays.fill(keysSeenAt, 0);
+                keysSeenAt.clear();
                 if (stamp != 0) readSeen(f);
             }
-            for (int i = 0; i < KEYS.length; i++) if (KEYS[i] == keyCode) return keysSeenAt[i];
-            return 0;
+            Long at = keysSeenAt.get(keyCode);
+            return at == null ? 0 : at;
         }
     }
 
@@ -427,10 +529,9 @@ final class Prefs {
             while ((line = r.readLine()) != null) {
                 int eq = line.indexOf('=');
                 if (eq <= 0) continue;
-                String key = line.substring(0, eq);
-                for (int i = 0; i < KEYS.length; i++) {
-                    if (!key.equals(String.valueOf(KEYS[i]))) continue;
-                    try { keysSeenAt[i] = Long.parseLong(line.substring(eq + 1)); } catch (NumberFormatException ignored) {}
+                try {
+                    keysSeenAt.put(Integer.parseInt(line.substring(0, eq)), Long.parseLong(line.substring(eq + 1)));
+                } catch (NumberFormatException ignored) {
                 }
             }
         } catch (IOException ignored) {

@@ -258,6 +258,7 @@ public class SettingsActivity extends Activity {
                     if (newest != null) announceForAccessibility(newest.optString("text"));
                 }
                 wasBusy = nowBusy;
+                checkLearned();
                 invalidate();
                 handler.postDelayed(this, 500);
             }
@@ -412,33 +413,102 @@ public class SettingsActivity extends Activity {
             return p;
         }
 
-        /** Remote Buttons: the app each of the brand's buttons opens. */
+        /**
+         * Remote Buttons: "Identify a button" (press any button on the remote, then pick what it opens), then every button
+         * that does something now and what. Remotes differ between TVs (the same button can send another code), so the
+         * buttons are told apart by what this TV receives, not by a brand's list of names.
+         */
         private Page keysPage() {
             Page p = new Page(Ui.tr("Botões do Controle", "Remote Buttons"));
-            String[] labels = keyLabels();
-            for (int i = 0; i < Prefs.KEYS.length && i < labels.length; i++) {
-                int key = Prefs.KEYS[i];
-                String label = labels[i];
-                p.rows.add(new Row(() -> onRemote(key) ? label : label + " · " + Ui.tr("não visto", "not seen yet", "no visto"), () -> {
-                    int at = appPkgs.indexOf(Prefs.keyApp(key));
-                    return at >= 0 ? appLabels.get(at) : Ui.tr("Não instalado", "Not installed");
-                }, () -> openPicker(label, appLabels, appPkgs.indexOf(Prefs.keyApp(key)), at -> setKeyApp(key, appPkgs.get(at))),
-                        dir -> {
-                            int n = appPkgs.size(), at = appPkgs.indexOf(Prefs.keyApp(key));
-                            setKeyApp(key, appPkgs.get(at < 0 ? (dir > 0 ? 0 : n - 1) : (at + dir + n) % n));
-                        }, null));
-            }
-            p.hint = () -> keysHint(labels);
-            p.hint2 = () -> RemoteKeys.supported() ? Ui.tr("Em Nada, a TV cuida do botão. A Central de controle e os Apps recentes abrem por cima de qualquer app.",
-                    "On Nothing, the TV handles the button. The Control Center and Recent apps open over any app.",
-                    "En Nada, la TV se encarga del botón. El Centro de control y las Apps recientes abren sobre cualquier app.")
-                    : Ui.tr("Esses são os botões do controle da TCL: nesta TV, os botões funcionam como sempre.",
-                    "These are the TCL remote's buttons: on this TV, the buttons work as they always did.");
+            p.rebuild = () -> {
+                p.rows.clear();
+                p.rows.add(new Row(() -> learningKeys ? Ui.tr("Aperte o botão no controle…", "Press the button on the remote…",
+                        "Pulsa el botón en el control…") : Ui.tr("Identificar um botão", "Identify a button", "Identificar un botón"),
+                        () -> "", this::startLearningKeys, null, null));
+                for (int key : Prefs.keysInUse()) {
+                    // A brand default this remote never sent (another model's code) would only confuse: it shows once seen.
+                    if (!Prefs.keyChosen(key) && !onRemote(key)) continue;
+                    String label = keyLabel(key);
+                    p.rows.add(new Row(() -> label, () -> targetName(key), () -> pickKeyTarget(key), null, null));
+                }
+                keepVisible(false);
+            };
+            p.hint = this::keysHint;
+            p.hint2 = () -> learningKeys ? Ui.tr("Setas, OK, Voltar, Home, energia e volume não mudam. Voltar cancela.",
+                    "Arrows, OK, Back, Home, power and volume don't change. Back cancels.",
+                    "Flechas, OK, Atrás, Inicio, encendido y volumen no cambian. Atrás cancela.")
+                    : Ui.tr("Em Nada, a TV volta a cuidar do botão.", "On Nothing, the TV handles the button again.",
+                    "En Nada, la TV vuelve a encargarse del botón.");
+            p.rebuild.run();
             return p;
         }
 
         private boolean keysServiceOn = true;   // read by the poll: the TV's list of enabled accessibility services
         private String keysError = "";
+        private boolean learningKeys;
+        private long learningSince;
+
+        /** Waits for the next button (the key service takes it from inside any app; this screen, without the service). */
+        private void startLearningKeys() {
+            if (learningKeys) return;
+            keysError = "";
+            Prefs.startLearning();
+            learningKeys = true;
+            learningSince = System.currentTimeMillis();
+            if (!keysServiceOn) HomeMode.ensureRemoteService(getContext(), 0);
+            if (page != null && page.rebuild != null) page.rebuild.run();
+            invalidate();
+        }
+
+        private void stopLearningKeys() {
+            if (!learningKeys) return;
+            learningKeys = false;
+            Prefs.stopLearning();
+            if (page != null && page.rebuild != null) page.rebuild.run();
+            invalidate();
+        }
+
+        /** From the poll and from this screen's keys: a button came, its list of choices opens; a minute without one ends it. */
+        private void checkLearned() {
+            if (!learningKeys) return;
+            int key = Prefs.learnedKey();
+            if (key != 0) {
+                stopLearningKeys();
+                pickKeyTarget(key);
+            } else if (System.currentTimeMillis() - learningSince > 60_000) {
+                stopLearningKeys();
+                keysError = Ui.tr("Nenhum botão foi apertado.", "No button was pressed.", "No se pulsó ningún botón.");
+            }
+        }
+
+        /** The choices for one button: an app, the Control Center, Recent apps or Nothing. */
+        private void pickKeyTarget(int key) {
+            openPicker(keyLabel(key), appLabels, appPkgs.indexOf(Prefs.keyApp(key)), at -> setKeyApp(key, appPkgs.get(at)));
+        }
+
+        private String targetName(int key) {
+            int at = appPkgs.indexOf(Prefs.keyApp(key));
+            return at >= 0 ? appLabels.get(at) : Ui.tr("Não instalado", "Not installed");
+        }
+
+        /** The brand's name for one of its buttons (one remote per brand), else what this TV calls the key. */
+        private String keyLabel(int key) {
+            String[] labels = keyLabels();
+            for (int i = 0; i < Prefs.KEYS.length && i < labels.length; i++) if (Prefs.KEYS[i] == key) return labels[i];
+            return keyName(key);
+        }
+
+        /** "INFO button", "PROG RED button", or its number ("4097 button") for the brand's own codes. */
+        private static String keyName(int key) {
+            String name;
+            if (key >= RemoteKeys.UNKNOWN_KEY) name = "scan " + (key - RemoteKeys.UNKNOWN_KEY);
+            else if (key >= Prefs.SONY_KEY) name = "Sony " + (key - Prefs.SONY_KEY);
+            else {
+                String s = KeyEvent.keyCodeToString(key);
+                name = s.startsWith("KEYCODE_") ? s.substring(8).replace('_', ' ') : String.valueOf(key);
+            }
+            return Ui.trf(Ui.tr("Botão {name}", "{name} button", "Botón {name}"), "name", name);
+        }
 
         /** Saves a button's app; if it didn't save, says so; and makes sure the key service is on to use it. */
         private void setKeyApp(int key, String pkg) {
@@ -463,8 +533,12 @@ public class SettingsActivity extends Activity {
             return has;
         }
 
-        /** What's wrong, else the button just pressed and what it opens, else how to test one. */
-        private String keysHint(String[] labels) {
+        /** Waiting for a button, else what's wrong, else the button just pressed and what it opens, else how to start. */
+        private String keysHint() {
+            if (learningKeys) {
+                return Ui.tr("Aperte o botão do controle que você quer configurar.", "Press the button on the remote you want to set.",
+                        "Pulsa el botón del control que quieres configurar.");
+            }
             if (!keysError.isEmpty()) return keysError;
             // The service runs only in Free My TV mode (Original turns it off on purpose).
             if (!keysServiceOn && RemoteKeys.supported() && HomeMode.FREE.equals(state.optString("mode"))) {
@@ -472,15 +546,13 @@ public class SettingsActivity extends Activity {
                         "El servicio de los botones está apagado. Encendiéndolo…");
             }
             long now = System.currentTimeMillis();
-            for (int i = 0; i < Prefs.KEYS.length && i < labels.length; i++) {
-                if (now - Prefs.keySeenAt(Prefs.KEYS[i]) > 15_000) continue;
-                int at = appPkgs.indexOf(Prefs.keyApp(Prefs.KEYS[i]));
-                String app = at >= 0 ? appLabels.get(at) : Ui.tr("Não instalado", "Not installed");
-                return Ui.trf("{button} works: it opens {app}.", "button", labels[i], "app", app);
+            for (int key : Prefs.keysInUse()) {
+                if (now - Prefs.keySeenAt(key) > 15_000) continue;
+                return Ui.trf("{button} works: it opens {app}.", "button", keyLabel(key), "app", targetName(key));
             }
-            return Ui.tr("OK abre a lista de apps. Aperte um botão do controle para testar.",
-                    "OK opens the list of apps. Press a button on the remote to test it.",
-                    "OK abre la lista de apps. Pulsa un botón del control para probarlo.");
+            return Ui.tr("Identificar um botão: aperte qualquer botão do controle e escolha o que ele abre.",
+                    "Identify a button: press any button on the remote and pick what it opens.",
+                    "Identificar un botón: pulsa cualquier botón del control y elige qué abre.");
         }
 
         /** A row that opens a page (a chevron instead of a value). */
@@ -688,6 +760,7 @@ public class SettingsActivity extends Activity {
         }
 
         void pause() {
+            stopLearningKeys();   // the key service must not keep taking buttons after this screen is gone
             click.stop();
             running = false;
             handler.removeCallbacks(poll);
@@ -1059,6 +1132,18 @@ public class SettingsActivity extends Activity {
 
         boolean onKey(KeyEvent e) {
             boolean down = e.getAction() == KeyEvent.ACTION_DOWN;
+            if (learningKeys && e.getKeyCode() == KeyEvent.KEYCODE_BACK) {
+                if (!down) stopLearningKeys();
+                return true;
+            }
+            // Without the key service (or a key it doesn't see), this screen takes the button itself.
+            if (learningKeys && !RemoteKeys.reserved(e.getKeyCode())) {
+                if (down && e.getRepeatCount() == 0) {
+                    Prefs.learned(RemoteKeys.identity(e));
+                    checkLearned();
+                }
+                return true;
+            }
             switch (e.getKeyCode()) {
                 case KeyEvent.KEYCODE_DPAD_UP:
                 case KeyEvent.KEYCODE_DPAD_DOWN:
@@ -1211,12 +1296,8 @@ public class SettingsActivity extends Activity {
                     Ui.tr("Botão Netflix", "Netflix button"), Ui.tr("Botão Disney+", "Disney+ button"),
                     Ui.tr("Botão Prime Video", "Prime Video button"), Ui.tr("Botão YouTube", "YouTube button"),
                     Ui.tr("Botão Crunchyroll", "Crunchyroll button"), Ui.tr("Botão Google Play", "Google Play button")};
-            // The same order as Prefs.KEYS (the remote's).
-            return new String[] {Ui.tr("Botão Netflix", "Netflix button"), Ui.tr("Botão Prime Video", "Prime Video button"),
-                    Ui.tr("Botão YouTube", "YouTube button"), Ui.tr("Botão Globoplay", "Globoplay button", "Botón Globoplay"),
-                    Ui.tr("Botão TCL tv+", "TCL tv+ button", "Botón TCL tv+"), Ui.tr("Botão Disney+", "Disney+ button"),
-                    Ui.tr("Botão ≡", "≡ button", "Botón ≡"), Ui.tr("Botão 123", "123 button", "Botón 123"),
-                    Ui.tr("Botão ⓘ", "ⓘ button", "Botón ⓘ")};
+            // TCL's remotes send other codes for the same button from one model to the next: no names, the code (keyName).
+            return new String[0];
         }
 
         /** Installed TV apps, by name, after "Nothing": what a remote button can open. */
