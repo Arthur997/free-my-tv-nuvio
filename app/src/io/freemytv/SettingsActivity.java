@@ -306,6 +306,7 @@ public class SettingsActivity extends Activity {
             p.rows.add(new Row(() -> Ui.tr("Início", "Home Screen"),
                     () -> busy() ? "" : freeActive() ? "Free My TV" : Ui.tr("Original", "Original"), this::openHomeChoice, null, null));
             p.rows.add(opens(() -> Ui.tr("Aparência", "Appearance", "Apariencia"), () -> open(appearancePage())));
+            p.rows.add(opens(() -> Ui.tr("Desempenho", "Performance", "Rendimiento"), () -> open(performancePage())));
             p.rows.add(opens(() -> Ui.tr("Recomendações", "Picks"), () -> open(picksPage())));
             p.rows.add(opens(() -> Ui.tr("Clima e cotações", "Weather and prices", "Clima y cotizaciones"), () -> open(weatherPage())));
             p.rows.add(opens(() -> Ui.tr("Tela de descanso", "Screensaver"), () -> open(screensaverPage())));
@@ -322,7 +323,7 @@ public class SettingsActivity extends Activity {
             return p;
         }
 
-        /** Language, theme, units, the top of the home screen, the shelf's art, performance mode and the sounds. */
+        /** Language, theme, units, the top of the home screen, the shelf's art and the sounds. */
         private Page appearancePage() {
             Page p = new Page(Ui.tr("Aparência", "Appearance", "Apariencia"));
             p.rows.add(choice(() -> Ui.tr("Idioma", "Language"), this::languageNames, () -> languageIndex(),
@@ -338,13 +339,273 @@ public class SettingsActivity extends Activity {
             p.rows.add(choice(() -> Ui.tr("Capa dos apps na prateleira", "Shelf app art"),
                     () -> list(Ui.tr("Original do app", "The app's own"), Ui.tr("Logo", "Logo")),
                     () -> Prefs.originalArt() ? 0 : 1, at -> Prefs.setOriginalArt(at == 0)));
-            p.rows.add(choice(() -> Ui.tr("Modo desempenho", "Performance mode"),
-                    () -> list(Ui.tr("Desligado", "Off"), Ui.tr("Ligado (sem vidro)", "On (no glass)")),
-                    () -> Prefs.performance() ? 1 : 0, at -> Prefs.setPerformance(at == 1)));
             p.rows.add(choice(() -> Ui.tr("Volume dos sons", "Sound volume", "Volumen de los sonidos"), SettingsView::soundLevels,
                     Prefs::soundLevel, Prefs::setSoundLevel));
             p.hint = () -> Ui.tr("OK abre as opções; ← e → mudam direto.", "OK opens the choices; ← and → change it right away.");
             return p;
+        }
+
+        // MARK: - Performance: the light look, fast animations, optimized apps, and the background services to turn off
+
+        private boolean optimizeRead, optimizeRunning, readingOptimize;
+        private long optimizedAt;
+
+        private Page performancePage() {
+            Page p = new Page(Ui.tr("Desempenho", "Performance", "Rendimiento"));
+            p.rows.add(choice(() -> Ui.tr("Modo desempenho", "Performance mode"),
+                    () -> list(Ui.tr("Desligado", "Off"), Ui.tr("Ligado (sem vidro)", "On (no glass)")),
+                    () -> Prefs.performance() ? 1 : 0, at -> Prefs.setPerformance(at == 1)));
+            p.rows.add(onOff(() -> Ui.tr("Animações rápidas", "Fast animations", "Animaciones rápidas"),
+                    () -> HomeMode.fastAnimations(state), on -> HomeMode.requestFastAnimations(getContext(), on), null));
+            p.rows.add(new Row(() -> Ui.tr("Otimizar apps", "Optimize apps", "Optimizar apps"), this::optimizeState,
+                    this::askOptimize, null, null));
+            Row background = new Row(() -> Ui.tr("Serviços em segundo plano", "Background services", "Servicios en segundo plano"),
+                    () -> "", this::openBackgroundApps, null, null);
+            background.opens = true;
+            p.rows.add(background);
+            // Two short lines: a hint isn't wrapped.
+            p.hint = () -> {
+                switch (focus) {
+                    case 1: return Ui.tr("Janelas e transições na metade do tempo.", "Windows and transitions in half the time.",
+                            "Ventanas y transiciones en la mitad del tiempo.");
+                    case 2: return Ui.tr("Compila o código mais usado: os apps abrem mais rápido.", "Compiles the most used code: apps open faster.",
+                            "Compila el código más usado: las apps abren más rápido.");
+                    case 3: return Ui.tr("Apps da TV que rodam escondidos e ocupam memória.", "The TV's apps that run out of sight and hold memory.",
+                            "Apps de la TV que corren ocultas y ocupan memoria.");
+                    default: return Ui.tr("OK abre as opções; ← e → mudam direto.", "OK opens the choices; ← and → change it right away.");
+                }
+            };
+            p.hint2 = () -> {
+                switch (focus) {
+                    case 1: return Ui.tr("O modo Original volta como era.", "Original brings them back as they were.", "El modo Original las deja como estaban.");
+                    case 2: return Ui.tr("A TV só faz isso parada. Enquanto roda, ela fica lenta.", "The TV only does it when idle. While it runs, it's slower.",
+                            "La TV solo lo hace en reposo. Mientras corre, va más lenta.");
+                    case 3: return Ui.tr("Você escolhe o que fica ligado.", "You pick what stays on.", "Tú eliges qué queda encendido.");
+                    default: return "";
+                }
+            };
+            readOptimize();
+            return p;
+        }
+
+        private String optimizeState() {
+            if (!optimizeRead) return "…";
+            if (optimizeRunning) return Ui.tr("Otimizando…", "Optimizing…", "Optimizando…");
+            if (optimizedAt == 0) return Ui.tr("Nunca", "Never", "Nunca");
+            long days = (System.currentTimeMillis() - optimizedAt) / 86_400_000L;
+            return days == 0 ? Ui.tr("Hoje", "Today", "Hoy") : Ui.plural(Ui.tr("plural|one:Há {n} dia|other:Há {n} dias",
+                    "plural|one:{n} day ago|other:{n} days ago", "plural|one:Hace {n} día|other:Hace {n} días"), (int) days);
+        }
+
+        private void askOptimize() {
+            if (optimizeRunning) return;
+            openPicker(Ui.tr("Otimizar os apps agora? A TV fica lenta por alguns minutos.", "Optimize the apps now? The TV is slow for a few minutes.",
+                    "¿Optimizar las apps ahora? La TV va lenta unos minutos."),
+                    list(Ui.tr("Otimizar", "Optimize", "Optimizar"), Ui.tr("Cancelar", "Cancel")), 1, at -> {
+                        if (at != 0) return;
+                        HomeMode.requestOptimizeApps(getContext());
+                        optimizeRunning = true;
+                        handler.postDelayed(this::readOptimize, 5000);
+                    });
+        }
+
+        /** Whether it runs and when it last ended, from the TV's shell; again every 10 s while it runs and the page is open. */
+        private void readOptimize() {
+            if (readingOptimize) return;
+            readingOptimize = true;
+            new Thread(() -> {
+                long[] status = null;
+                try {
+                    status = HomeMode.optimizeStatus(getContext());
+                } catch (java.io.IOException e) {
+                    AppLog.w("optimize status: " + e.getMessage());
+                }
+                long[] read = status;
+                handler.post(() -> {
+                    readingOptimize = false;
+                    optimizeRead = true;
+                    if (read != null) {
+                        optimizeRunning = read[0] == 1;
+                        optimizedAt = read[1];
+                    }
+                    if (optimizeRunning && running) handler.postDelayed(this::readOptimize, 10_000);
+                    invalidate();
+                });
+            }, "free-my-tv-optimize-status").start();
+        }
+
+        private List<HomeMode.BackgroundApp> backgroundApps;   // null until read
+        private final java.util.Map<String, Boolean> backgroundKeep = new java.util.HashMap<>();   // the person's pick
+        private boolean readingBackground;
+        private Page backgroundPage;
+
+        /**
+         * The optional services this TV has (HomeMode.OPTIONAL_SERVICES), the most memory first, each marked to keep or
+         * turn off as the list suggests; OK changes the pick, the hint says what each does. Nothing changes until Apply.
+         */
+        private void openBackgroundApps() {
+            Page p = new Page(Ui.tr("Serviços em segundo plano", "Background services", "Servicios en segundo plano"));
+            p.rebuild = () -> {
+                p.rows.clear();
+                if (backgroundApps == null || backgroundApps.isEmpty()) {
+                    p.rows.add(new Row(() -> backgroundApps == null ? Ui.tr("Lendo os serviços…", "Reading the services…", "Leyendo los servicios…")
+                            : Ui.tr("Nenhum serviço para desligar.", "No services to turn off.", "Ningún servicio para apagar."),
+                            () -> "", () -> {}, null, () -> true));
+                } else {
+                    Row auto = new Row(() -> Ui.tr("Automático", "Automatic", "Automático"), this::automaticText, this::applyAutomatic, null,
+                            () -> automaticPlan()[0].isEmpty() && automaticPlan()[1].isEmpty());
+                    p.rows.add(auto);
+                    for (HomeMode.BackgroundApp app : backgroundApps) {
+                        p.rows.add(new Row(() -> serviceText(app.pkg)[0], () -> backgroundValue(app),
+                                () -> backgroundKeep.put(app.pkg, !keeps(app)), dir -> backgroundKeep.put(app.pkg, !keeps(app)), null));
+                    }
+                    p.rows.add(new Row(() -> Ui.tr("Aplicar", "Apply", "Aplicar"), this::backgroundChanges, this::askApplyBackground, null,
+                            () -> backgroundPlan()[0].isEmpty() && backgroundPlan()[1].isEmpty()));
+                }
+                if (page == p && focus >= p.rows.size()) focus = p.rows.size() - 1;
+            };
+            // Row 0 is Automatic, then one per service, then Apply.
+            p.hint = () -> backgroundApps != null && focus == 0 && !backgroundApps.isEmpty()
+                    ? Ui.tr("Desliga o que não faz falta; mantém o essencial.", "Turns off what isn't missed; keeps what matters.", "Apaga lo que no hace falta; mantiene lo esencial.")
+                    : backgroundApps == null || focus < 1 || focus > backgroundApps.size()
+                    ? Ui.tr("Nada é desinstalado: o modo Original liga todos de volta.", "Nothing is uninstalled: Original turns them all back on.",
+                            "Nada se desinstala: el modo Original las vuelve a encender.")
+                    : serviceText(backgroundApps.get(focus - 1).pkg)[1];
+            p.hint2 = () -> Ui.tr("OK escolhe manter ou desligar; nada muda antes de Aplicar.",
+                    "OK picks keep or turn off; nothing changes before Apply.", "OK elige mantener o apagar; nada cambia antes de Aplicar.");
+            p.rebuild.run();
+            backgroundPage = p;
+            open(p);
+            readBackgroundApps();
+        }
+
+        /** {name, what it does and what turning it off costs}, short enough for the hint's line. */
+        private static String[] serviceText(String pkg) {
+            switch (pkg) {
+                case "com.google.android.katniss": return new String[] {Ui.tr("Google (busca e Assistente)", "Google (search and Assistant)", "Google (búsqueda y Asistente)"),
+                        Ui.tr("Desligado, o microfone do controle e a busca param.", "Off, the remote's mic and search stop working.", "Apagado, el micrófono del control y la búsqueda no funcionan.")};
+                case "com.google.android.speech.pumpkin": return new String[] {Ui.tr("Voz sem internet", "Offline voice", "Voz sin internet"),
+                        Ui.tr("Comandos de voz sem internet, para o Assistente.", "Voice commands without the internet, for the Assistant.", "Comandos de voz sin internet, para el Asistente.")};
+                case "com.google.android.backdrop": return new String[] {Ui.tr("Modo ambiente", "Ambient mode", "Modo ambiente"),
+                        Ui.tr("A tela de descanso de fotos do Google.", "Google's photo screensaver.", "El protector de fotos de Google.")};
+                case "com.google.android.tts": return new String[] {Ui.tr("Leitura em voz alta", "Text-to-speech", "Lectura en voz alta"),
+                        Ui.tr("Lê textos em voz alta; o TalkBack usa.", "Reads text aloud; TalkBack uses it.", "Lee textos en voz alta; TalkBack lo usa.")};
+                case "com.google.android.marvin.talkback": return new String[] {"TalkBack",
+                        Ui.tr("O leitor de tela, para quem não enxerga bem.", "The screen reader, for people who don't see well.", "El lector de pantalla, para quien no ve bien.")};
+                case "com.google.android.videos": return new String[] {Ui.tr("Google TV (filmes)", "Google TV (movies)", "Google TV (películas)"),
+                        Ui.tr("Comprar e alugar filmes e séries do Google.", "Buying and renting movies and shows from Google.", "Comprar y alquilar películas y series de Google.")};
+                case "com.android.gallery3d": return new String[] {Ui.tr("Galeria", "Gallery", "Galería"),
+                        Ui.tr("Fotos de um pendrive. A TV tem seu próprio leitor.", "Photos from a USB drive. The TV has its own viewer.", "Fotos de un pendrive. La TV tiene su propio visor.")};
+                case "com.google.android.music": return new String[] {"Google Play Music",
+                        Ui.tr("Serviço encerrado pelo Google.", "A service Google closed.", "Servicio cerrado por Google.")};
+                case "com.google.android.youtube.tvmusic": return new String[] {"YouTube Music",
+                        Ui.tr("Música do YouTube, num app à parte.", "Music from YouTube, in an app of its own.", "Música de YouTube, en una app aparte.")};
+                case "com.google.android.play.games": return new String[] {"Play Games",
+                        Ui.tr("Conquistas e perfis de jogos do Google.", "Game achievements and profiles from Google.", "Logros y perfiles de juegos de Google.")};
+                case "com.google.android.tvrecommendations":
+                case "com.google.android.leanbacklauncher.recommendations": return new String[] {Ui.tr("Recomendações do Android TV", "Android TV recommendations", "Recomendaciones de Android TV"),
+                        Ui.tr("Sugestões para a tela inicial original da TV.", "Suggestions for the original home screen of the TV.", "Sugerencias para la pantalla de inicio original.")};
+                case "com.google.android.feedback": return new String[] {Ui.tr("Envio de feedback", "Feedback", "Envío de comentarios"),
+                        Ui.tr("Manda opiniões e travamentos ao Google.", "Sends opinions and crashes to Google.", "Envía opiniones y fallos a Google.")};
+                case "com.google.android.tv.bugreportsender": return new String[] {Ui.tr("Relatórios de erro", "Bug reports", "Informes de errores"),
+                        Ui.tr("Manda relatórios de erro ao Google.", "Sends bug reports to Google.", "Envía informes de errores a Google.")};
+                case "com.android.printspooler": return new String[] {Ui.tr("Impressão", "Printing", "Impresión"),
+                        Ui.tr("Imprimir pela TV.", "Printing from the TV.", "Imprimir desde la TV.")};
+                case "com.google.android.syncadapters.calendar": return new String[] {Ui.tr("Sincronizar agenda", "Calendar sync", "Sincronizar calendario"),
+                        Ui.tr("Copia a agenda do Google para a TV.", "Copies the Google calendar to the TV.", "Copia el calendario de Google a la TV.")};
+                case "com.google.android.syncadapters.contacts": return new String[] {Ui.tr("Sincronizar contatos", "Contacts sync", "Sincronizar contactos"),
+                        Ui.tr("Copia os contatos do Google para a TV.", "Copies the Google contacts to the TV.", "Copia los contactos de Google a la TV.")};
+                default: return new String[] {pkg, ""};
+            }
+        }
+
+        private boolean keeps(HomeMode.BackgroundApp app) {
+            Boolean keep = backgroundKeep.get(app.pkg);
+            return keep != null ? keep : app.enabled && app.keep;   // the ones already off stay off
+        }
+
+        private String backgroundValue(HomeMode.BackgroundApp app) {
+            String mb = app.megabytes > 0 ? app.megabytes + " MB · " : "";
+            if (!app.enabled) return mb + (keeps(app) ? Ui.tr("Ligar", "Turn on", "Encender") : Ui.tr("Desligado", "Off"));
+            return mb + (keeps(app) ? Ui.tr("Manter", "Keep", "Mantener") : Ui.tr("Desligar", "Turn off", "Apagar"));
+        }
+
+        /** {to turn off, to turn on}: what the picks change. */
+        private List<String>[] backgroundPlan() {
+            return plan(this::keeps, true);
+        }
+
+        /** Automatic: off, every service the list doesn't keep; nothing turned on (one off already stays off). */
+        private List<String>[] automaticPlan() {
+            return plan(app -> app.keep, false);
+        }
+
+        private List<String>[] plan(java.util.function.Predicate<HomeMode.BackgroundApp> keep, boolean turnOn) {
+            @SuppressWarnings("unchecked") List<String>[] plan = new List[] {new ArrayList<String>(), new ArrayList<String>()};
+            if (backgroundApps == null) return plan;
+            for (HomeMode.BackgroundApp app : backgroundApps) {
+                if (app.enabled && !keep.test(app)) plan[0].add(app.pkg);
+                if (turnOn && !app.enabled && keep.test(app)) plan[1].add(app.pkg);
+            }
+            return plan;
+        }
+
+        private String automaticText() {
+            int n = automaticPlan()[0].size();
+            return n == 0 ? Ui.tr("Já está leve", "Already light", "Ya está liviana")
+                    : Ui.plural(Ui.tr("plural|one:Desliga {n}|other:Desliga {n}", "plural|one:Turns off {n}|other:Turns off {n}",
+                    "plural|one:Apaga {n}|other:Apaga {n}"), n);
+        }
+
+        private void applyAutomatic() {
+            backgroundKeep.clear();   // the picks go back to the list's
+            confirmBackground(automaticPlan());
+        }
+
+        private String backgroundChanges() {
+            List<String>[] plan = backgroundPlan();
+            int n = plan[0].size() + plan[1].size();
+            return n == 0 ? Ui.tr("Nada a mudar", "Nothing to change", "Nada que cambiar")
+                    : Ui.plural(Ui.tr("plural|one:{n} mudança|other:{n} mudanças", "plural|one:{n} change|other:{n} changes",
+                    "plural|one:{n} cambio|other:{n} cambios"), n);
+        }
+
+        private void askApplyBackground() {
+            confirmBackground(backgroundPlan());
+        }
+
+        private void confirmBackground(List<String>[] plan) {
+            if (plan[0].isEmpty() && plan[1].isEmpty()) return;
+            String question = Ui.trf(Ui.tr("Desligar {off} e ligar {on}?", "Turn off {off} and turn on {on}?", "¿Apagar {off} y encender {on}?"),
+                    "off", plan[0].size(), "on", plan[1].size());
+            openPicker(question, list(Ui.tr("Aplicar", "Apply", "Aplicar"), Ui.tr("Cancelar", "Cancel")), 1, at -> {
+                if (at != 0) return;
+                HomeMode.requestBackgroundApps(getContext(), plan[0], plan[1]);
+                backgroundApps = null;   // read again once the job is through (each app is checked first)
+                backgroundKeep.clear();
+                backgroundPage.rebuild.run();
+                handler.postDelayed(this::readBackgroundApps, 6000 + 2500L * (plan[0].size() + plan[1].size()));
+            });
+        }
+
+        private void readBackgroundApps() {
+            if (readingBackground) return;
+            readingBackground = true;
+            new Thread(() -> {
+                List<HomeMode.BackgroundApp> list = new ArrayList<>();
+                try {
+                    list = HomeMode.backgroundApps(getContext());
+                } catch (java.io.IOException e) {
+                    AppLog.w("background apps: " + e.getMessage());
+                }
+                List<HomeMode.BackgroundApp> read = list;
+                handler.post(() -> {
+                    readingBackground = false;
+                    backgroundApps = read;
+                    if (backgroundPage != null) backgroundPage.rebuild.run();
+                    invalidate();
+                });
+            }, "free-my-tv-background-apps").start();
         }
 
         /** The picks: which list, how big the top is, where they open, the TMDB key, and Continue Watching's apps. */

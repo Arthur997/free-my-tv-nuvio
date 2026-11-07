@@ -16,8 +16,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -497,6 +499,7 @@ final class HomeMode {
             }
             record(adb, new HashSet<>(failed));
             restoreScreensaver(adb, s);
+            restoreAnimations(c, adb);
             try {
                 remoteService(c, adb, false);
             } catch (IOException e) {
@@ -1050,6 +1053,179 @@ final class HomeMode {
         List<String> list = new ArrayList<>();
         for (String pkg : out) if (mayTurnOff(pkg) && launchable.contains(pkg + "/")) list.add(pkg);
         return list;
+    }
+
+    // MARK: - Performance (More Settings > Performance): optimized apps, fast animations, background services
+
+    /** Where the TV's shell keeps the app optimization: its script, the running one's pid and when it last ended (.done). */
+    private static final String OPTIMIZE_FILES = "/data/local/tmp/freemytv-optimize";
+
+    /**
+     * Compiles each app's most used code ahead of time (speed-profile, from what Android saw it run), as Android does
+     * itself only while the TV is idle, which a TV that suspends in standby never is: on the UnionTV no app had been
+     * optimized since it was installed (Nuvio opened 20% faster after). Only what changed since the last time; the first
+     * time takes minutes, with the TV slower meanwhile. In the TV's shell: it outlives this app.
+     */
+    private static final String OPTIMIZE_SCRIPT = String.join("\n",
+            "F=" + OPTIMIZE_FILES,
+            "echo $$ > $F.pid",
+            "cmd package compile -m speed-profile -a >/dev/null 2>&1",
+            "date +%s > $F.done",
+            "rm -f $F.pid",
+            "log -t FreeMyTV 'apps optimized'",
+            "");
+
+    static void requestOptimizeApps(Context c) {
+        ModeJob.schedule(c, ModeJob.OPTIMIZE, null, 0);
+    }
+
+    static void optimizeAppsNow(Context c) {
+        try (Adb adb = Adb.connect(c, 10_000, null)) {
+            adb.shell(startShellScript(OPTIMIZE_FILES, OPTIMIZE_SCRIPT, ""));
+            AppLog.w("optimizing the apps");
+        } catch (IOException e) {
+            AppLog.w("optimize apps: " + e.getMessage());
+            notice(c, Ui.trf(Ui.tr("Não deu para otimizar os apps: {error}", "Couldn't optimize the apps: {error}",
+                    "No se pudieron optimizar las apps: {error}"), "error", e.getMessage()));
+        }
+    }
+
+    /** The optimization: {1 while it runs, else 0; when it last ended, wall clock ms, 0 = never}. Not on the UI thread. */
+    static long[] optimizeStatus(Context c) throws IOException {
+        try (Adb adb = Adb.connect(c, 0, null)) {
+            String out = adb.shell("p=$(cat " + OPTIMIZE_FILES + ".pid 2>/dev/null); [ -n \"$p\" ] && kill -0 $p 2>/dev/null"
+                    + " && echo running; echo \"done $(cat " + OPTIMIZE_FILES + ".done 2>/dev/null)\"");
+            Matcher m = Pattern.compile("done (\\d+)").matcher(out);
+            return new long[] {out.contains("running") ? 1 : 0, m.find() ? Long.parseLong(m.group(1)) * 1000 : 0};
+        }
+    }
+
+    private static final String[] ANIMATION_SCALES = {"window_animation_scale", "transition_animation_scale", "animator_duration_scale"};
+
+    /** The system's animations at half their time (a slow TV feels much quicker), or back as they were. */
+    static void requestFastAnimations(Context c, boolean fast) {
+        ModeJob.schedule(c, ModeJob.ANIMATIONS, fast ? "fast" : "", 0);
+    }
+
+    /** Fast animations on: the scales the TV had are kept until they come back (here or with Original). */
+    static boolean fastAnimations(JSONObject s) {
+        return s.has("animationScales");
+    }
+
+    static void animationsNow(Context c, boolean fast) {
+        try (Adb adb = Adb.connect(c, 10_000, null)) {
+            if (fast) {
+                JSONObject s = state(c);
+                if (!s.has("animationScales")) {
+                    JSONArray before = new JSONArray();
+                    for (String key : ANIMATION_SCALES) before.put(adb.shell("settings get global " + key).trim());
+                    s.put("animationScales", before);
+                    save(c, s);
+                }
+                for (String key : ANIMATION_SCALES) adb.shell("settings put global " + key + " 0.5");
+                AppLog.w("animations at 0.5");
+            } else {
+                restoreAnimations(c, adb);
+            }
+        } catch (Exception e) {
+            AppLog.w("animations: " + e.getMessage());
+        }
+    }
+
+    /** The animation scales the TV had before fast animations ("null": it had none set, so the default, 1). */
+    private static void restoreAnimations(Context c, Adb adb) throws IOException {
+        JSONObject s = state(c);
+        JSONArray before = s.optJSONArray("animationScales");
+        if (before == null) return;
+        for (int i = 0; i < ANIMATION_SCALES.length; i++) {
+            String v = before.optString(i, "null");
+            adb.shell(v.matches("\\d+(\\.\\d+)?") ? "settings put global " + ANIMATION_SCALES[i] + " " + v
+                    : "settings delete global " + ANIMATION_SCALES[i]);
+        }
+        s.remove("animationScales");
+        save(c, s);
+        AppLog.w("animations as they were");
+    }
+
+    /**
+     * What More Settings > Performance > Background services offers: optional services a TV may run out of sight, each
+     * with whether it starts kept on (1: losing it is felt, like the remote's mic, the Google screensaver or reading
+     * aloud). Only these: a list of whatever runs would offer Bluetooth (the remote) or Android's own pieces.
+     */
+    static final String[][] OPTIONAL_SERVICES = {
+        {"com.google.android.katniss", "1"},                       // Google search and the Assistant (the mic button)
+        {"com.google.android.speech.pumpkin", "1"},                // voice commands without the internet
+        {"com.google.android.backdrop", "1"},                      // Ambient mode: Google's photo screensaver
+        {"com.google.android.tts", "1"},                           // reading aloud (TalkBack uses it)
+        {"com.google.android.marvin.talkback", "1"},               // TalkBack
+        {"com.google.android.videos", "1"},                        // Google TV / Play Movies
+        {"com.android.gallery3d", "0"},                            // gallery
+        {"com.google.android.music", "0"},                         // Google Play Music, closed by Google
+        {"com.google.android.youtube.tvmusic", "0"},               // YouTube Music
+        {"com.google.android.play.games", "0"},                    // Play Games
+        {"com.google.android.tvrecommendations", "0"},             // Android TV's recommendations
+        {"com.google.android.leanbacklauncher.recommendations", "0"},
+        {"com.google.android.feedback", "0"},                      // sending feedback to Google
+        {"com.google.android.tv.bugreportsender", "0"},            // sending bug reports
+        {"com.android.printspooler", "0"},                         // printing
+        {"com.google.android.syncadapters.calendar", "0"},         // calendar sync
+        {"com.google.android.syncadapters.contacts", "0"},         // contacts sync
+    };
+
+    /** An optional service the TV has: its package, the memory its processes hold now (PSS), on or off, kept by default. */
+    static final class BackgroundApp {
+        final String pkg;
+        final int megabytes;
+        final boolean enabled, keep;
+
+        BackgroundApp(String pkg, int megabytes, boolean enabled, boolean keep) {
+            this.pkg = pkg;
+            this.megabytes = megabytes;
+            this.enabled = enabled;
+            this.keep = keep;
+        }
+    }
+
+    /**
+     * The optional services this TV has (OPTIONAL_SERVICES, past lockReason), the most memory first. Memory is PSS
+     * (dumpsys meminfo -c, a quarter of a second on the UnionTV): RSS counts what every app shares and read ~50 MB for
+     * all. Through the shell, a few seconds: never on the UI thread.
+     */
+    static List<BackgroundApp> backgroundApps(Context c) throws IOException {
+        try (Adb adb = Adb.connect(c, 30_000, null)) {
+            Set<String> present = packages(adb, ""), off = packages(adb, "-d");
+            Map<String, Integer> kb = new HashMap<>();
+            // "proc,cached,com.android.gallery3d,27961,4561,N/A,e": the process, then its PSS in kB.
+            for (String line : adb.shell("dumpsys meminfo -c | grep '^proc,'").split("\n")) {
+                String[] f = line.trim().split(",");
+                if (f.length < 5 || !f[4].matches("\\d+")) continue;
+                String pkg = f[2].contains(":") ? f[2].substring(0, f[2].indexOf(':')) : f[2];
+                kb.put(pkg, (kb.containsKey(pkg) ? kb.get(pkg) : 0) + Integer.parseInt(f[4]));
+            }
+            Set<String> homes = homePackages(adb, state(c));
+            String keyboard = keyboardPackage(adb);
+            Set<String> owners = wifiOwners(adb);
+            List<BackgroundApp> list = new ArrayList<>();
+            for (String[] service : OPTIONAL_SERVICES) {
+                String pkg = service[0];
+                if (!present.contains(pkg) || !lockReason(pkg, homes, keyboard, owners).isEmpty()) continue;
+                list.add(new BackgroundApp(pkg, kb.containsKey(pkg) ? kb.get(pkg) / 1024 : 0, !off.contains(pkg), service[1].equals("1")));
+            }
+            Collections.sort(list, (a, b) -> b.megabytes - a.megabytes);
+            return list;
+        }
+    }
+
+    /** Turns those apps off and those on (More Settings > Performance > Background services), one by one. */
+    static void requestBackgroundApps(Context c, List<String> turnOff, List<String> turnOn) {
+        ModeJob.schedule(c, ModeJob.BACKGROUND_APPS, String.join(",", turnOff) + ";" + String.join(",", turnOn), 0);
+    }
+
+    /** Each through setAppEnabledNow: its checks, its notice, and Original's list. */
+    static void backgroundAppsNow(Context c, String plan) {
+        String[] parts = (plan + ";").split(";", -1);
+        for (String pkg : parts[0].split(",")) if (!pkg.isEmpty()) setAppEnabledNow(c, pkg, false);
+        for (String pkg : parts[1].split(",")) if (!pkg.isEmpty()) setAppEnabledNow(c, pkg, true);
     }
 
     // MARK: - Sleep timer
