@@ -233,7 +233,8 @@ final class HomeMode {
     /**
      * The remote's app buttons (RemoteKeys) need an accessibility service that only filters those keys. It is on only
      * on TCL, Vestel, KTC and Sony TVs (and Formovie projectors) in Free My TV mode, and goes off with Original. Android turns it off when this app is updated, so the
-     * boot check and an update turn it back on.
+     * boot check and an update turn it back on. A force-stop takes it out of the enabled ones too, and some TVs do that
+     * when a big app opens (TCL's framework.custom with YouTube): a watch in the TV's shell (REMOTE_WATCH) puts it back.
      */
     static void ensureRemoteService(Context c, long delayMs) {
         if (RemoteKeys.supported()) ModeJob.schedule(c, ModeJob.REMOTE, null, delayMs);
@@ -250,9 +251,39 @@ final class HomeMode {
 
     private static final String REMOTE_SERVICE = PKG + "/" + PKG + ".RemoteKeyService";
     private static final Pattern SERVICE = Pattern.compile("[\\w.]+/[\\w.$]+");
+    private static final String REMOTE_WATCH_FILES = "/data/local/tmp/freemytv-keys";
+
+    /**
+     * The remote buttons' watch, in the TV's shell while the service is on: every 5 s, is the service's process (:keys)
+     * there? pidof only reads /proc, so it costs nothing on a slow TV. When it's gone for 10 s and the service is out of
+     * the enabled ones (a force-stop), it goes back in, after the others; while it's in, the system brings the process
+     * back itself, and the watch waits a minute. It ends when this app is gone.
+     */
+    private static final String REMOTE_WATCH = String.join("\n",
+            "F=" + REMOTE_WATCH_FILES,
+            "S=" + REMOTE_SERVICE,
+            "echo $$ > $F.pid",
+            "while [ \"$(cat $F.pid 2>/dev/null)\" = \"$$\" ]; do",
+            "  sleep 5",
+            "  pidof " + PKG + ":keys >/dev/null && continue",
+            "  sleep 5",
+            "  pidof " + PKG + ":keys >/dev/null && continue",
+            "  pm path " + PKG + " >/dev/null 2>&1 || exit 0",
+            "  now=$(settings get secure enabled_accessibility_services)",
+            "  case \"$now\" in",
+            "    *$S*) sleep 60; continue ;;",
+            "    null|'') next=$S ;;",
+            "    *) next=\"$now:$S\" ;;",
+            "  esac",
+            "  settings put secure enabled_accessibility_services \"$next\"",
+            "  settings put secure accessibility_enabled 1",
+            "  log -t FreeMyTV 'remote buttons service: back on (the TV force-stopped the app)'",
+            "done",
+            "");
 
     /** Adds ours to the enabled accessibility services (keeping the others, like TalkBack), or takes it out. */
     private static void remoteService(Context c, Adb adb, boolean on) throws IOException {
+        adb.shell(on ? startShellScript(REMOTE_WATCH_FILES, REMOTE_WATCH, "") : stopShellScript(REMOTE_WATCH_FILES));
         String current = adb.shell("settings get secure enabled_accessibility_services").trim();
         if (current.equals("null")) current = "";
         List<String> others = new ArrayList<>();
@@ -267,17 +298,25 @@ final class HomeMode {
         }
         if (on == current.contains(REMOTE_SERVICE)) return;
         List<String> list = new ArrayList<>(others);
+        JSONObject s = state(c);
         if (on) {
-            JSONObject s = state(c);
-            try { s.put("accessibilityWasOff", !"1".equals(adb.shell("settings get secure accessibility_enabled").trim())); }
-            catch (JSONException ignored) {}
-            save(c, s);
+            // Only the first time: when it's put back (after an update or a force-stop), accessibility is on already.
+            if (!s.has("accessibilityWasOff")) {
+                try { s.put("accessibilityWasOff", !"1".equals(adb.shell("settings get secure accessibility_enabled").trim())); }
+                catch (JSONException ignored) {}
+                save(c, s);
+            }
             list.add(REMOTE_SERVICE);
         }
         adb.shell(list.isEmpty() ? "settings delete secure enabled_accessibility_services"
                 : "settings put secure enabled_accessibility_services '" + String.join(":", list) + "'");
-        if (on) adb.shell("settings put secure accessibility_enabled 1");
-        else if (list.isEmpty() && state(c).optBoolean("accessibilityWasOff")) adb.shell("settings put secure accessibility_enabled 0");
+        if (on) {
+            adb.shell("settings put secure accessibility_enabled 1");
+        } else {
+            if (list.isEmpty() && s.optBoolean("accessibilityWasOff")) adb.shell("settings put secure accessibility_enabled 0");
+            s.remove("accessibilityWasOff");
+            save(c, s);
+        }
         AppLog.w("remote buttons service " + (on ? "on" : "off"));
     }
 
@@ -1048,25 +1087,38 @@ final class HomeMode {
             "log -t FreeMyTV \"sleep timer: POWER sent, $(dumpsys power | grep -m 1 mWakefulness=)\"",
             "");
 
+    // MARK: - Scripts in the TV's shell: they outlive a force-stop of this app (the sleep timer, the remote buttons'
+    // watch). Each keeps its files under one name in /data/local/tmp: the script (.sh) and the running one's pid (.pid).
+
     /** The shell command that writes the script (each time: an update may change it). */
-    private static String writeSleepScript() {
-        return "cat > " + SLEEP_FILES + ".sh <<'EOF'\n" + SLEEP_SCRIPT + "EOF\n";
+    private static String writeShellScript(String files, String script) {
+        return "cat > " + files + ".sh <<'EOF'\n" + script + "EOF\n";
+    }
+
+    /** The shell command that stops the script running under `files`, if one is. */
+    private static String stopShellScript(String files) {
+        return "kill $(cat " + files + ".pid 2>/dev/null) 2>/dev/null; rm -f " + files + ".pid\n";
+    }
+
+    /**
+     * The shell command that starts the script in the background, in place of the one running. When the session closes,
+     * adbd kills its process group: setsid takes the script out of it (the sleep keeps the session open until it has).
+     */
+    private static String startShellScript(String files, String script, String args) {
+        return stopShellScript(files) + writeShellScript(files, script)
+                + "setsid nohup sh " + files + ".sh " + args + " >/dev/null 2>&1 </dev/null & sleep 1";
     }
 
     /** Hands the sleep timer to the TV's shell (SleepTimer.set), or takes it back when it was turned off. */
     static synchronized void armSleepNow(Context c) {
         long at = SleepTimer.endsAt(c) / 1000;
-        String stop = "kill $(cat " + SLEEP_FILES + ".pid 2>/dev/null) 2>/dev/null; rm -f " + SLEEP_FILES + ".pid\n";
         try (Adb adb = Adb.connect(c, 10_000, null)) {
             if (at == 0) {
-                adb.shell(stop);
+                adb.shell(stopShellScript(SLEEP_FILES));
                 AppLog.w("sleep timer: taken back from the TV's shell");
                 return;
             }
-            // When the session closes, adbd kills its process group: setsid takes the script out of it (the second
-            // keeps the session open until it has).
-            adb.shell(stop + writeSleepScript() + "setsid nohup sh " + SLEEP_FILES + ".sh " + at
-                    + " >/dev/null 2>&1 </dev/null & sleep 1");
+            adb.shell(startShellScript(SLEEP_FILES, SLEEP_SCRIPT, String.valueOf(at)));
             AppLog.w("sleep timer: the TV's shell turns it off at " + at);
         } catch (IOException e) {
             AppLog.w("sleep timer: the TV's shell didn't take it, the alarm stays: " + e.getMessage());
@@ -1089,7 +1141,7 @@ final class HomeMode {
                 return;
             }
             AppLog.w("sleep timer: the TV's shell didn't run it, running it now");
-            adb.shell(writeSleepScript() + "sh " + SLEEP_FILES + ".sh " + at);
+            adb.shell(writeShellScript(SLEEP_FILES, SLEEP_SCRIPT) + "sh " + SLEEP_FILES + ".sh " + at);
             if (!adb.shell("dumpsys power | grep -m 1 mWakefulness=").contains("Awake")) return;
             notice(c, Ui.tr("O timer acabou, mas a TV não aceitou desligar.", "The sleep timer ended, but the TV wouldn't turn off.",
                     "El temporizador terminó, pero la TV no se apagó."));
