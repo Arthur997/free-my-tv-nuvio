@@ -2202,6 +2202,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final Spring control = new Spring(0.22f, 0.86f, 0);
     private final ControlCenter controlCenter;
     private boolean controlOpen, controlDirty;
+    private final Paint controlFill = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private ControlCenter makeControlCenter(Activity a) {
         return new ControlCenter(a, new ControlCenter.Host() {
@@ -2218,9 +2219,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             }
             @Override public float dark() { return HomeView.this.dark(); }
             /** The shelf's glass (drawPlatter): white by day, smoked at night. */
+            /** Solid, as over other apps (ControlActivity): the home screen's picture showing through was hard to read. */
             @Override public void glass(Canvas c, RectF r, float radius) {
-                scene.liquid(c, r, radius, tone(0xFFFFFFFF, SMOKE), tone(0.42f, 0.12f), tone(0.03f, 0.08f),
-                        tone(30, 34) * k, tone(22, 28) * k, tone(0.65f, 0.95f), 1);
+                controlFill.setColor(tone(WHITE, INK));
+                c.drawRoundRect(r, radius, radius, controlFill);
             }
         });
     }
