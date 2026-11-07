@@ -1021,19 +1021,24 @@ final class HomeMode {
     /**
      * The sleep timer, run by the TV's shell: some TVs force-stop Free My TV when a big app opens (TCL's
      * framework.custom did with YouTube), which drops its alarms and jobs; a shell process stays. It waits for $1 (wall
-     * clock, seconds), then goes to the home screen and to standby as the power button does (SLEEP, then POWER if the
-     * TV is still awake). Nothing when a newer timer replaced it, when the TV is already off, or when it's long past $1
+     * clock, seconds), shows the last minute's notice (SleepWarningActivity), then goes to the home screen and to
+     * standby as the power button does (SLEEP, then POWER if the TV is still awake). Nothing when a newer timer replaced it, when the TV is already off, or when it's long past $1
      * (the TV was asleep meanwhile: sleep doesn't count that time).
      */
     private static final String SLEEP_SCRIPT = String.join("\n",
             "F=" + SLEEP_FILES,
             "echo $$ > $F.pid",
-            "while [ $(date +%s) -lt $1 ]; do sleep 15; done",
-            "[ \"$(cat $F.pid 2>/dev/null)\" = \"$$\" ] || exit 0",
+            "mine() { [ \"$(cat $F.pid 2>/dev/null)\" = \"$$\" ]; }",
+            "awake() { dumpsys power | grep -m 1 mWakefulness= | grep -q Awake; }",
+            // A minute before: the notice with more time or no timer (it changes the timer, which stops this one).
+            "while [ $(date +%s) -lt $(($1 - 60)) ]; do sleep 15; done",
+            "mine || exit 0",
+            "[ $(date +%s) -lt $1 ] && awake && am start -n " + PKG + "/.SleepWarningActivity >/dev/null 2>&1",
+            "while [ $(date +%s) -lt $1 ]; do sleep 5; done",
+            "mine || exit 0",
             "rm -f $F.pid",
             "[ $(date +%s) -le $(($1 + 300)) ] || exit 0",
             "echo $1 > $F.fired",
-            "awake() { dumpsys power | grep -m 1 mWakefulness= | grep -q Awake; }",
             "awake || exit 0",
             "log -t FreeMyTV \"sleep timer: due, on screen $(dumpsys activity activities | grep -m 1 -E 'topResumedActivity|mResumedActivity')\"",
             "input keyevent KEYCODE_HOME; sleep 2",

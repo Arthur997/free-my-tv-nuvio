@@ -510,12 +510,12 @@ final class ControlCenter {
     }
 
     /** Text on a fill of this color: dark on a light one, white on a dark one. */
-    private static int contrast(int color) {
+    static int contrast(int color) {
         int r = (color >> 16) & 255, g = (color >> 8) & 255, b = color & 255;
         return r * 299 + g * 587 + b * 114 > 128_000 ? INK : WHITE;
     }
 
-    private static int blend(int a, int b, float f) {
+    static int blend(int a, int b, float f) {
         f = Ui.clamp(f);
         int aa = a >>> 24, ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
         int ba = b >>> 24, br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;

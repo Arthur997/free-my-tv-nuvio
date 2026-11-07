@@ -145,6 +145,21 @@
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|fontScale|locale|layoutDirection"
             android:theme="@style/FreeMyTV.Overlay.Still" />
 
+        <!-- The sleep timer's last minute, over any app. The TV's shell opens it (it runs the timer), so it's exported,
+             to callers holding a permission the shell has and apps don't. -->
+        <activity
+            android:name=".SleepWarningActivity"
+            android:process=":home"
+            android:exported="true"
+            android:permission="android.permission.WRITE_SECURE_SETTINGS"
+            android:launchMode="singleTask"
+            android:taskAffinity="io.freemytv.sleepwarning"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:screenOrientation="landscape"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|fontScale|locale|layoutDirection"
+            android:theme="@style/FreeMyTV.Overlay.Still" />
+
         <!-- The sleep timer's alarm (Control Center): the TV goes to sleep, from the main process. -->
         <receiver
             android:name=".SleepTimer$Fire"
