@@ -1015,27 +1015,83 @@ final class HomeMode {
 
     // MARK: - Sleep timer
 
+    /** Where the TV's shell keeps the sleep timer: its script (.sh), the waiting one's pid and the last end it ran for. */
+    private static final String SLEEP_FILES = "/data/local/tmp/freemytv-sleep";
+
     /**
-     * The sleep timer ended: the TV goes to standby, as its power button does (SLEEP; some TVs only answer POWER, so
-     * that one when the screen is still on a moment later).
+     * The sleep timer, run by the TV's shell: some TVs force-stop Free My TV when a big app opens (TCL's
+     * framework.custom did with YouTube), which drops its alarms and jobs; a shell process stays. It waits for $1 (wall
+     * clock, seconds), then goes to the home screen and to standby as the power button does (SLEEP, then POWER if the
+     * TV is still awake). Nothing when a newer timer replaced it, when the TV is already off, or when it's long past $1
+     * (the TV was asleep meanwhile: sleep doesn't count that time).
+     */
+    private static final String SLEEP_SCRIPT = String.join("\n",
+            "F=" + SLEEP_FILES,
+            "echo $$ > $F.pid",
+            "while [ $(date +%s) -lt $1 ]; do sleep 15; done",
+            "[ \"$(cat $F.pid 2>/dev/null)\" = \"$$\" ] || exit 0",
+            "rm -f $F.pid",
+            "[ $(date +%s) -le $(($1 + 300)) ] || exit 0",
+            "echo $1 > $F.fired",
+            "awake() { dumpsys power | grep -m 1 mWakefulness= | grep -q Awake; }",
+            "awake || exit 0",
+            "log -t FreeMyTV \"sleep timer: due, on screen $(dumpsys activity activities | grep -m 1 -E 'topResumedActivity|mResumedActivity')\"",
+            "input keyevent KEYCODE_HOME; sleep 2",
+            "input keyevent KEYCODE_SLEEP; sleep 2",
+            "awake || { log -t FreeMyTV 'sleep timer: off with SLEEP'; exit 0; }",
+            "input keyevent KEYCODE_POWER; sleep 2",
+            "log -t FreeMyTV \"sleep timer: POWER sent, $(dumpsys power | grep -m 1 mWakefulness=)\"",
+            "");
+
+    /** The shell command that writes the script (each time: an update may change it). */
+    private static String writeSleepScript() {
+        return "cat > " + SLEEP_FILES + ".sh <<'EOF'\n" + SLEEP_SCRIPT + "EOF\n";
+    }
+
+    /** Hands the sleep timer to the TV's shell (SleepTimer.set), or takes it back when it was turned off. */
+    static synchronized void armSleepNow(Context c) {
+        long at = SleepTimer.endsAt(c) / 1000;
+        String stop = "kill $(cat " + SLEEP_FILES + ".pid 2>/dev/null) 2>/dev/null; rm -f " + SLEEP_FILES + ".pid\n";
+        try (Adb adb = Adb.connect(c, 10_000, null)) {
+            if (at == 0) {
+                adb.shell(stop);
+                AppLog.w("sleep timer: taken back from the TV's shell");
+                return;
+            }
+            // When the session closes, adbd kills its process group: setsid takes the script out of it (the second
+            // keeps the session open until it has).
+            adb.shell(stop + writeSleepScript() + "setsid nohup sh " + SLEEP_FILES + ".sh " + at
+                    + " >/dev/null 2>&1 </dev/null & sleep 1");
+            AppLog.w("sleep timer: the TV's shell turns it off at " + at);
+        } catch (IOException e) {
+            AppLog.w("sleep timer: the TV's shell didn't take it, the alarm stays: " + e.getMessage());
+        }
+    }
+
+    /**
+     * The sleep timer's alarm, a little after the end: when the TV's shell didn't run the script for it (it couldn't be
+     * handed over, or the TV dropped it), the script runs now. A notice when the TV stays on after that.
      */
     static void sleepNow(Context c) {
-        if (!SleepTimer.takeDue(c)) {
+        long at = SleepTimer.takeDue(c) / 1000;
+        if (at == 0) {
             AppLog.w("sleep timer: not due (turned off, moved, or already done)");
             return;
         }
         try (Adb adb = Adb.connect(c, 10_000, null)) {
-            adb.shell("input keyevent KEYCODE_SLEEP");
-            SystemClock.sleep(2_000);
-            String power = adb.shell("dumpsys power | grep -m 1 mWakefulness=").trim();
-            AppLog.w("sleep timer: SLEEP sent, " + power);
-            if (power.contains("Awake")) {
-                adb.shell("input keyevent KEYCODE_POWER");
-                SystemClock.sleep(2_000);
-                AppLog.w("sleep timer: POWER sent, " + adb.shell("dumpsys power | grep -m 1 mWakefulness=").trim());
+            if (adb.shell("cat " + SLEEP_FILES + ".fired 2>/dev/null").trim().equals(String.valueOf(at))) {
+                AppLog.w("sleep timer: the TV's shell already ran it");
+                return;
             }
+            AppLog.w("sleep timer: the TV's shell didn't run it, running it now");
+            adb.shell(writeSleepScript() + "sh " + SLEEP_FILES + ".sh " + at);
+            if (!adb.shell("dumpsys power | grep -m 1 mWakefulness=").contains("Awake")) return;
+            notice(c, Ui.tr("O timer acabou, mas a TV não aceitou desligar.", "The sleep timer ended, but the TV wouldn't turn off.",
+                    "El temporizador terminó, pero la TV no se apagó."));
         } catch (IOException e) {
             AppLog.w("sleep timer: couldn't turn the TV off: " + e.getMessage());
+            notice(c, Ui.trf(Ui.tr("O timer acabou, mas não deu para desligar a TV: {error}", "The sleep timer ended, but the TV couldn't be turned off: {error}",
+                    "El temporizador terminó, pero no se pudo apagar la TV: {error}"), "error", e.getMessage()));
         }
     }
 

@@ -15,7 +15,7 @@ import android.os.PersistableBundle;
 public class ModeJob extends JobService {
     static final String APPLY = "apply", VERIFY = "verify", REVERT = "revert", MEMORY = "memory", REMOTE = "remote",
             DREAM = "dream", FREE_MEMORY = "freememory", TRIM = "trim", CLEAR_CACHE = "clearcache",
-            FORCE_STOP = "forcestop", APP_STATE = "appstate", SLEEP = "sleep";
+            FORCE_STOP = "forcestop", APP_STATE = "appstate", SLEEP = "sleep", SLEEP_ARM = "sleeparm";
 
     @Override public boolean onStartJob(JobParameters params) {
         PersistableBundle extras = params.getExtras();
@@ -36,6 +36,7 @@ public class ModeJob extends JobService {
                     case FORCE_STOP: HomeMode.forceStopNow(app, appOf(mode), nameOf(mode)); break;
                     case CLEAR_CACHE: HomeMode.clearCacheNow(app, appOf(mode), nameOf(mode)); break;
                     case SLEEP: HomeMode.sleepNow(app); break;
+                    case SLEEP_ARM: HomeMode.armSleepNow(app); break;
                     case APP_STATE: HomeMode.setAppEnabledNow(app, appOf(mode), "on".equals(nameOf(mode))); break;
                     default: break;
                 }

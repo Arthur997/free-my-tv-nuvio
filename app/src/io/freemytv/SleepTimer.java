@@ -16,14 +16,18 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * The sleep timer (Control Center): the TV turns itself off after 15 to 90 minutes. The time is kept in a small file
- * (the home screen and the main process both read it) and an alarm wakes the main process then (SleepTimer.Fire),
- * which puts the TV to sleep through its own debugging connection (HomeMode.sleepNow). A restart ends it.
+ * (the home screen and the main process both read it). The TV's own shell, through its debugging connection, waits for
+ * it and turns the TV off (HomeMode.armSleepNow); an alarm a little later (SleepTimer.Fire) does it when the shell
+ * didn't (HomeMode.sleepNow). A restart ends it.
  */
 final class SleepTimer {
     private SleepTimer() {}
 
     /** The choices, in minutes; 0 = no timer. */
     static final int[] OPTIONS = {0, 15, 30, 45, 60, 90};
+
+    /** How long after the end the alarm checks that the shell turned the TV off (it takes a few seconds). */
+    private static final long FALLBACK_MS = 90_000L;
 
     private static File file(Context c) {
         return new File(c.getFilesDir(), "sleep-timer.txt");
@@ -69,12 +73,14 @@ final class SleepTimer {
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         alarms.cancel(fire);
         AppLog.w(minutes > 0 ? "sleep timer: " + minutes + " min, at " + at : "sleep timer: off");
+        ModeJob.schedule(c, ModeJob.SLEEP_ARM, null, 0);
         if (at == 0) {
             ModeJob.cancel(c, ModeJob.SLEEP);
             return;
         }
-        // Two ways to wake up, in case the TV holds one back (TCL limits what starts in the background): the job too.
-        // Whichever comes first turns the TV off; the other finds the timer gone (sleepDue).
+        // The fallback, after the shell's turn. Two ways to wake up, in case the TV holds one back (TCL limits what
+        // starts in the background): the job too. The first one checks; the other finds the timer gone (takeDue).
+        at += FALLBACK_MS;
         ModeJob.schedule(c, ModeJob.SLEEP, null, at - System.currentTimeMillis());
         // Exact when the TV lets us (Android 12+ asks for it); otherwise Android may run it a little late.
         if (Build.VERSION.SDK_INT < 31 || alarms.canScheduleExactAlarms()) {
@@ -88,13 +94,13 @@ final class SleepTimer {
      * The timer is over (within a minute): true once, and the timer is cleared. False when it was turned off or a newer
      * choice put it later.
      */
-    static synchronized boolean takeDue(Context c) {
+    static synchronized long takeDue(Context c) {
         long[] v = read(c);
-        if (v[0] == 0 || v[0] > System.currentTimeMillis() + 60_000L) return false;
+        if (v[0] == 0 || v[0] > System.currentTimeMillis() + 60_000L) return 0;
         File f = file(c);
         //noinspection ResultOfMethodCallIgnored
         f.delete();
-        return true;
+        return v[0];
     }
 
     /** The alarm, in the main process: the timer is over, the TV goes to sleep (in a job: it may take a few seconds). */
