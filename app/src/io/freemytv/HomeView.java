@@ -452,6 +452,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         data.removeListener(this);
         recs.removeListener(this);
         if (tvInputs != null) tvInputs.unregisterCallback(inputCallback);
+        if (controlOpen) hideControl();   // its live reading (CpuMonitor) stops with it
     }
 
     void destroy() {

@@ -48,7 +48,7 @@ final class ControlCenter {
     static final float TILE_W = 272, TILE_H = 124, GAP = 16, PAD = 28, TILE_RADIUS = 30;
     private static final float TEXT_X = 22, CHIP_H = 40, CHIP_GAP = 8, CHIP_INSET = 14, SHADOW_BLUR = 26;
     private static final int INK = 0xFF1D1D1F, DIM = 0xFF6E6E73, WHITE = 0xFFF5F5F7;
-    private static final long MEMORY_SETTLE_MS = 5000;   // the cleanup runs in the background; the tile reads again after
+    private static final long LIVE_MS = 2000;   // the memory tile's CPU and free memory, while the panel is open
 
     private final Activity activity;
     private final Host host;
@@ -66,10 +66,15 @@ final class ControlCenter {
     private float k = 1, chipHalfCap, titleHalfCap;
     private int index, sleepAt, sleepCursor;
     private boolean open;
-    private final Runnable memoryRead = () -> {
-        if (!open) return;
-        updateTexts();
-        hostRedraw();
+    private final CpuMonitor cpu = new CpuMonitor();
+    private int cpuPercent = -1;   // -1 until the first reading
+    private final Runnable liveRead = new Runnable() {
+        @Override public void run() {
+            if (!open) return;
+            updateMemoryText();
+            hostRedraw();
+            handler.postDelayed(this, LIVE_MS);
+        }
     };
 
     ControlCenter(Activity activity, Host host) {
@@ -142,13 +147,18 @@ final class ControlCenter {
         updateTexts();
         aim(true);
         SpeedTest.get().setListener(this::onSpeed);
+        cpuPercent = -1;
+        cpu.start(activity, percent -> cpuPercent = percent);
+        handler.removeCallbacks(liveRead);
+        handler.postDelayed(liveRead, LIVE_MS);
         host.view().announceForAccessibility(Ui.tr("Central de controle", "Control Center", "Centro de control"));
     }
 
     /** Closed: nothing it started waits on it any more (the speed test and the timer go on). */
     void stop() {
         open = false;
-        handler.removeCallbacks(memoryRead);
+        handler.removeCallbacks(liveRead);
+        cpu.stop();
         SpeedTest.get().setListener(null);
     }
 
@@ -215,7 +225,7 @@ final class ControlCenter {
                 case MEMORY:
                     symbol = "clean";
                     t = Ui.tr("Liberar memória", "Free memory", "Liberar memoria");
-                    d = memoryText();
+                    d = "";   // memoryText, which fits it to the tile
                     break;
                 case RECENTS:
                     symbol = "recents";
@@ -235,7 +245,10 @@ final class ControlCenter {
             }
             float room = rects[i].width() - 2 * TEXT_X * k;
             symbols[i] = symbol;
-            if (TILES[i][0] == SLEEP) {
+            if (TILES[i][0] == MEMORY) {
+                titles[i] = ellipsize(t, title, room);
+                details[i] = memoryText(room);
+            } else if (TILES[i][0] == SLEEP) {
                 // Title and status share the top line; the choices take the bottom.
                 details[i] = d;
                 titles[i] = ellipsize(t, title, room - 48 * k - status.measureText(d) - 16 * k);
@@ -306,14 +319,33 @@ final class ControlCenter {
         return Ui.trf(Ui.tr("Desliga às {time}", "Off at {time}", "Se apaga a las {time}"), "time", Ui.clock(at));
     }
 
-    /** "1.2 GB free of 2 GB": what Android counts as available now. */
-    private String memoryText() {
+    /**
+     * What Android counts as available now and, once read, how busy the processor is: "CPU 23% · 1.2 GB free", shorter
+     * when that doesn't fit ("CPU 23% · 1.2 GB"); before the first reading, "1.2 GB free of 2 GB".
+     */
+    private String memoryText(float room) {
         android.app.ActivityManager am = activity.getSystemService(android.app.ActivityManager.class);
         if (am == null) return "";
         android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
         am.getMemoryInfo(mi);
-        return Ui.trf(Ui.tr("{free} livres de {total}", "{free} free of {total}", "{free} libres de {total}"),
-                "free", gigabytes(mi.availMem), "total", gigabytes(Math.round(mi.totalMem / 1073741824.0) * 1073741824L));
+        String free = gigabytes(mi.availMem), text;
+        if (cpuPercent < 0) {
+            text = Ui.trf(Ui.tr("{free} livres de {total}", "{free} free of {total}", "{free} libres de {total}"),
+                    "free", free, "total", gigabytes(Math.round(mi.totalMem / 1073741824.0) * 1073741824L));
+        } else {
+            text = Ui.trf(Ui.tr("CPU {cpu}% · {free} livres", "CPU {cpu}% · {free} free", "CPU {cpu}% · {free} libres"),
+                    "cpu", cpuPercent, "free", free);
+            if (detail.measureText(text) > room) text = Ui.trf("CPU {cpu}% · {free}", "cpu", cpuPercent, "free", free);
+        }
+        return ellipsize(text, detail, room);
+    }
+
+    /** The memory tile's line again (every LIVE_MS while open). */
+    private void updateMemoryText() {
+        if (title == null) return;
+        for (int i = 0; i < TILES.length; i++) {
+            if (TILES[i][0] == MEMORY) details[i] = memoryText(rects[i].width() - 2 * TEXT_X * k);
+        }
     }
 
     private static String gigabytes(long bytes) {
@@ -396,8 +428,6 @@ final class ControlCenter {
             case MEMORY:
                 HomeMode.requestFreeMemory(activity);
                 host.toast(Ui.tr("Liberando memória…", "Freeing memory…", "Liberando memoria…"));
-                handler.removeCallbacks(memoryRead);
-                handler.postDelayed(memoryRead, MEMORY_SETTLE_MS);
                 return;
             default:
                 break;
