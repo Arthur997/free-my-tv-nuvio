@@ -12,11 +12,15 @@ import android.text.TextPaint;
 import android.text.TextUtils;
 import android.view.View;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * The Control Center: the TV's quick settings and tools in one panel of rounded tiles (Wi-Fi, Bluetooth, the speed
  * test, the sleep timer, free memory, recent apps, both settings). The home screen shows it under its button; the
  * remote button picked in Remote Buttons shows it over any app (ControlActivity). The host moves and fades it; this
- * class lays it out, draws it at rest and answers the keys. Measurements in a 1920 × 1080 space.
+ * class lays it out, draws it at rest and answers the keys. The home screen's HDMI Inputs button shows the inputs in it
+ * instead (showInputs). Measurements in a 1920 × 1080 space.
  */
 final class ControlCenter {
     interface Host {
@@ -33,9 +37,11 @@ final class ControlCenter {
     }
 
     private static final int WIFI = 0, BLUETOOTH = 1, SPEED = 2, SLEEP = 3, MEMORY = 4, RECENTS = 5, APP_SETTINGS = 6,
-            TV_SETTINGS = 7;
-    /** The tiles in reading order: what each does, its column, its row and how many columns it takes. */
-    private static final int[][] TILES = {
+            TV_SETTINGS = 7, NO_INPUTS = 8;
+    /** The inputs' tiles (showInputs): INPUT + the input's place in the list. */
+    private static final int INPUT = 100;
+    /** The Control Center's tiles in reading order: what each does, its column, its row and how many columns it takes. */
+    private static final int[][] CONTROLS = {
         {WIFI, 0, 0, 1}, {BLUETOOTH, 1, 0, 1},
         {SPEED, 0, 1, 2},
         {SLEEP, 0, 2, 2},
@@ -54,16 +60,19 @@ final class ControlCenter {
     private final Host host;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Shadows shadows = new Shadows();
-    private final Spring[] focus = new Spring[TILES.length];
-    private final RectF[] rects = new RectF[TILES.length];
+    /** What the panel shows now: CONTROLS, or the inputs (showInputs). The arrays below follow it. */
+    private int[][] tiles = CONTROLS;
+    private final List<HomeApps.Item> inputs = new ArrayList<>();
+    private Spring[] focus;
+    private RectF[] rects;
+    private String[] titles, details, symbols;
     private final RectF panel = new RectF(), tmp = new RectF();
     private final RectF[] chips = new RectF[SleepTimer.OPTIONS.length];
     private final String[] chipLabels = new String[SleepTimer.OPTIONS.length];
-    private final String[] titles = new String[TILES.length], details = new String[TILES.length], symbols = new String[TILES.length];
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG), border = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint shadow = new Paint(Paint.ANTI_ALIAS_FLAG), cursor = new Paint(Paint.ANTI_ALIAS_FLAG);
     private Paint title, detail, chipText, status;
-    private float k = 1, chipHalfCap, titleHalfCap;
+    private float k = 1, chipHalfCap, titleHalfCap, right, top;
     private int index, sleepAt, sleepCursor;
     private boolean open;
     private final CpuMonitor cpu = new CpuMonitor();
@@ -80,17 +89,55 @@ final class ControlCenter {
     ControlCenter(Activity activity, Host host) {
         this.activity = activity;
         this.host = host;
-        for (int i = 0; i < TILES.length; i++) {
+        for (int i = 0; i < chips.length; i++) chips[i] = new RectF();
+        border.setStyle(Paint.Style.STROKE);
+        setTiles(CONTROLS);
+    }
+
+    private void setTiles(int[][] t) {
+        tiles = t;
+        focus = new Spring[t.length];
+        rects = new RectF[t.length];
+        titles = new String[t.length];
+        details = new String[t.length];
+        symbols = new String[t.length];
+        for (int i = 0; i < t.length; i++) {
             focus[i] = new Spring(0.2f, 0.85f, 0);
             rects[i] = new RectF();
         }
-        for (int i = 0; i < chips.length; i++) chips[i] = new RectF();
-        border.setStyle(Paint.Style.STROKE);
+        index = 0;
+        if (title != null) layout(k, right, top);
     }
 
-    /** The panel's height for this scale (the host places it). */
-    static float height(float k) {
-        int rows = TILES[TILES.length - 1][2] + 1;
+    /** The Control Center's tiles (before open()). */
+    void showControls() {
+        if (tiles != CONTROLS) setTiles(CONTROLS);
+    }
+
+    /**
+     * The inputs instead (before open()), for the HDMI Inputs button: live TV and each HDMI input, two to a row, the
+     * last one across when they're odd; OK switches to it.
+     */
+    void showInputs(List<HomeApps.Item> list) {
+        inputs.clear();
+        inputs.addAll(list);
+        int n = inputs.size();
+        if (n == 0) {
+            setTiles(new int[][] {{NO_INPUTS, 0, 0, 2}});
+            return;
+        }
+        int[][] t = new int[n][];
+        for (int i = 0; i < n; i++) t[i] = new int[] {INPUT + i, i % 2, i / 2, i == n - 1 && n % 2 == 1 ? 2 : 1};
+        setTiles(t);
+    }
+
+    boolean showsInputs() {
+        return tiles != CONTROLS;
+    }
+
+    /** The panel's height for what it shows (the host places it by its top). */
+    private float height() {
+        int rows = tiles[tiles.length - 1][2] + 1;
         return (2 * PAD + rows * TILE_H + (rows - 1) * GAP) * k;
     }
 
@@ -101,6 +148,8 @@ final class ControlCenter {
     /** The panel with its top right corner at (right, top). */
     void layout(float k, float right, float top) {
         this.k = k;
+        this.right = right;
+        this.top = top;
         title = Ui.text(Ui.semibold, 27 * k, INK);
         detail = Ui.text(Ui.medium, 22 * k, DIM);
         status = Ui.text(Ui.medium, 22 * k, DIM);
@@ -114,11 +163,11 @@ final class ControlCenter {
         cursor.setStyle(Paint.Style.STROKE);
         cursor.setStrokeWidth(2.5f * k);
         float pad = PAD * k, tw = TILE_W * k, th = TILE_H * k, gap = GAP * k;
-        panel.set(right - width(k), top, right, top + height(k));
-        for (int i = 0; i < TILES.length; i++) {
-            float x = panel.left + pad + TILES[i][1] * (tw + gap), y = top + pad + TILES[i][2] * (th + gap);
-            rects[i].set(x, y, x + TILES[i][3] * tw + (TILES[i][3] - 1) * gap, y + th);
-            if (TILES[i][0] == SLEEP) layoutChips(rects[i]);
+        panel.set(right - width(k), top, right, top + height());
+        for (int i = 0; i < tiles.length; i++) {
+            float x = panel.left + pad + tiles[i][1] * (tw + gap), y = top + pad + tiles[i][2] * (th + gap);
+            rects[i].set(x, y, x + tiles[i][3] * tw + (tiles[i][3] - 1) * gap, y + th);
+            if (tiles[i][0] == SLEEP) layoutChips(rects[i]);
         }
         if (open) updateTexts();
     }
@@ -147,11 +196,14 @@ final class ControlCenter {
         updateTexts();
         aim(true);
         SpeedTest.get().setListener(this::onSpeed);
-        cpuPercent = -1;
-        cpu.start(activity, percent -> cpuPercent = percent);
         handler.removeCallbacks(liveRead);
-        handler.postDelayed(liveRead, LIVE_MS);
-        host.view().announceForAccessibility(Ui.tr("Central de controle", "Control Center", "Centro de control"));
+        if (!showsInputs()) {
+            cpuPercent = -1;
+            cpu.start(activity, percent -> cpuPercent = percent);
+            handler.postDelayed(liveRead, LIVE_MS);
+        }
+        host.view().announceForAccessibility(showsInputs() ? Ui.tr("Entradas HDMI", "HDMI Inputs")
+                : Ui.tr("Central de controle", "Control Center", "Centro de control"));
     }
 
     /** Closed: nothing it started waits on it any more (the speed test and the timer go on). */
@@ -197,9 +249,21 @@ final class ControlCenter {
             int m = SleepTimer.OPTIONS[i];
             chipLabels[i] = m == 0 ? "Off" : String.valueOf(m);
         }
-        for (int i = 0; i < TILES.length; i++) {
+        for (int i = 0; i < tiles.length; i++) {
             String t, d, symbol;
-            switch (TILES[i][0]) {
+            int kind = tiles[i][0];
+            if (kind >= INPUT) {
+                HomeApps.Item it = inputs.get(kind - INPUT);
+                symbol = it.symbol;
+                t = it.label;
+                d = it.kind == HomeApps.LIVE_TV ? Ui.tr("Canais da TV", "The TV's channels", "Canales de la TV")
+                        : it.connected ? Ui.tr("Com sinal", "Signal", "Con señal") : Ui.tr("Sem sinal", "No signal", "Sin señal");
+            } else switch (kind) {
+                case NO_INPUTS:
+                    symbol = "hdmi";
+                    t = Ui.tr("Nenhuma entrada", "No inputs", "Ninguna entrada");
+                    d = Ui.tr("A TV não informou entradas HDMI", "The TV reported no HDMI inputs", "La TV no informó entradas HDMI");
+                    break;
                 case WIFI: {
                     String[] net = networkStatus();
                     symbol = net[0];
@@ -245,10 +309,10 @@ final class ControlCenter {
             }
             float room = rects[i].width() - 2 * TEXT_X * k;
             symbols[i] = symbol;
-            if (TILES[i][0] == MEMORY) {
+            if (tiles[i][0] == MEMORY) {
                 titles[i] = ellipsize(t, title, room);
                 details[i] = memoryText(room);
-            } else if (TILES[i][0] == SLEEP) {
+            } else if (tiles[i][0] == SLEEP) {
                 // Title and status share the top line; the choices take the bottom.
                 details[i] = d;
                 titles[i] = ellipsize(t, title, room - 48 * k - status.measureText(d) - 16 * k);
@@ -343,8 +407,8 @@ final class ControlCenter {
     /** The memory tile's line again (every LIVE_MS while open). */
     private void updateMemoryText() {
         if (title == null) return;
-        for (int i = 0; i < TILES.length; i++) {
-            if (TILES[i][0] == MEMORY) details[i] = memoryText(rects[i].width() - 2 * TEXT_X * k);
+        for (int i = 0; i < tiles.length; i++) {
+            if (tiles[i][0] == MEMORY) details[i] = memoryText(rects[i].width() - 2 * TEXT_X * k);
         }
     }
 
@@ -365,7 +429,7 @@ final class ControlCenter {
      * list opens) and OK picks the one under the cursor. ↑ from the top row closes the panel.
      */
     void move(int dx, int dy) {
-        if (dx != 0 && TILES[index][0] == SLEEP) {
+        if (dx != 0 && tiles[index][0] == SLEEP) {
             int next = Math.max(0, Math.min(SleepTimer.OPTIONS.length - 1, sleepCursor + dx));
             if (next == sleepCursor) return;
             sleepCursor = next;
@@ -393,7 +457,7 @@ final class ControlCenter {
             return;
         }
         index = best;
-        if (TILES[index][0] == SLEEP) sleepCursor = sleepAt;   // the cursor starts on the time in use
+        if (tiles[index][0] == SLEEP) sleepCursor = sleepAt;   // the cursor starts on the time in use
         aim(false);
         host.view().announceForAccessibility(titles[best] + ", " + details[best]);
     }
@@ -416,8 +480,18 @@ final class ControlCenter {
     }
 
     void press() {
-        int action = TILES[index][0];
+        int action = tiles[index][0];
         RectF r = rects[index];
+        if (action == NO_INPUTS) return;
+        if (action >= INPUT) {
+            HomeApps.Item it = inputs.get(action - INPUT);
+            if (HomeApps.open(activity, it, host.view(), Math.round(r.left), Math.round(r.top), Math.round(r.width()), Math.round(r.height()))) {
+                host.close(true);
+            } else {
+                host.toast(Ui.trf(Ui.tr("Não deu para abrir {app}.", "Couldn't open {app}.", "No se pudo abrir {app}."), "app", it.label));
+            }
+            return;
+        }
         switch (action) {
             case SPEED:
                 SpeedTest.get().start();
@@ -476,7 +550,7 @@ final class ControlCenter {
         int restInk = tone(INK, WHITE), litInk = tone(WHITE, INK);
         int restDim = tone(DIM, 0xFF98989D), litDim = tone(0xB3FFFFFF, 0xB31D1D1F);
         SpeedTest st = SpeedTest.get();
-        for (int i = 0; i < TILES.length; i++) {
+        for (int i = 0; i < tiles.length; i++) {
             RectF r = rects[i];
             float f = Ui.clamp(focus[i].value), s = 1 + 0.04f * f;
             c.save();
@@ -488,7 +562,7 @@ final class ControlCenter {
                 c.drawRoundRect(r, tileRadius, tileRadius, fill);
             }
             int ink = blend(restInk, litInk, f), dim = blend(restDim, litDim, f);
-            if (TILES[i][0] == SPEED && st.running()) {
+            if (tiles[i][0] == SPEED && st.running()) {
                 // How far the test got: a faint fill from the left, clipped to the tile's corners.
                 tmp.set(r.left, r.top, r.left + r.width() * st.progress, r.bottom);
                 c.save();
@@ -498,7 +572,7 @@ final class ControlCenter {
                 c.restore();
             }
             float x = r.left + TEXT_X * k;
-            if (TILES[i][0] == SLEEP) {
+            if (tiles[i][0] == SLEEP) {
                 drawSleep(c, i, r, x, ink, dim, f);
             } else {
                 Symbols.draw(activity, c, symbols[i], x + 17 * k, r.top + 36 * k, 30 * k, ink);

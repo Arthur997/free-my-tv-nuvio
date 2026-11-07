@@ -2257,6 +2257,17 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private boolean controlByKey;
 
     private void openControl() {
+        controlCenter.showControls();
+        showControlPanel();
+    }
+
+    /** The HDMI Inputs button: the same panel with live TV and the inputs (the drawer's, already read). */
+    private void openInputs() {
+        controlCenter.showInputs(drawerItems.subList(0, drawerInputs));
+        showControlPanel();
+    }
+
+    private void showControlPanel() {
         controlOpen = true;
         controlCenter.open();
         control.target = 1;
@@ -2784,14 +2795,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             return;
         }
         if (it.kind == HomeApps.INPUTS) {
-            openDrawer();
-            for (int i = 0; i < drawerItems.size(); i++) {
-                if (drawerItems.get(i).kind == HomeApps.INPUT) {
-                    drawerIndex = i;
-                    break;
-                }
-            }
-            retarget(false);
+            openInputs();
             return;
         }
         openNow(it, zone == Z_CARDS || zone == Z_SHELF || sheetOpen ? openRect(r) : r);
