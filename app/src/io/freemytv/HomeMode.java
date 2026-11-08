@@ -1278,8 +1278,9 @@ final class HomeMode {
             "i=0",
             "while [ \"$3\" != now ] && [ $i -lt 120 ] && front; do sleep 30; i=$((i + 1)); done",
             "log -t FreeMyTV \"update: installing $2\"",
-            "out=$(pm install -r \"$1\" 2>&1)",
-            "rm -f \"$1\" $F.pid",
+            "cp \"$1\" $F.apk; rm -f \"$1\"",   // the installer (system_server) can't read the shared storage, only here
+            "out=$(pm install -r $F.apk 2>&1)",
+            "rm -f $F.apk $F.pid",
             "log -t FreeMyTV \"update to $2: $out\"",
             "");
 
