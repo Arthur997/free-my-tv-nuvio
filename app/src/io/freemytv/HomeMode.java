@@ -1263,6 +1263,33 @@ final class HomeMode {
             "log -t FreeMyTV \"sleep timer: POWER sent, $(dumpsys power | grep -m 1 mWakefulness=)\"",
             "");
 
+    // MARK: - Updates (Updater): the TV's shell installs the release the app downloaded
+
+    private static final String UPDATE_FILES = "/data/local/tmp/freemytv-update";
+
+    /**
+     * Installs $1 (version $2). Unless $3 is "now", it waits up to an hour for the person to leave Free My TV first:
+     * installing restarts the home screen. In the TV's shell, since installing stops this app.
+     */
+    private static final String UPDATE_SCRIPT = String.join("\n",
+            "F=" + UPDATE_FILES,
+            "echo $$ > $F.pid",
+            "front() { dumpsys activity activities | grep -m 1 -E 'topResumedActivity|mResumedActivity' | grep -q io.freemytv/; }",
+            "i=0",
+            "while [ \"$3\" != now ] && [ $i -lt 120 ] && front; do sleep 30; i=$((i + 1)); done",
+            "log -t FreeMyTV \"update: installing $2\"",
+            "out=$(pm install -r \"$1\" 2>&1)",
+            "rm -f \"$1\" $F.pid",
+            "log -t FreeMyTV \"update to $2: $out\"",
+            "");
+
+    static void installUpdateNow(Context c, String apk, String version, boolean now) throws IOException {
+        try (Adb adb = Adb.connect(c, 10_000, null)) {
+            adb.shell(startShellScript(UPDATE_FILES, UPDATE_SCRIPT, "'" + apk + "' '" + version + "' " + (now ? "now" : "later")));
+            AppLog.w("update: " + version + " handed to the TV's shell" + (now ? "" : ", once Free My TV isn't on screen"));
+        }
+    }
+
     // MARK: - Scripts in the TV's shell: they outlive a force-stop of this app (the sleep timer, the remote buttons'
     // watch). Each keeps its files under one name in /data/local/tmp: the script (.sh) and the running one's pid (.pid).
 

@@ -61,6 +61,7 @@ final class Prefs {
         prefs = app.getSharedPreferences("settings", Context.MODE_PRIVATE);
         migrateKeys();   // before anything reads the button choices
         migrateCity();
+        keepBuildKey();
         Ui.applyLanguage();   // the language picked on the TV, now that it can be read
         weakTv = weak(app);
         Ui.LITE = Ui.LEGACY || performance();
@@ -185,6 +186,20 @@ final class Prefs {
     static void setTmdbKey(String key) { put("tmdbKey", key == null ? "" : key.trim()); }
 
     static boolean typedTmdbKey() { return !sp().getString("tmdbKey", "").trim().isEmpty(); }
+
+    /**
+     * The TMDB key this build carries, kept as if typed on the TV: the GitHub releases (Updater) are public, so they're
+     * built without keys, and updating to one keeps the picks.
+     */
+    private static void keepBuildKey() {
+        String key = Config.TMDB_KEY.trim();
+        if (!key.isEmpty() && !typedTmdbKey()) sp().edit().putString("tmdbKey", key).apply();
+    }
+
+    /** Updates from GitHub (Updater) on their own: on unless turned off in More Settings > Updates. */
+    static boolean autoUpdate() { return sp().getBoolean("autoUpdate", true); }
+
+    static void setAutoUpdate(boolean on) { put("autoUpdate", on); }
 
     // MARK: - Fork options (Free My TV > More Settings)
 

@@ -317,6 +317,7 @@ public class SettingsActivity extends Activity {
                 loadApps();
                 open(keysPage());
             }));
+            p.rows.add(opens(() -> Ui.tr("Atualizações", "Updates", "Actualizaciones"), () -> open(updatesPage())));
             p.rows.add(opens(() -> Ui.tr("Estado", "Status", "Estado"), () -> go(STATUS, null)));
             p.rows.add(opens(() -> Ui.tr("Ajustes da TV", "TV Settings"), () ->
                     activity.startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))));
@@ -343,6 +344,79 @@ public class SettingsActivity extends Activity {
                     Prefs::soundLevel, Prefs::setSoundLevel));
             p.hint = () -> Ui.tr("OK abre as opções; ← e → mudam direto.", "OK opens the choices; ← and → change it right away.");
             return p;
+        }
+
+        // MARK: - Updates: the newest GitHub release (Updater), now or on its own
+
+        private Updater.Release release;   // the newest, once read
+        private boolean releaseRead, releaseFailed, readingRelease, updating;
+
+        private Page updatesPage() {
+            Page p = new Page(Ui.tr("Atualizações", "Updates", "Actualizaciones"));
+            p.rows.add(new Row(() -> Ui.tr("Versão instalada", "Installed version", "Versión instalada"),
+                    () -> Updater.installedName(getContext()), () -> {}, null, null));
+            p.rows.add(new Row(() -> Ui.tr("Procurar atualização", "Check for updates", "Buscar actualización"), this::releaseState,
+                    this::askUpdate, null, () -> updating));
+            p.rows.add(onOff(() -> Ui.tr("Atualizar sozinho", "Update on its own", "Actualizar solo"), Prefs::autoUpdate,
+                    Prefs::setAutoUpdate, null));
+            p.hint = () -> focus == 2
+                    ? Ui.tr("Procura a cada 6 horas e instala quando você sai do app.", "Checks every 6 hours and installs once you leave the app.",
+                            "Busca cada 6 horas e instala cuando sales de la app.")
+                    : Ui.tr("As versões novas vêm do GitHub do projeto.", "New versions come from the project's GitHub.",
+                            "Las versiones nuevas vienen del GitHub del proyecto.");
+            p.hint2 = () -> Ui.tr("Ao atualizar, o app reinicia sozinho.", "When it updates, the app starts again by itself.",
+                    "Al actualizar, la app se reinicia sola.");
+            readRelease();
+            return p;
+        }
+
+        private String releaseState() {
+            if (updating) return Ui.tr("Atualizando…", "Updating…", "Actualizando…");
+            if (!releaseRead) return "…";
+            if (releaseFailed) return Ui.tr("Sem conexão: OK tenta de novo", "No connection: OK tries again", "Sin conexión: OK lo intenta de nuevo");
+            if (release == null || release.code <= Updater.installedCode(getContext())) return Ui.tr("Em dia", "Up to date", "Al día");
+            return Ui.trf(Ui.tr("{version} disponível", "{version} available", "{version} disponible"), "version", release.version());
+        }
+
+        /** A newer release: asks, then installs it now. Otherwise OK reads GitHub again. */
+        private void askUpdate() {
+            if (updating) return;
+            if (release == null || release.code <= Updater.installedCode(getContext())) {
+                releaseRead = false;
+                readRelease();
+                return;
+            }
+            openPicker(Ui.trf(Ui.tr("Atualizar para {version}? O app reinicia.", "Update to {version}? The app starts again.",
+                    "¿Actualizar a {version}? La app se reinicia."), "version", release.version()),
+                    list(Ui.tr("Atualizar", "Update", "Actualizar"), Ui.tr("Cancelar", "Cancel")), 1, at -> {
+                        if (at != 0) return;
+                        Updater.requestNow(getContext());
+                        updating = true;
+                    });
+        }
+
+        private void readRelease() {
+            if (readingRelease) return;
+            readingRelease = true;
+            new Thread(() -> {
+                Updater.Release newest = null;
+                boolean failed = false;
+                try {
+                    newest = Updater.latest();
+                } catch (java.io.IOException e) {
+                    AppLog.w("update check: " + e.getMessage());
+                    failed = true;
+                }
+                Updater.Release read = newest;
+                boolean readFailed = failed;
+                handler.post(() -> {
+                    readingRelease = false;
+                    releaseRead = true;
+                    releaseFailed = readFailed;
+                    release = read;
+                    invalidate();
+                });
+            }, "free-my-tv-update-check").start();
         }
 
         // MARK: - Performance: the light look, fast animations, optimized apps, and the background services to turn off

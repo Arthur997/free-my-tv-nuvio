@@ -3,6 +3,8 @@
 # Needs a JDK (17+) and the Android SDK command-line tools (build-tools 34+, platform android-34). See README.md.
 set -euo pipefail
 cd "$(dirname "$0")"
+# --release: a build for the GitHub releases (tools/release.sh), which are public: without the keys.
+RELEASE=false; [ "${1:-}" = "--release" ] && RELEASE=true
 
 # --- Tools
 SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
@@ -31,6 +33,8 @@ prop() {
   v="$(printf '%s' "$v" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | tr -d '"\\')"
   printf '%s' "${v:-$2}"
 }
+# A key: empty in a release build.
+secret() { if $RELEASE; then printf ""; else prop "$1" ""; fi; }
 number() {
   local v; v="$(prop "$1" "$2")"
   [[ "$v" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] || { echo "config.properties: $1 must be a number (got \"$v\")" >&2; exit 1; }
@@ -50,8 +54,8 @@ package io.freemytv;
 final class Config {
     private Config() {}
 
-    static final String TMDB_KEY = "$(prop tmdb_key '')";
-    static final String WATCHMODE_KEY = "$(prop watchmode_key '')";
+    static final String TMDB_KEY = "$(secret tmdb_key)";
+    static final String WATCHMODE_KEY = "$(secret watchmode_key)";
     static final String TMDB_REGION = "$(prop tmdb_region US)";
     static final String LATITUDE = "$LAT";
     static final String LONGITUDE = "$LON";
@@ -129,3 +133,10 @@ if [ ! -f freemytv.keystore ]; then
 fi
 "$BT/apksigner$BAT" sign --ks freemytv.keystore --ks-pass pass:freemytv --key-pass pass:freemytv --out FreeMyTV.apk out/aligned.apk
 echo "Built FreeMyTV.apk ($(du -h FreeMyTV.apk | cut -f1)). Install: adb install -r FreeMyTV.apk"
+if $RELEASE; then
+  # What tools/release.sh checks: this APK came from a release build, at this version.
+  VERSION="$(sed -n 's/.*android:versionName="\([^"]*\)".*/\1/p' app/AndroidManifest.xml)"
+  SUM="$( (sha256sum FreeMyTV.apk 2>/dev/null || shasum -a 256 FreeMyTV.apk) | cut -d' ' -f1)"
+  echo "$VERSION $SUM" > out/release.txt
+  echo "Release build $VERSION, without keys: publish it with tools/release.sh"
+fi

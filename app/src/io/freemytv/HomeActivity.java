@@ -48,6 +48,7 @@ public class HomeActivity extends Activity {
             return;
         }
         if (home != null) home.resume();
+        Updater.maybeCheck(this);
     }
 
     /** A setting the home screen changed itself (the shelf, from the app options): no need to start over. */

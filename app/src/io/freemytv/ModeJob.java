@@ -16,7 +16,7 @@ public class ModeJob extends JobService {
     static final String APPLY = "apply", VERIFY = "verify", REVERT = "revert", MEMORY = "memory", REMOTE = "remote",
             DREAM = "dream", FREE_MEMORY = "freememory", TRIM = "trim", CLEAR_CACHE = "clearcache",
             FORCE_STOP = "forcestop", APP_STATE = "appstate", SLEEP = "sleep", SLEEP_ARM = "sleeparm",
-            OPTIMIZE = "optimize", ANIMATIONS = "animations", BACKGROUND_APPS = "backgroundapps";
+            OPTIMIZE = "optimize", ANIMATIONS = "animations", BACKGROUND_APPS = "backgroundapps", UPDATE = "update";
 
     @Override public boolean onStartJob(JobParameters params) {
         PersistableBundle extras = params.getExtras();
@@ -41,6 +41,7 @@ public class ModeJob extends JobService {
                     case OPTIMIZE: HomeMode.optimizeAppsNow(app); break;
                     case ANIMATIONS: HomeMode.animationsNow(app, "fast".equals(mode)); break;
                     case BACKGROUND_APPS: HomeMode.backgroundAppsNow(app, mode); break;
+                    case UPDATE: Updater.updateNow(app, "now".equals(mode)); break;
                     case APP_STATE: HomeMode.setAppEnabledNow(app, appOf(mode), "on".equals(nameOf(mode))); break;
                     default: break;
                 }
