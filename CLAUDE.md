@@ -125,6 +125,13 @@ with a Tizen certificate (`--sign`), which 2017-2022 TVs install as it is; on 20
 with the person's Samsung certificate. Sign every release with the same author certificate: older TVs refuse an
 update signed by another. `python3 webos/build.py --generic` makes the LG `.ipk` that goes along.
 
+This fork's releases (Arthur997/free-my-tv-nuvio) carry the Android app instead, and the TVs update to them on their
+own (`Updater`: More Settings > Updates checks every 6 hours from the home screen, the TV's shell installs once Free
+My TV is off screen). Every change that reaches the TVs is a new version: raise `android:versionName` in
+`app/AndroidManifest.xml` (2.0.1, 2.1.0…) and `versionCode` to match (major*10000 + minor*100 + patch), commit and
+push, `./build.sh --release` (no keys inside: releases are public; the TMDB key a TV got from an earlier build stays
+on it), then `tools/release.sh "what changed"`. Signed with `freemytv.keystore`, or the TVs refuse it.
+
 ## Adapting it to another TV
 
 Read first, change after. Read-only commands that tell you what the TV has:

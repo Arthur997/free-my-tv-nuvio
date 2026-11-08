@@ -1269,7 +1269,8 @@ final class HomeMode {
 
     /**
      * Installs $1 (version $2). Unless $3 is "now", it waits up to an hour for the person to leave Free My TV first:
-     * installing restarts the home screen. In the TV's shell, since installing stops this app.
+     * installing restarts the home screen. With "now" (asked in Settings, which installing closes), the home screen
+     * after. In the TV's shell, since installing stops this app.
      */
     private static final String UPDATE_SCRIPT = String.join("\n",
             "F=" + UPDATE_FILES,
@@ -1282,6 +1283,7 @@ final class HomeMode {
             "out=$(pm install -r $F.apk 2>&1)",
             "rm -f $F.apk $F.pid",
             "log -t FreeMyTV \"update to $2: $out\"",
+            "[ \"$3\" = now ] && am start -a android.intent.action.MAIN -c android.intent.category.HOME >/dev/null",   // asked in Settings, which closed
             "");
 
     static void installUpdateNow(Context c, String apk, String version, boolean now) throws IOException {
