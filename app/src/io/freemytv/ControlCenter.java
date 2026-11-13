@@ -102,7 +102,7 @@ final class ControlCenter {
         details = new String[t.length];
         symbols = new String[t.length];
         for (int i = 0; i < t.length; i++) {
-            focus[i] = new Spring(0.2f, 0.85f, 0);
+            focus[i] = Spring.focus(0);
             rects[i] = new RectF();
         }
         index = 0;

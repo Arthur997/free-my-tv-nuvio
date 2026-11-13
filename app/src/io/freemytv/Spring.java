@@ -5,6 +5,14 @@ final class Spring {
     float value, velocity, target;
     private final float response, damping;
 
+    /**
+     * The focus of any item (tabs, cards, apps, rows, buttons): one feel everywhere, with only a hint of bounce (0.74
+     * made the apps wobble, the most visible focus of all).
+     */
+    static Spring focus(float initial) {
+        return new Spring(0.22f, 0.86f, initial);
+    }
+
     Spring(float response, float damping, float initial) {
         this.response = response;
         this.damping = damping;

@@ -202,7 +202,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private int pickIndex, heroSlide = 1;
     private Hero hero, heroFrom;
     private long heroFadeAt, bgFadeAt;
-    private final Spring heroFocus = new Spring(0.2f, 0.85f, 0);
+    private final Spring heroFocus = Spring.focus(0);
     private final RectF heroButton = new RectF();
     private Backdrop bgFrom, bgTo;     // null = gradient (no photo)
     private final int[] frostMix = new int[Backdrop.FW * Backdrop.FH];
@@ -364,11 +364,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         setContentDescription("Free My TV");
         drawerLayer.setVisibility(INVISIBLE);
         for (int i = 0; i < TOP_ITEMS; i++) {
-            topFocus[i] = new Spring(0.2f, 0.85f, 0);
+            topFocus[i] = Spring.focus(0);
             topRects[i] = new RectF();
         }
         for (int i = 0; i < SLOTS; i++) {
-            cardFocus[i] = new Spring(0.22f, 0.78f, 0);
+            cardFocus[i] = Spring.focus(0);
             cardRects[i] = new RectF();
         }
         makeLightButtons();
@@ -1099,7 +1099,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             statusRects = new RectF[list.size()];
             int index = Math.min(statusIndex, Math.max(0, list.size() - 1));
             for (int i = 0; i < statusFocus.length; i++) {
-                statusFocus[i] = new Spring(0.2f, 0.85f, 0);
+                statusFocus[i] = Spring.focus(0);
                 statusRects[i] = new RectF();
                 if (list.get(i).key.equals(focusedKey)) index = i;   // a device came on: keep focus on the same button
             }
@@ -1152,7 +1152,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             tileFocus = new Spring[list.size()];
             tileRects = new RectF[list.size()];
             for (int i = 0; i < tileFocus.length; i++) {
-                tileFocus[i] = new Spring(0.22f, 0.74f, 0);
+                tileFocus[i] = Spring.focus(0);
                 tileRects[i] = new RectF();
             }
             shelfIndex = Math.min(shelfIndex, Math.max(0, list.size() - 1));
@@ -1441,7 +1441,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             drawerFocus = new Spring[list.size()];
             drawerRects = new RectF[list.size()];
             for (int i = 0; i < drawerFocus.length; i++) {
-                drawerFocus[i] = new Spring(0.2f, 0.85f, 0);
+                drawerFocus[i] = Spring.focus(0);
                 drawerRects[i] = new RectF();
             }
             drawerIndex = Math.min(drawerIndex, Math.max(0, list.size() - 1));
@@ -1722,7 +1722,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void setOthers(List<HomeApps.Item> list) {
         others = list;
         gridFocus = new Spring[list.size()];
-        for (int i = 0; i < gridFocus.length; i++) gridFocus[i] = new Spring(0.22f, 0.82f, 0);
+        for (int i = 0; i < gridFocus.length; i++) gridFocus[i] = Spring.focus(0);
         gridLabels = null;
         gridIndex = Math.min(gridIndex, Math.max(0, list.size() - 1));
         retargetGrid(true);

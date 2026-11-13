@@ -75,7 +75,7 @@ final class RecentsView extends View implements Choreographer.FrameCallback {
     private int index;
     private boolean onCloseAll;         // the focus is on "Close all", under the cards
     private final Spring scroll = new Spring(0.3f, 1f, 0);          // the card in the middle, as a float index
-    private final Spring cardFocus = new Spring(0.2f, 0.85f, 1), pillFocus = new Spring(0.2f, 0.85f, 0);
+    private final Spring cardFocus = Spring.focus(1), pillFocus = Spring.focus(0);
     private final Spring appear = new Spring(0.3f, 0.9f, 0);
     private boolean okDown, backDown, running, frameQueued;
     private long lastNanos;

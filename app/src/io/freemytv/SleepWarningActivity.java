@@ -79,7 +79,7 @@ public class SleepWarningActivity extends Activity {
             super(a);
             activity = a;
             for (int i = 0; i < CHOICES.length; i++) {
-                focus[i] = new Spring(0.2f, 0.85f, i == 0 ? 1 : 0);
+                focus[i] = Spring.focus(i == 0 ? 1 : 0);
                 buttons[i] = new RectF();
                 labels[i] = CHOICES[i] == 0 ? Ui.tr("Cancelar", "Cancel", "Cancelar")
                         : Ui.trf(Ui.tr("+{n} min", "+{n} min", "+{n} min"), "n", CHOICES[i]);

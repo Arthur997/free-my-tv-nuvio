@@ -1136,7 +1136,7 @@ public class SettingsActivity extends Activity {
         }
 
         private Spring pop(int i) {
-            while (pop.size() <= i) pop.add(new Spring(0.28f, 0.85f, 0));
+            while (pop.size() <= i) pop.add(Spring.focus(0));
             return pop.get(i);
         }
 
@@ -1423,10 +1423,10 @@ public class SettingsActivity extends Activity {
         private float drawRowBackground(Canvas c, int i) {
             float f = Ui.clamp(pop(i).value);
             if (f > 0.01f) {
-                float s = 1 + 0.02f * f;
+                float s = 1 + 0.03f * f;
                 float cx = rowRect.centerX(), cy = rowRect.centerY();
                 tmp.set(cx - rowRect.width() * s / 2, cy - rowRect.height() * s / 2, cx + rowRect.width() * s / 2, cy + rowRect.height() * s / 2);
-                float r = 18 * k * s;
+                float r = 22 * k * s;   // the home screen's menu rows (MENU_ROW_RADIUS)
                 tmp.offset(0, 10 * k * f);
                 shadow.setColor(Ui.alpha(0xFF000000, (lightTheme ? 0.16f : 0.4f) * f));
                 c.drawRoundRect(tmp, r, r, shadow);
