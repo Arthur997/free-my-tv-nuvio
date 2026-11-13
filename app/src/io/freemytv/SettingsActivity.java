@@ -1249,6 +1249,7 @@ public class SettingsActivity extends Activity {
             notice = new TextPaint(Ui.text(Ui.regular, 23 * k, fg(0xB3FFFFFF)));
             heading = Ui.text(Ui.displaySemibold, 34 * k, fg(0xFFFFFFFF));
             hint = Ui.text(Ui.regular, 23 * k, secondary(0x8CFFFFFF));
+            hintLayouts.clear();   // made with the old paint (theme or size)
             spinner = new Paint(Paint.ANTI_ALIAS_FLAG);
             spinner.setStyle(Paint.Style.STROKE);
             spinner.setStrokeCap(Paint.Cap.ROUND);
@@ -1369,8 +1370,30 @@ public class SettingsActivity extends Activity {
                 return;
             }
             String hint1 = page.hint.get(), hint2 = page.hint2.get();
-            if (!hint1.isEmpty()) c.drawText(hint1, x, hy, hint);
-            if (!hint2.isEmpty()) c.drawText(hint2, x, hy + 38 * k, hint);
+            if (!hint1.isEmpty()) hy = drawHint(c, hint1, x, hy) + 38 * k;
+            else hy += 38 * k;
+            if (!hint2.isEmpty()) drawHint(c, hint2, x, hy);
+        }
+
+        /** The hints, wrapped (2 lines at most) to the list's width: longer translations no longer run off the screen. */
+        private final java.util.HashMap<String, StaticLayout> hintLayouts = new java.util.HashMap<>();
+
+        /** Draws a hint with its first baseline at y; returns the last line's baseline. */
+        private float drawHint(Canvas c, String text, float x, float y) {
+            int width = Math.max(1, Math.round(LIST_R * k - x));
+            StaticLayout layout = hintLayouts.get(text);
+            if (layout == null || layout.getWidth() != width) {
+                if (hintLayouts.size() > 24) hintLayouts.clear();
+                layout = StaticLayout.Builder.obtain(text, 0, text.length(), new TextPaint(hint), width)
+                        .setMaxLines(2).setEllipsize(TextUtils.TruncateAt.END).build();
+                hintLayouts.put(text, layout);
+            }
+            float top = y - layout.getLineBaseline(0);
+            c.save();
+            c.translate(x, top);
+            layout.draw(c);
+            c.restore();
+            return top + layout.getLineBaseline(layout.getLineCount() - 1);
         }
 
         /** One row: the focus pill, the name (cut if it would meet the value), the value, a chevron or a check. */

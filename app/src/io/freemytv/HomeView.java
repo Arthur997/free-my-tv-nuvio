@@ -2838,7 +2838,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 return label(others, i) + ", " + (i + 1) + Ui.tr(" de ", " of ") + others.size();
             case Z_TOP:
                 if (i >= 3) return label(lightButtons, i - 3);
-                return tabs()[i] + Ui.tr(", aba ", ", tab ") + (i + 1) + Ui.tr(" de 3", " of 3");
+                return tabs()[i] + (i == tab ? Ui.tr(", selecionada", ", selected", ", seleccionada") : "")
+                        + Ui.tr(", aba ", ", tab ") + (i + 1) + Ui.tr(" de 3", " of 3");
             case Z_CARDS: {
                 if (i >= cards.size()) return "";
                 Recs.Pick p = cards.get(i);
@@ -2962,7 +2963,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         StringBuilder s = new StringBuilder(p.title == null ? "" : p.title);
         if (p.meta != null && !p.meta.isEmpty()) s.append(", ").append(p.meta);
         String app = Recs.serviceName(p);
-        if (app != null && !app.isEmpty()) s.append(". App: ").append(app);
+        if (app != null && !app.isEmpty()) s.append(Ui.tr(". No app ", ". On ", ". En ")).append(app);
         return s.toString();
     }
 
