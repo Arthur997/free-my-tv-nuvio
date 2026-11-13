@@ -1348,6 +1348,7 @@ public class SettingsActivity extends Activity {
             if (page.title != null) c.drawText(page.title, x, (LIST_TOP - 24) * k, heading);
             float top = listTop(), vis = visibleRows();
             float listBottom = top + vis * STEP;
+            drawListPanel(c, top, Math.min(listBottom, top + page.rows.size() * STEP));
             c.save();
             // Rows fade out under the edges instead of being cut: drawn in a band a little taller than the list.
             c.clipRect(LIST_X * k - 40 * k, (top - 14) * k, LIST_R * k + 40 * k, (listBottom + 10) * k);
@@ -1382,6 +1383,26 @@ public class SettingsActivity extends Activity {
             else hy += 38 * k;
             if (!hint2.isEmpty()) drawHint(c, hint2, x, hy);
         }
+
+        /**
+         * The rows sit on one panel, like the home screen's Control Center (radius 30): a faint tint with a hairline
+         * edge, so the white focus pill stands out on it in either theme. `top`/`bottom` in 1080p units.
+         */
+        private void drawListPanel(Canvas c, float top, float bottom) {
+            panelRect.set((LIST_X - 22) * k, (top - 16) * k, (LIST_R + 22) * k, (bottom + 10) * k);
+            float r = PANEL_RADIUS * k;
+            panelPaint.setStyle(Paint.Style.FILL);
+            panelPaint.setColor(lightTheme ? 0x0F000000 : 0x12FFFFFF);
+            c.drawRoundRect(panelRect, r, r, panelPaint);
+            panelPaint.setStyle(Paint.Style.STROKE);
+            panelPaint.setStrokeWidth(Math.max(1, k));
+            panelPaint.setColor(lightTheme ? 0x14000000 : 0x1FFFFFFF);
+            c.drawRoundRect(panelRect, r, r, panelPaint);
+        }
+
+        private static final float PANEL_RADIUS = 30;   // ControlCenter.TILE_RADIUS
+        private final Paint panelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF panelRect = new RectF();
 
         /** The hints, wrapped (2 lines at most) to the list's width: longer translations no longer run off the screen. */
         private final java.util.HashMap<String, StaticLayout> hintLayouts = new java.util.HashMap<>();

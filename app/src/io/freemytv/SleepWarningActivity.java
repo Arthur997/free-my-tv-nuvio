@@ -85,6 +85,29 @@ public class SleepWarningActivity extends Activity {
                         : Ui.trf(Ui.tr("+{n} min", "+{n} min", "+{n} min"), "n", CHOICES[i]);
             }
             setFocusable(true);
+            // TalkBack: one item per button, id = button + 1.
+            spoken = new Spoken(this, new Spoken.Source() {
+                @Override public void items(java.util.List<Integer> out) {
+                    for (int i = 0; i < CHOICES.length; i++) out.add(i + 1);
+                }
+                @Override public String text(int id) {
+                    return id >= 1 && id <= labels.length ? labels[id - 1] + ", " + countdown : "";
+                }
+                @Override public boolean bounds(int id, android.graphics.Rect out) {
+                    if (id < 1 || id > buttons.length) return false;
+                    buttons[id - 1].round(out);
+                    return out.height() > 0;
+                }
+                @Override public int focused() { return index + 1; }
+                @Override public void focus(int id) { move(id - 1 - index); }
+                @Override public void click(int id) { choose(CHOICES[id - 1]); }
+            });
+        }
+
+        private final Spoken spoken;
+
+        @Override public android.view.accessibility.AccessibilityNodeProvider getAccessibilityNodeProvider() {
+            return spoken;
         }
 
         void resume() {
@@ -92,6 +115,7 @@ public class SleepWarningActivity extends Activity {
             night = HomeData.get(activity).isNight(System.currentTimeMillis());
             appear.target = 1;
             handler.post(second);
+            spoken.readAgain();
             wake();
         }
 
@@ -149,7 +173,7 @@ public class SleepWarningActivity extends Activity {
                     if (down) {
                         if (e.getRepeatCount() == 0) okDown = true;
                     } else {
-                        if (okDown && !e.isCanceled()) choose(CHOICES[index]);
+                        if (okDown && !e.isCanceled() && spoken.keyClick()) choose(CHOICES[index]);   // not twice with TalkBack
                         okDown = false;
                     }
                     return true;
@@ -173,7 +197,7 @@ public class SleepWarningActivity extends Activity {
             focus[index].target = 0;
             index = next;
             focus[index].target = 1;
-            announceForAccessibility(labels[index]);
+            spoken.focusMoved();
             wake();
         }
 

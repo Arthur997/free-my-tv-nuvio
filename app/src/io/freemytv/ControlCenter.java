@@ -544,8 +544,9 @@ final class ControlCenter {
         host.glass(c, panel, radius);
         border.setColor(tone(0x14000000, 0x1FFFFFFF));
         c.drawRoundRect(panel, radius, radius, border);
-        int restInk = tone(INK, WHITE), litInk = tone(WHITE, INK);
-        int restDim = tone(DIM, 0xFF98989D), litDim = tone(0xB3FFFFFF, 0xB31D1D1F);
+        // Focused: a white tile with dark ink, day and night, as the home screen's tabs and menu (by day it was black).
+        int restInk = tone(INK, WHITE), litInk = INK;
+        int restDim = tone(DIM, 0xFF98989D), litDim = 0xB31D1D1F;
         SpeedTest st = SpeedTest.get();
         for (int i = 0; i < tiles.length; i++) {
             RectF r = rects[i];
@@ -555,7 +556,11 @@ final class ControlCenter {
             fill.setColor(tone(0x0F000000, 0x17FFFFFF));
             c.drawRoundRect(r, tileRadius, tileRadius, fill);
             if (f > 0.01f) {
-                fill.setColor(Ui.alpha(tone(INK, WHITE), f));
+                tmp.set(r);
+                tmp.offset(0, 8 * k * f);
+                shadow.setColor(Ui.alpha(0xFF000000, (0.16f + 0.24f * dk) * f));   // the tabs' soft shadow
+                shadows.draw(c, tmp, tileRadius, SHADOW_BLUR * k, shadow);
+                fill.setColor(Ui.alpha(0xFFFFFFFF, f));
                 c.drawRoundRect(r, tileRadius, tileRadius, fill);
             }
             int ink = blend(restInk, litInk, f), dim = blend(restDim, litDim, f);
