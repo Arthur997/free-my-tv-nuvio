@@ -118,6 +118,20 @@ final class Prefs {
         version++;
     }
 
+    // MARK: - Clock (Clock)
+
+    /** Off (the default): the zone and the time come from the internet. On: clockZone and clockAdjust. */
+    static boolean manualClock() { return sp().getBoolean("manualClock", false); }
+    static void setManualClock(boolean on) { put("manualClock", on); }
+
+    /** The manual UTC offset, in minutes: the TV's own until one is picked. */
+    static int clockZone() { return sp().getInt("clockZone", Clock.systemZoneMinutes()); }
+    static void setClockZone(int minutes) { put("clockZone", minutes); }
+
+    /** Minutes added to the manual time (a clock running fast or slow). */
+    static int clockAdjust() { return sp().getInt("clockAdjust", 0); }
+    static void setClockAdjust(int minutes) { put("clockAdjust", minutes); }
+
     // MARK: - City
 
     static String city() { return sp().getString("city", Config.CITY).trim(); }

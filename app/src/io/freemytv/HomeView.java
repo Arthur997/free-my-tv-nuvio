@@ -3168,20 +3168,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
     }
 
-    /** Brasília's time, whatever zone the TV is set to. */
-    private final java.text.SimpleDateFormat brasilia = brasiliaFormat();
+    /** 24 h, in Clock's zone (set again every minute: the zone may change). */
+    private final java.text.SimpleDateFormat topClockFormat = new java.text.SimpleDateFormat("HH:mm", java.util.Locale.US);
     private long topMinute = -1, topWeatherAt = -1;
+    private int topZone = -1;
     private String topTime = "", topTemp = "", topSymbol = "";
     private float topTimeW, topTempW;
 
-    private static java.text.SimpleDateFormat brasiliaFormat() {
-        java.text.SimpleDateFormat f = new java.text.SimpleDateFormat("HH:mm", java.util.Locale.US);
-        f.setTimeZone(java.util.TimeZone.getTimeZone("America/Sao_Paulo"));
-        return f;
-    }
-
     /**
-     * The clock (24 h, Brasília) and the weather now (symbol + temperature), where the prices were and in their style:
+     * The clock (24 h, Clock's zone) and the weather now (symbol + temperature), where the prices were and in their style:
      * a quiet line at the right end of the tab bar. Text is formatted and measured once a minute (or per forecast).
      */
     private void drawTopClock(Canvas c) {
@@ -3192,9 +3187,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         for (int i = 3; i < TOP_ITEMS; i++) fade = Math.min(fade, 1 - Ui.clamp(topFocus[i].value));
         if (fade <= 0.01f) return;
         long now = System.currentTimeMillis();
-        if (now / 60_000 != topMinute) {
+        if (now / 60_000 != topMinute || Clock.generation != topZone) {
             topMinute = now / 60_000;
-            topTime = brasilia.format(new java.util.Date(now));
+            topClockFormat.setTimeZone(Clock.zone());
+            topZone = Clock.generation;
+            topTime = topClockFormat.format(new java.util.Date(now));
             topTimeW = text.measureText(topTime);
         }
         HomeData.Weather wx = data.weather;

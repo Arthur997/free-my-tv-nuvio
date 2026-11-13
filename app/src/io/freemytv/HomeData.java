@@ -186,6 +186,7 @@ final class HomeData {
     /** Fetches whatever is stale. The screen calls this when it appears and every minute while it's visible. */
     void refreshIfStale() {
         long now = System.currentTimeMillis();
+        Clock.refreshIfStale(io);
         // A negative age (the TV's clock went back) counts as stale: otherwise the data would freeze.
         long pricesEvery = Prefs.PRICES_EVERY[Prefs.pricesEveryIndex()];
         if (!fetchingPrices && coinCount() > 0 && (now - pricesAt > pricesEvery || now < pricesAt) && !failedRecently(pricesFailedAt, now)) {
@@ -273,7 +274,10 @@ final class HomeData {
 
     private static Weather parseWeather(String body) throws Exception {
         JSONObject o = new JSONObject(body);
-        TimeZone zone = TimeZone.getTimeZone(o.optString("timezone", TimeZone.getDefault().getID()));
+        // The offset Open-Meteo sends, not its zone's name: an old TV's time zone database may get that zone wrong.
+        TimeZone zone = o.has("utc_offset_seconds")
+                ? new java.util.SimpleTimeZone(o.getInt("utc_offset_seconds") * 1000, "forecast")
+                : TimeZone.getTimeZone(o.optString("timezone", TimeZone.getDefault().getID()));
         Weather w = new Weather();
         JSONObject current = o.getJSONObject("current");
         w.temp = current.getDouble("temperature_2m");
@@ -332,12 +336,18 @@ final class HomeData {
     }
 
     private static String get(String url) throws IOException {
+        return get(url, null);
+    }
+
+    /** `serverDate`, when given, gets the server's clock (its Date header, ms; 0 without one). */
+    static String get(String url, long[] serverDate) throws IOException {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(6000);
         c.setReadTimeout(6000);
         c.setRequestProperty("User-Agent", "FreeMyTV");
         try {
             if (c.getResponseCode() != 200) throw new IOException("HTTP " + c.getResponseCode());
+            if (serverDate != null) serverDate[0] = c.getDate();
             try (InputStream in = c.getInputStream()) {
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
                 byte[] buffer = new byte[8192];

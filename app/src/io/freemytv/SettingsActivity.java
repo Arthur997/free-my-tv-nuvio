@@ -309,6 +309,7 @@ public class SettingsActivity extends Activity {
             p.rows.add(opens(() -> Ui.tr("Desempenho", "Performance", "Rendimiento"), () -> open(performancePage())));
             p.rows.add(opens(() -> Ui.tr("Recomendações", "Picks"), () -> open(picksPage())));
             p.rows.add(opens(() -> Ui.tr("Clima e cotações", "Weather and prices", "Clima y cotizaciones"), () -> open(weatherPage())));
+            p.rows.add(opens(() -> Ui.tr("Relógio", "Clock", "Reloj"), () -> open(clockPage())));
             p.rows.add(opens(() -> Ui.tr("Tela de descanso", "Screensaver"), () -> open(screensaverPage())));
             p.rows.add(opens(() -> Ui.tr("Prateleira", "Shelf"), this::openShelfEditor));
             p.rows.add(opens(() -> Ui.tr("Apps da TV", "TV Apps", "Apps de la TV"), this::openTvApps));
@@ -729,6 +730,50 @@ public class SettingsActivity extends Activity {
             return p;
         }
 
+        /** The clocks' time: automatic (the weather city's zone and the time from the internet) or a zone and adjustment by hand. */
+        private Page clockPage() {
+            Page p = new Page(Ui.tr("Relógio", "Clock", "Reloj"));
+            p.rows.add(choice(() -> Ui.tr("Hora", "Time", "Hora"),
+                    () -> list(Ui.tr("Automática (internet)", "Automatic (internet)", "Automática (internet)"),
+                            Ui.tr("Manual", "Manual", "Manual")),
+                    () -> Prefs.manualClock() ? 1 : 0, at -> Prefs.setManualClock(at == 1)));
+            java.util.function.BooleanSupplier automatic = () -> !Prefs.manualClock();
+            p.rows.add(dimmed(choice(() -> Ui.tr("Fuso horário", "Time zone", "Zona horaria"), SettingsView::zoneNames,
+                    () -> automatic.getAsBoolean() ? nearest(Clock.ZONES, Clock.zoneMinutes()) : nearest(Clock.ZONES, Prefs.clockZone()),
+                    at -> Prefs.setClockZone(Clock.ZONES[at])), automatic));
+            p.rows.add(dimmed(choice(() -> Ui.tr("Ajuste da hora", "Time adjustment", "Ajuste de la hora"), SettingsView::adjustNames,
+                    () -> automatic.getAsBoolean() ? nearest(Clock.ADJUSTS, 0) : nearest(Clock.ADJUSTS, Prefs.clockAdjust()),
+                    at -> Prefs.setClockAdjust(Clock.ADJUSTS[at])), automatic));
+            p.rows.add(new Row(() -> Ui.tr("Agora", "Now", "Ahora"), () -> Ui.clock(System.currentTimeMillis()), () -> {}, null, null));
+            p.hint = () -> Prefs.manualClock()
+                    ? Ui.tr("Escolha o fuso e, se a hora ainda estiver errada, ajuste com ← e →.",
+                            "Pick the zone and, if the time is still off, adjust it with ← and →.",
+                            "Elige la zona y, si la hora sigue mal, ajústala con ← y →.")
+                    : Ui.tr("Usa o fuso da cidade do clima e a hora certa da internet.",
+                            "Uses the weather city's time zone and the exact time from the internet.",
+                            "Usa la zona de la ciudad del clima y la hora exacta de internet.");
+            return p;
+        }
+
+        private static List<String> zoneNames() {
+            List<String> l = new ArrayList<>();
+            for (int minutes : Clock.ZONES) l.add(Clock.utcLabel(minutes));
+            return l;
+        }
+
+        private static List<String> adjustNames() {
+            List<String> l = new ArrayList<>();
+            for (int minutes : Clock.ADJUSTS) l.add(Clock.adjustLabel(minutes));
+            return l;
+        }
+
+        /** The index of the value in `values` closest to `value` (a zone the list lacks, like UTC+5:30, shows the nearest). */
+        private static int nearest(int[] values, int value) {
+            int best = 0;
+            for (int i = 1; i < values.length; i++) if (Math.abs(values[i] - value) < Math.abs(values[best] - value)) best = i;
+            return best;
+        }
+
         /** Which screensaver Free My TV mode keeps, and a look at Free My TV's. */
         private Page screensaverPage() {
             Page p = new Page(Ui.tr("Tela de descanso", "Screensaver"));
@@ -918,7 +963,11 @@ public class SettingsActivity extends Activity {
                           java.util.function.Consumer<Boolean> set, java.util.function.BooleanSupplier dim) {
             Row r = choice(label, () -> list(Ui.tr("Ligado", "On"), Ui.tr("Desligado", "Off")), () -> on.getAsBoolean() ? 0 : 1,
                     at -> set.accept(at == 0));
-            if (dim == null) return r;
+            return dim == null ? r : dimmed(r, dim);
+        }
+
+        /** The row greyed out and locked while `dim` says so. */
+        private static Row dimmed(Row r, java.util.function.BooleanSupplier dim) {
             return new Row(r.label, r.value, () -> { if (!dim.getAsBoolean()) r.ok.run(); },
                     d -> { if (!dim.getAsBoolean()) r.adjust.accept(d); }, dim);
         }

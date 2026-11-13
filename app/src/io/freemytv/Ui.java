@@ -396,7 +396,9 @@ final class Ui {
         }
 
         String format(long at) {
-            return new SimpleDateFormat(text, locale).format(new Date(at));
+            SimpleDateFormat f = new SimpleDateFormat(text, locale);
+            f.setTimeZone(Clock.zone());
+            return f.format(new Date(at));
         }
     }
 
@@ -445,6 +447,7 @@ final class Ui {
     }
 
     private static final HashMap<String, String> FORMATTED = new HashMap<>();
+    private static int formattedZone;
 
     /**
      * A formatted value, made once per language: the bottom drawer is redrawn on every frame of its focus animation,
@@ -453,6 +456,10 @@ final class Ui {
     static String once(String kind, double value, Supplier<String> format) {
         String key = kind + '|' + language + '|' + value;
         synchronized (FORMATTED) {
+            if (formattedZone != Clock.generation) {   // times formatted in another zone
+                FORMATTED.clear();
+                formattedZone = Clock.generation;
+            }
             String s = FORMATTED.get(key);
             if (s == null) {
                 if (FORMATTED.size() > 200) FORMATTED.clear();

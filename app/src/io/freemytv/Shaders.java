@@ -304,7 +304,7 @@ final class Shaders {
 
     /** Palette for the time of day: sunrise at 6:00 and sunset at 18:00, like an average day. */
     static void sky(Palette out, long now) {
-        java.util.Calendar cal = java.util.Calendar.getInstance();
+        java.util.Calendar cal = java.util.Calendar.getInstance(Clock.zone());
         cal.setTimeInMillis(now);
         cal.set(java.util.Calendar.HOUR_OF_DAY, 0);
         cal.set(java.util.Calendar.MINUTE, 0);
@@ -331,7 +331,7 @@ final class Shaders {
     /** Time of day (ms since local midnight) of an instant; `fallback` if there is no data. */
     static long timeOfDay(long at, long fallback) {
         if (at == 0) return fallback;
-        java.util.Calendar c = java.util.Calendar.getInstance();
+        java.util.Calendar c = java.util.Calendar.getInstance(Clock.zone());
         c.setTimeInMillis(at);
         return ((c.get(java.util.Calendar.HOUR_OF_DAY) * 60L + c.get(java.util.Calendar.MINUTE)) * 60 + c.get(java.util.Calendar.SECOND)) * 1000L;
     }
