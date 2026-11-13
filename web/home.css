@@ -138,7 +138,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
   height: 28px;
   font-size: 21px;
   line-height: 28px;
-  color: #8E8E93;
+  color: #6E6E73;
   white-space: nowrap;
   -webkit-transition: opacity 0.25s;
   transition: opacity 0.25s;
@@ -375,7 +375,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 }
 .key .sym { position: absolute; left: 50%; top: 33px; width: 34px; height: 34px; margin-left: -17px; }
 .key .label { position: absolute; left: 8px; right: 8px; top: 82px; font-size: 23px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.key.off { color: #8E8E93; }
+.key.off { color: #6E6E73; }
 .key.focus { background: #F5F5F7; color: #1C1C1E; -webkit-transform: scale(1.07); transform: scale(1.07); box-shadow: 0 16px 34px rgba(0, 0, 0, 0.42); z-index: 2; }
 .night .key { color: rgba(255, 255, 255, 0.95); }
 .night .key.off { color: rgba(255, 255, 255, 0.42); }
@@ -384,7 +384,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .panel { position: absolute; top: 708px; height: 300px; border-radius: 30px; overflow: hidden; color: #1D1D1F; }
 .night .panel { color: #F5F5F7; }
 .panel .head { position: absolute; left: 34px; top: 30px; font-size: 25px; font-weight: 600; color: #6E6E73; white-space: nowrap; }
-.panel .side { position: absolute; right: 34px; top: 33px; font-size: 21px; font-weight: 500; color: #8E8E93; white-space: nowrap; }
+.panel .side { position: absolute; right: 34px; top: 33px; font-size: 21px; font-weight: 500; color: #6E6E73; white-space: nowrap; }
 .night .panel .head { color: rgba(255, 255, 255, 0.7); }
 .night .panel .side { color: rgba(255, 255, 255, 0.6); }
 

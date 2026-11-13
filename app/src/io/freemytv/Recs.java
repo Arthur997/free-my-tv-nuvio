@@ -197,6 +197,9 @@ final class Recs {
 
     String error() { return error; }
 
+    /** The list or its details are being fetched now. */
+    boolean fetching() { return fetching; }
+
     static String periodLabel() {
         int p = period(System.currentTimeMillis());
         return p == MANHA ? Ui.tr("THIS MORNING") : p == TARDE ? Ui.tr("THIS AFTERNOON") : Ui.tr("TONIGHT");

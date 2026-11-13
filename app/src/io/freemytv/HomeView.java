@@ -3140,6 +3140,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         drawCards(c);
         if (tab == 0 && watching.isEmpty() && cards.isEmpty()) drawNothingToContinue(c);
+        else if (tab != 0 && cards.isEmpty()) drawNoPicks(c);
         if (!cardCounter.isEmpty()) {
             // Above the last column, on the right: where the top's list is ("5–9 of 20").
             float cw = lCardMeta.measureText(cardCounter);
@@ -3396,12 +3397,54 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 : Ui.tr("Aceite quando a TV pedir, ou troque o Início de novo em Free My TV → Início.",
                         "Allow it when the TV asks, or switch the home screen again in Free My TV → Home Screen.",
                         "Acéptalo cuando el TV lo pida, o cambia el inicio otra vez en Free My TV → Inicio.");
-        float cx = (cardRects[0].left + cardRects[4].right) / 2, cy = (cardRects[0].top + cardRects[0].bottom) / 2;
-        float tw = lTabOn.measureText(title), lw = lCardMeta.measureText(line);
-        lTabOn.setColor(tone(L_INK, WHITE));
-        c.drawText(title, cx - tw / 2, cy - 8 * k, lTabOn);
-        c.drawText(line, cx - lw / 2, cy + 36 * k, lCardMeta);
+        drawEmptyTab(c, title, line);
     }
+
+    /** Movies and Shows with no picks: why (no TMDB key, still loading, the last fetch failed), instead of a blank row. */
+    private void drawNoPicks(Canvas c) {
+        String title, line;
+        if (!Recs.hasKey(getContext())) {
+            title = Ui.tr("Sem sugestões", "No picks", "Sin sugerencias");
+            line = Ui.tr("Adicione a chave do TMDB em Free My TV → Recomendações.",
+                    "Add the TMDB key in Free My TV → Picks.", "Añade la clave de TMDB en Free My TV → Recomendaciones.");
+        } else if (recs.fetching()) {
+            title = Ui.tr("Buscando sugestões…", "Finding picks…", "Buscando sugerencias…");
+            line = "";
+        } else if (!recs.error().isEmpty()) {
+            title = Ui.tr("Não deu para buscar as sugestões", "Couldn't get the picks", "No se pudieron obtener las sugerencias");
+            line = Ui.tr("Confira a internet. Tenta de novo sozinho em alguns minutos.",
+                    "Check the internet. It tries again by itself in a few minutes.",
+                    "Revisa el internet. Lo intenta de nuevo solo en unos minutos.");
+        } else {
+            title = Ui.tr("Sem sugestões agora", "No picks right now", "Sin sugerencias ahora");
+            line = "";
+        }
+        drawEmptyTab(c, title, line);
+    }
+
+    /** A title and a line (wrapped to the cards' width) in the middle of the cards' row. */
+    private void drawEmptyTab(Canvas c, String title, String line) {
+        float cx = (cardRects[0].left + cardRects[4].right) / 2, cy = (cardRects[0].top + cardRects[0].bottom) / 2;
+        lTabOn.setColor(tone(L_INK, WHITE));
+        c.drawText(title, cx - lTabOn.measureText(title) / 2, cy - 8 * k, lTabOn);
+        if (line.isEmpty()) return;
+        int width = Math.round(cardRects[4].right - cardRects[0].left);
+        if (!line.equals(emptyLine) || emptyLayout == null || emptyLayout.getWidth() != width) {
+            emptyLine = line;
+            emptyPaint.set(lCardMeta);
+            emptyLayout = StaticLayout.Builder.obtain(line, 0, line.length(), emptyPaint, Math.max(1, width))
+                    .setAlignment(Layout.Alignment.ALIGN_CENTER).setMaxLines(2).setEllipsize(TextUtils.TruncateAt.END).build();
+        }
+        emptyPaint.setColor(lCardMeta.getColor());
+        c.save();
+        c.translate(cx - width / 2f, cy + 36 * k - emptyLayout.getLineBaseline(0));   // the first line where the one line was
+        emptyLayout.draw(c);
+        c.restore();
+    }
+
+    private final TextPaint emptyPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+    private String emptyLine;
+    private StaticLayout emptyLayout;   // the empty tab's line, wrapped: made again only when it changes
 
     /** Reads the apps' Watch Next lists in the background; the tab is redrawn only when something changed. */
     private void loadWatching() {

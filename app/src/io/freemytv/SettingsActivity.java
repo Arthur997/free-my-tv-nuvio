@@ -1234,13 +1234,13 @@ public class SettingsActivity extends Activity {
             title.setTextAlign(Paint.Align.CENTER);
             subtitle = Ui.text(Ui.regular, 26 * k, fg(0x99FFFFFF));
             subtitle.setTextAlign(Paint.Align.CENTER);
-            version = Ui.text(Ui.regular, 22 * k, fg(0x66FFFFFF));
+            version = Ui.text(Ui.regular, 22 * k, secondary(0x99FFFFFF));
             version.setTextAlign(Paint.Align.CENTER);
             rowLabel = Ui.text(Ui.medium, 30 * k, fg(0xF2FFFFFF));
-            rowValue = Ui.text(Ui.regular, 28 * k, fg(0x8CFFFFFF));
+            rowValue = Ui.text(Ui.regular, 28 * k, secondary(0x8CFFFFFF));
             rowValue.setTextAlign(Paint.Align.RIGHT);
-            rowSub = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
-            header = Ui.text(Ui.semibold, 21 * k, fg(0x73FFFFFF));
+            rowSub = Ui.text(Ui.regular, 23 * k, secondary(0x8CFFFFFF));
+            header = Ui.text(Ui.semibold, 21 * k, secondary(0x99FFFFFF));
             header.setLetterSpacing(0.06f);
             cellLabel = Ui.text(Ui.regular, 25 * k, fg(0xD9FFFFFF));
             cellValue = Ui.numbers(Ui.regular, 25 * k, fg(0xD9FFFFFF));
@@ -1248,7 +1248,7 @@ public class SettingsActivity extends Activity {
             warn = Ui.text(Ui.regular, 23 * k, lightTheme ? 0xFFB35C00 : AMBER);
             notice = new TextPaint(Ui.text(Ui.regular, 23 * k, fg(0xB3FFFFFF)));
             heading = Ui.text(Ui.displaySemibold, 34 * k, fg(0xFFFFFFFF));
-            hint = Ui.text(Ui.regular, 23 * k, fg(0x8CFFFFFF));
+            hint = Ui.text(Ui.regular, 23 * k, secondary(0x8CFFFFFF));
             spinner = new Paint(Paint.ANTI_ALIAS_FLAG);
             spinner.setStyle(Paint.Style.STROKE);
             spinner.setStrokeCap(Paint.Cap.ROUND);
@@ -1279,6 +1279,14 @@ public class SettingsActivity extends Activity {
         /** Text and symbols: white on the dark background; on the light one, the same alpha in near-black. */
         private int fg(int white) {
             return lightTheme ? (white & 0xFF000000) | (INK & 0x00FFFFFF) : white;
+        }
+
+        /**
+         * Small secondary text (values, hints, headers): `white` on the dark background; on the light one the home
+         * screen's gray (Apple's #6E6E73, ~4.7:1), since near-black at a low alpha read under 4.5:1 there.
+         */
+        private int secondary(int white) {
+            return lightTheme ? 0xFF6E6E73 : white;
         }
 
         private boolean busy() {
@@ -1345,7 +1353,7 @@ public class SettingsActivity extends Activity {
             }
             c.restore();
             // More above or below: a small chevron at that edge.
-            int fg = fg(0x59FFFFFF);
+            int fg = fg(0x99FFFFFF);
             if (scroll.value > 0.05f) {
                 c.save();
                 c.rotate(180, (LIST_R - 40) * k, (top - 30) * k);
@@ -1531,7 +1539,7 @@ public class SettingsActivity extends Activity {
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + CHOICE_H * k);
                 float f = drawRowBackground(c, i);
                 rowLabel.setColor(blend(fg(0xF2FFFFFF), INK, f));
-                rowSub.setColor(blend(fg(0x8CFFFFFF), 0x991C1C1E, f));
+                rowSub.setColor(blend(secondary(0x8CFFFFFF), 0x991C1C1E, f));
                 c.drawText(options[i][0], rowRect.left + 30 * k, rowRect.top + 44 * k, rowLabel);
                 c.drawText(options[i][1], rowRect.left + 30 * k, rowRect.top + 80 * k, rowSub);
                 if (i == current) {
