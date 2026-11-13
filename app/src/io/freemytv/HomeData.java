@@ -132,6 +132,7 @@ final class HomeData {
 
     static final class Weather {
         double temp = Double.NaN, max = Double.NaN, min = Double.NaN;
+        double tomorrowMax = Double.NaN, tomorrowMin = Double.NaN;   // shown in the evening, after sunset
         int code = -1;
         boolean isDay = true;
         long sunrise, sunset;   // today's, in epoch ms
@@ -289,6 +290,8 @@ final class HomeData {
         JSONObject daily = o.getJSONObject("daily");
         w.max = daily.getJSONArray("temperature_2m_max").getDouble(0);
         w.min = daily.getJSONArray("temperature_2m_min").getDouble(0);
+        w.tomorrowMax = daily.getJSONArray("temperature_2m_max").optDouble(1, Double.NaN);
+        w.tomorrowMin = daily.getJSONArray("temperature_2m_min").optDouble(1, Double.NaN);
         w.sunrise = localTime(daily.getJSONArray("sunrise").getString(0), zone);
         w.sunset = localTime(daily.getJSONArray("sunset").getString(0), zone);
         JSONObject hourly = o.optJSONObject("hourly");

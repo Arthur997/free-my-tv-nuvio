@@ -1644,17 +1644,27 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     // of the drawer's focus animation.
     private HomeData.Weather wxTextsFor;
     private int wxTextsLanguage = -1, wxTextsZone = -1, wxTextsPrefs = -1;
+    private boolean wxTextsEvening;
     private String wxNow = "", wxRange = "", wxSunrise = "", wxSunset = "";
     private final String[] wxHours = new String[6], wxHourTemps = new String[6];
 
     private void prepareWeatherTexts(HomeData.Weather wx) {
-        if (wx == wxTextsFor && wxTextsLanguage == Ui.generation && wxTextsZone == Clock.generation && wxTextsPrefs == Prefs.version) return;
+        // After sunset, today's high and low are over: tomorrow's take their place.
+        boolean evening = wx.sunset != 0 && System.currentTimeMillis() > wx.sunset && !Double.isNaN(wx.tomorrowMax);
+        if (wx == wxTextsFor && wxTextsLanguage == Ui.generation && wxTextsZone == Clock.generation && wxTextsPrefs == Prefs.version
+                && evening == wxTextsEvening) return;
         wxTextsFor = wx;
         wxTextsPrefs = Prefs.version;   // the temperature unit
         wxTextsLanguage = Ui.generation;
+        wxTextsEvening = evening;
         wxNow = HomeData.degrees(wx.temp);
-        wxRange = Ui.en ? "H:" + HomeData.degrees(wx.max) + "   L:" + HomeData.degrees(wx.min)
-                : "Máx. " + HomeData.degrees(wx.max) + "   Mín. " + HomeData.degrees(wx.min);
+        if (evening) {
+            wxRange = Ui.trf(Ui.tr("Amanhã {max}/{min}", "Tomorrow {max}/{min}", "Mañana {max}/{min}"),
+                    "max", HomeData.degrees(wx.tomorrowMax), "min", HomeData.degrees(wx.tomorrowMin));
+        } else {
+            wxRange = Ui.en ? "H:" + HomeData.degrees(wx.max) + "   L:" + HomeData.degrees(wx.min)
+                    : "Máx. " + HomeData.degrees(wx.max) + "   Mín. " + HomeData.degrees(wx.min);
+        }
         for (int i = 0; i < wx.hours.size() && i < 6; i++) {
             wxHours[i] = HomeData.hour(wx.hours.get(i));
             wxHourTemps[i] = HomeData.degrees(wx.hourTemp.get(i));

@@ -108,7 +108,8 @@ final class Adb implements Closeable {
             s.connect(new InetSocketAddress("127.0.0.1", 5555), 3000);
         } catch (IOException e) {
             s.close();
-            throw new IOException(Ui.tr("debugging is off on the TV (port 5555 closed)"));
+            throw new IOException(Ui.tr("a depuração está desligada na TV (porta 5555 fechada)",
+                    "debugging is off on the TV (port 5555 closed)", "la depuración está apagada en la TV (puerto 5555 cerrado)"));
         }
         try {
             s.setSoTimeout(10_000);

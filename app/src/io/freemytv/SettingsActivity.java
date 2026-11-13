@@ -351,8 +351,11 @@ public class SettingsActivity extends Activity {
             }));
             p.rows.add(opens(() -> Ui.tr("Atualizações", "Updates", "Actualizaciones"), () -> open(updatesPage())));
             p.rows.add(opens(() -> Ui.tr("Estado", "Status", "Estado"), () -> go(STATUS, null)));
-            p.rows.add(opens(() -> Ui.tr("Ajustes da TV", "TV Settings"), () ->
-                    activity.startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))));
+            // The last switch failed because the TV's debugging is off (a TV update can do that): this row then goes
+            // straight to where it's turned on.
+            p.rows.add(opens(() -> debuggingOff() ? Ui.tr("Ligar a depuração USB", "Turn on USB debugging", "Activar la depuración USB")
+                    : Ui.tr("Ajustes da TV", "TV Settings"), () -> HomeApps.openSettings(activity,
+                    debuggingOff() ? Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS : Settings.ACTION_SETTINGS)));
             return p;
         }
 
@@ -1288,6 +1291,11 @@ public class SettingsActivity extends Activity {
          */
         private int secondary(int white) {
             return lightTheme ? 0xFF6E6E73 : white;
+        }
+
+        /** The last switch's error: the TV's own debugging (ADB on port 5555) is off. */
+        private boolean debuggingOff() {
+            return !busy() && state.optString("error").contains("5555");
         }
 
         private boolean busy() {
