@@ -3267,7 +3267,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /**
      * Recommendation card j of the tab's list: the photo (rounded, with a soft shadow) and, over its darkened bottom, the
      * title's logo (or its name, when TMDB has no logo). The big card also says the genre and where it streams. When
-     * focused, it grows 5%, rises and lights up its border.
+     * focused, it grows 8%, rises, lights up its border and gets the shelf's focus ring (5% was easy to miss from the couch).
      */
     private void drawCard(Canvas c, Recs.Pick p, int from, int to, float dx, float fade, boolean focused) {
         float t = cardShift.value, tc = Ui.clamp(t);
@@ -3279,7 +3279,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float bh = slotFrom.height() + (slotTo.height() - slotFrom.height()) * t;
         float bx = slotFrom.centerX() + (slotTo.centerX() - slotFrom.centerX()) * t + dx;
         float by = slotFrom.centerY() + (slotTo.centerY() - slotFrom.centerY()) * t;
-        float v = to >= 0 && to < SLOTS ? cardFocus[to].value : 0, f = Ui.clamp(v), s = 1 + 0.05f * v;
+        float v = to >= 0 && to < SLOTS ? cardFocus[to].value : 0, f = Ui.clamp(v), s = 1 + CARD_GROWTH * v;
         float r0 = 18 * k, cy = by - 6 * k * v;
         cell.set(bx - bw * s / 2, cy - bh * s / 2, bx + bw * s / 2, cy + bh * s / 2);
         float r = r0 * s;
@@ -3293,6 +3293,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         shadowDeep.setColor(Ui.alpha(0xFF000000, tone(0.14f, 0.32f) + tone(0.2f, 0.28f) * f));
         shadows.draw(c, tmp, r0, DEEP_BLUR * k, shadowDeep);
         c.restore();
+        focusRing.glow(c, cell, r, f, k, ringGlow());
         // How big this card is now, from a small one (0) to the big one (1): it changes while the list moves.
         float big = Ui.clamp((bw - cardRects[1].width()) / (cardRects[0].width() - cardRects[1].width()));
         Backdrop b = recs.backdrop(p);
@@ -3327,8 +3328,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         if (preview > 0.01f) drawPreview(c, p, cell, r, big, preview);
         if (suggestion(p)) drawBadge(c, cell, s);
+        focusRing.ring(c, cell, r, f, k, ringInk());
         if (save >= 0) c.restoreToCount(save);
     }
+
+    /** How much a focused card grows (the shelf's tiles grow 20%: they are much smaller). */
+    private static final float CARD_GROWTH = 0.08f;
 
     /** The logo (or the name) at the bottom left of the photo; on the big card, the genre and the app below it. */
     private void drawCardName(Canvas c, Recs.Pick p, RectF card, float big, float lift, boolean withName) {
