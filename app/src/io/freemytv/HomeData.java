@@ -481,6 +481,20 @@ final class HomeData {
         long age = System.currentTimeMillis() - at;
         if (age < every * 2) return "";
         long minutes = age / 60_000;
-        return minutes < 60 ? Ui.trf("{n} min ago", "n", minutes) : Ui.trf("{n} h ago", "n", minutes / 60);
+        // Drawn on every frame of the drawer's animation: formatted once per minute per source (prices, weather).
+        int slot = at == staleAt[0] ? 0 : at == staleAt[1] ? 1 : -1;
+        if (slot >= 0 && staleMinutes[slot] == minutes && staleLanguage[slot] == Ui.generation) return staleText[slot];
+        if (slot < 0) slot = staleNext ^= 1;
+        staleAt[slot] = at;
+        staleMinutes[slot] = minutes;
+        staleLanguage[slot] = Ui.generation;
+        staleText[slot] = minutes < 60 ? Ui.trf("{n} min ago", "n", minutes) : Ui.trf("{n} h ago", "n", minutes / 60);
+        return staleText[slot];
     }
+
+    // Two remembered "12 min ago" texts (UI thread only).
+    private static final long[] staleAt = {-1, -1}, staleMinutes = {-1, -1};
+    private static final int[] staleLanguage = {-1, -1};
+    private static final String[] staleText = {"", ""};
+    private static int staleNext;
 }

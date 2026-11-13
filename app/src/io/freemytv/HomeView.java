@@ -1177,6 +1177,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             x += tw + gap;
         }
         crispLogos.clear();
+        crispByItem.clear();
     }
 
     /** Shelf layer: the glass bar and its shadow (it only changes with the background). */
@@ -1393,17 +1394,45 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private Bitmap crispLogo(HomeApps.Item it, boolean dark) {
         Bitmap src = dark ? it.logoDark : it.logo;
         if (tileRects.length == 0) return src;
-        String key = it.key + "@" + System.identityHashCode(src) + "@" + Math.round(tileRects[0].width());
+        // Looked up by the item itself on every frame of the shelf's focus: no key string built per tile per frame.
+        Crisp[] pair = crispByItem.get(it);
+        if (pair == null) {
+            if (crispByItem.size() > 64) crispByItem.clear();   // items of an older shelf (a reload makes new ones)
+            pair = new Crisp[2];
+            crispByItem.put(it, pair);
+        }
+        Crisp known = pair[dark ? 1 : 0];
+        int width = Math.round(tileRects[0].width());
+        if (known != null && known.src == src && known.width == width) return known.out;
+        String key = it.key + "@" + System.identityHashCode(src) + "@" + width;
         Bitmap cached = crispLogos.get(key);
-        if (cached != null) return cached;
+        if (cached != null) {
+            pair[dark ? 1 : 0] = new Crisp(src, width, cached);
+            return cached;
+        }
         float bw = tileRects[0].width() * (1 + FOCUS_GROW), bh = tileRects[0].height() * (1 + FOCUS_GROW);
         float lw = src.getWidth(), lh = src.getHeight();
         float scale = (float) Math.sqrt(bw * bh * 0.085f / (lw * lh * Math.max(0.08f, it.logoInk))) * it.logoScale;
         scale = Math.min(scale, Math.min(bw * 0.76f / lw, bh * 0.58f / lh));
         Bitmap out = downscale(src, Math.round(lw * scale), Math.round(lh * scale));
         crispLogos.put(key, out);
+        pair[dark ? 1 : 0] = new Crisp(src, width, out);
         return out;
     }
+
+    /** A logo sized for the focused tile, and what it was made from (the logo and the tile width). */
+    private static final class Crisp {
+        final Bitmap src, out;
+        final int width;
+
+        Crisp(Bitmap src, int width, Bitmap out) {
+            this.src = src;
+            this.width = width;
+            this.out = out;
+        }
+    }
+
+    private final java.util.IdentityHashMap<HomeApps.Item, Crisp[]> crispByItem = new java.util.IdentityHashMap<>();
 
     /** Halves the size while it can (a 2×2 average, no aliasing), then finishes at the exact size. */
     private static Bitmap downscale(Bitmap src, int w, int h) {
@@ -1585,11 +1614,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         String symbol = Symbols.weather(wx.code, wx.isDay);
         float sw = Symbols.width(getContext(), symbol, 52 * k);
         Symbols.draw(getContext(), c, symbol, x + sw / 2, r.top + 132 * k, 52 * k, drawerInk(0.95f));
-        String now = HomeData.degrees(wx.temp);
-        c.drawText(now, x + sw + 18 * k - Ui.leftBearing(bigTemp, now), r.top + 170 * k, bigTemp);
+        prepareWeatherTexts(wx);
+        c.drawText(wxNow, x + sw + 18 * k - Ui.leftBearing(bigTemp, wxNow), r.top + 170 * k, bigTemp);
         c.drawText(HomeData.condition(wx.code, wx.isDay), x, r.top + 220 * k, cardText);
-        c.drawText(Ui.en ? "H:" + HomeData.degrees(wx.max) + "   L:" + HomeData.degrees(wx.min)
-                : "Máx. " + HomeData.degrees(wx.max) + "   Mín. " + HomeData.degrees(wx.min), x, r.top + 258 * k, cardDim);
+        c.drawText(wxRange, x, r.top + 258 * k, cardDim);
         float split = r.left + 392 * k;
         fill.setShader(null);
         fill.setColor(tone(0x1A000000, 0x24FFFFFF));
@@ -1597,13 +1625,37 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float hx = split + 30 * k, hw = (r.right - 30 * k - hx) / 6;
         for (int i = 0; i < wx.hours.size() && i < 6; i++) {
             float hc = hx + hw * (i + 0.5f);
-            c.drawText(HomeData.hour(wx.hours.get(i)), hc, r.top + 96 * k, hourPaint);
+            c.drawText(wxHours[i], hc, r.top + 96 * k, hourPaint);
             Symbols.draw(getContext(), c, Symbols.weather(wx.hourCode.get(i), wx.hourDay.get(i)), hc, r.top + 142 * k, 30 * k, drawerInk(0.9f));
-            c.drawText(HomeData.degrees(wx.hourTemp.get(i)), hc, r.top + 196 * k, hourTemp);
+            c.drawText(wxHourTemps[i], hc, r.top + 196 * k, hourTemp);
         }
         float sx = hx, base = r.top + 258 * k;
-        if (wx.sunrise != 0) sx = sunItem(c, "sunrise", Ui.tr("Nascer ", "Sunrise ") + Ui.time(wx.sunrise), sx, base) + 36 * k;
-        if (wx.sunset != 0) sunItem(c, "sunset", Ui.tr("Pôr do sol ", "Sunset ") + Ui.time(wx.sunset), sx, base);
+        if (wx.sunrise != 0) sx = sunItem(c, "sunrise", wxSunrise, sx, base) + 36 * k;
+        if (wx.sunset != 0) sunItem(c, "sunset", wxSunset, sx, base);
+    }
+
+    // The weather card's text, made when the forecast, the language or the clock's zone changes, not on every frame
+    // of the drawer's focus animation.
+    private HomeData.Weather wxTextsFor;
+    private int wxTextsLanguage = -1, wxTextsZone = -1, wxTextsPrefs = -1;
+    private String wxNow = "", wxRange = "", wxSunrise = "", wxSunset = "";
+    private final String[] wxHours = new String[6], wxHourTemps = new String[6];
+
+    private void prepareWeatherTexts(HomeData.Weather wx) {
+        if (wx == wxTextsFor && wxTextsLanguage == Ui.generation && wxTextsZone == Clock.generation && wxTextsPrefs == Prefs.version) return;
+        wxTextsFor = wx;
+        wxTextsPrefs = Prefs.version;   // the temperature unit
+        wxTextsLanguage = Ui.generation;
+        wxNow = HomeData.degrees(wx.temp);
+        wxRange = Ui.en ? "H:" + HomeData.degrees(wx.max) + "   L:" + HomeData.degrees(wx.min)
+                : "Máx. " + HomeData.degrees(wx.max) + "   Mín. " + HomeData.degrees(wx.min);
+        for (int i = 0; i < wx.hours.size() && i < 6; i++) {
+            wxHours[i] = HomeData.hour(wx.hours.get(i));
+            wxHourTemps[i] = HomeData.degrees(wx.hourTemp.get(i));
+        }
+        wxSunrise = wx.sunrise == 0 ? "" : Ui.tr("Nascer ", "Sunrise ") + Ui.time(wx.sunrise);
+        wxSunset = wx.sunset == 0 ? "" : Ui.tr("Pôr do sol ", "Sunset ") + Ui.time(wx.sunset);
+        wxTextsZone = Clock.generation;   // read after formatting: formatting may have moved the zone on
     }
 
     private float sunItem(Canvas c, String symbol, String label, float x, float base) {
@@ -1625,9 +1677,25 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      * sunrise and sunset, "12 min ago").
      */
     private String drawerCardsKey() {
-        return data.weatherAt + "|" + data.pricesAt + "|" + Prefs.version + "|" + Ui.language + "|"
-                + Float.floatToIntBits(dark()) + "|" + System.currentTimeMillis() / 60_000;
+        long minute = System.currentTimeMillis() / 60_000;
+        int darkBits = Float.floatToIntBits(dark());
+        // Built again only when a part changes: asked on every frame of the drawer's focus animation.
+        if (data.weatherAt != keyWeatherAt || data.pricesAt != keyPricesAt || Prefs.version != keyPrefs
+                || Ui.generation != keyLanguage || darkBits != keyDark || minute != keyMinute) {
+            keyWeatherAt = data.weatherAt;
+            keyPricesAt = data.pricesAt;
+            keyPrefs = Prefs.version;
+            keyLanguage = Ui.generation;
+            keyDark = darkBits;
+            keyMinute = minute;
+            drawerKey = keyWeatherAt + "|" + keyPricesAt + "|" + keyPrefs + "|" + Ui.language + "|" + darkBits + "|" + minute;
+        }
+        return drawerKey;
     }
+
+    private long keyWeatherAt = -1, keyPricesAt = -1, keyMinute = -1;
+    private int keyPrefs = -1, keyLanguage = -1, keyDark;
+    private String drawerKey = "";
 
     /**
      * Android 9 to 11: a drawer card's content (its text and symbols, not its glass) kept as a bitmap. The drawer is
