@@ -47,27 +47,34 @@ final class Backdrop {
         return 2 * Math.round(px * UI_SCALE / 2);
     }
     final Bitmap image;
+    /** Built with the glass's images (frost, glass, nightFrost…): the flat look doesn't read them, so they're not made. */
+    final boolean withGlass;
     final int[] frost;      // heavily blurred (frosted glass, bottom drawer)
     final int[] glass;      // lightly blurred (Liquid Glass: the photo shows through the glass)
     final Bitmap wide, small;           // the photo on the big card and on the small ones
-    final int[] light, lightGlass;      // by day: the frosted and glass versions, lightened
+    final int[] lightGlass;             // by day: the glass version, lightened
     final Bitmap lightImage;            // by day: the background (the lightened frosted version, scaled up on screen)
     final int[] nightFrost, nightGlass; // at night: frosted (the bottom drawer's frosted glass) and glass, darkened
     final Bitmap nightImage;            // at night: the background (the darkened frosted version)
 
     private Backdrop(Bitmap image, int[] frost, int[] glass, Bitmap wide, Bitmap small, int[] light, int[] lightGlass,
-                     int[] night, int[] nightGlass) {
+                     int[] night, int[] nightGlass, boolean withGlass) {
         this.image = image;
+        this.withGlass = withGlass;
         this.frost = frost;
         this.glass = glass;
         this.wide = wide;
         this.small = small;
-        this.light = light;
         this.lightGlass = lightGlass;
-        this.nightFrost = night;
+        this.nightFrost = withGlass ? night : null;
         this.nightGlass = nightGlass;
         lightImage = light == null ? null : Bitmap.createBitmap(light, FW, FH, Bitmap.Config.ARGB_8888);
         nightImage = night == null ? null : Bitmap.createBitmap(night, FW, FH, Bitmap.Config.ARGB_8888);
+    }
+
+    /** Whether the glass shaders draw (Android 13+, not in performance mode): Scene's rule, without compiling them. */
+    static boolean glassShown() {
+        return android.os.Build.VERSION.SDK_INT >= 33 && !Ui.LITE;
     }
 
     static Backdrop make(Bitmap src, boolean forLight) {
@@ -85,11 +92,15 @@ final class Backdrop {
             if (preview != null) savePreview(wide, preview);
             int[] frost = reduce(wide, FW, FH, 3, 3);
             int[] light = whiten(frost.clone(), 0.82f);
+            int[] night = darken(frost.clone(), 0.76f);
+            if (!glassShown()) {
+                // The flat look draws only the backgrounds (lightImage, nightImage): the glass's ~1.3 MB isn't made.
+                return new Backdrop(null, null, null, gpu(wide), small, light, null, night, null, false);
+            }
             int[] glass = reduce(wide, GW, GH, 2, 2);
             int[] lightGlass = whiten(glass.clone(), 0.74f);
-            int[] night = darken(frost.clone(), 0.76f);
             int[] nightGlass = darken(glass, 0.56f);
-            return new Backdrop(null, frost, null, gpu(wide), small, light, lightGlass, night, nightGlass);
+            return new Backdrop(null, frost, null, gpu(wide), small, light, lightGlass, night, nightGlass, true);
         }
         Bitmap out = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(out);
@@ -121,9 +132,10 @@ final class Backdrop {
                 new float[] {0, 0.5f, 1}, Shader.TileMode.CLAMP));
         c.drawRect(0, 0, W, H * 0.24f, scrim);
 
+        if (!glassShown()) return new Backdrop(gpu(out), null, null, null, null, null, null, null, null, false);
         int[] frost = reduce(out, FW, FH, 3, 3);
         int[] glass = reduce(out, GW, GH, 2, 2);
-        return new Backdrop(gpu(out), frost, glass, null, null, null, null, null, null);
+        return new Backdrop(gpu(out), frost, glass, null, null, null, null, null, null, true);
     }
 
     /** How many times smaller the screensaver photo's frosted version is (the glass math uses the same number). */
@@ -141,7 +153,10 @@ final class Backdrop {
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw new java.io.IOException("unreadable image");
         android.graphics.BitmapFactory.Options opts = new android.graphics.BitmapFactory.Options();
         opts.inSampleSize = 1;
-        while (bounds.outWidth / (opts.inSampleSize * 2) >= w && bounds.outHeight / (opts.inSampleSize * 2) >= h) opts.inSampleSize *= 2;
+        // Down to 3/4 of the size asked, then scaled up filtered: a 3840-wide original decodes at 1920 (8 MB), not 33 MB.
+        while (bounds.outWidth / (opts.inSampleSize * 2) >= w * 3 / 4 && bounds.outHeight / (opts.inSampleSize * 2) >= h * 3 / 4) {
+            opts.inSampleSize *= 2;
+        }
         Bitmap src = android.graphics.BitmapFactory.decodeFile(f.getPath(), opts);
         if (src == null) throw new java.io.IOException("unreadable image");
         float ratio = (float) w / h;

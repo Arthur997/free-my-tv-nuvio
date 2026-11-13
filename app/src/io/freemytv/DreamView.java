@@ -42,8 +42,8 @@ import java.util.concurrent.Executors;
 final class DreamView extends View implements Choreographer.FrameCallback, HomeData.Listener, Recs.Listener {
     private static final long SHOW_MS = 30_000, FADE_MS = 3_000, FIRST_MS = 1_600;
     private static final float ZOOM = 0.1f;
-    /** Photos 10% larger than the screen (the zoom goes up to 1.1 without upscaling). */
-    private static final int PW = 2112, PH = 1188;
+    /** Photos 10% larger than the UI (the zoom goes up to 1.1 without upscaling): 2112×1188 at 1080p, 1408×792 at 720p. */
+    private static final int PW = 2 * Math.round(Backdrop.W * 1.1f / 2), PH = 2 * Math.round(Backdrop.H * 1.1f / 2);
     private static final float MARGIN = 80, RIGHT = 1840, TITLE_W = 900, META_BASE = 1008;
     private static final float DATE_BASE = 92, CLOCK_TOP = 120, CLOCK_SIZE = 200, QUOTES_GAP = 52;
     private static final double DRIFT_PERIOD_S = 600;
@@ -101,7 +101,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     private final HomeData data;
     private final Recs recs;
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private ExecutorService worker = Executors.newSingleThreadExecutor();
+    private ExecutorService worker = Ui.background("dream");
     private final Recording content = Recording.create("clock");     // without photos: the clock over the aurora
     private final Recording chrome = Recording.create("corner");     // date, weather, prices and the clock's shadow
     private final float timeOffset = (float) (Math.random() * 300);
@@ -164,7 +164,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     void start() {
         if (running) return;
         running = true;
-        if (worker.isShutdown()) worker = Executors.newSingleThreadExecutor();
+        if (worker.isShutdown()) worker = Ui.background("dream");
         startedAt = clock();
         lastFrame = 0;
         failed.clear();

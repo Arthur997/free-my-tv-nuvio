@@ -156,7 +156,7 @@ final class HomeData {
     volatile Weather weather = new Weather();
 
     private final SharedPreferences cache;
-    private final ExecutorService io = Executors.newSingleThreadExecutor();
+    private final ExecutorService io = Ui.background("data");
     private final Handler main = new Handler(Looper.getMainLooper());
     private final List<Listener> listeners = new ArrayList<>();
     private volatile boolean fetchingPrices, fetchingWeather;
@@ -186,7 +186,6 @@ final class HomeData {
     /** Fetches whatever is stale. The screen calls this when it appears and every minute while it's visible. */
     void refreshIfStale() {
         long now = System.currentTimeMillis();
-        Clock.refreshIfStale(io);
         // A negative age (the TV's clock went back) counts as stale: otherwise the data would freeze.
         long pricesEvery = Prefs.PRICES_EVERY[Prefs.pricesEveryIndex()];
         if (!fetchingPrices && coinCount() > 0 && (now - pricesAt > pricesEvery || now < pricesAt) && !failedRecently(pricesFailedAt, now)) {
@@ -222,7 +221,10 @@ final class HomeData {
             fetchingWeather = true;
             io.execute(() -> {
                 try {
-                    String body = get(weatherUrl());
+                    long sent = System.currentTimeMillis();
+                    long[] serverDate = {0};
+                    String body = get(weatherUrl(), serverDate);
+                    Clock.fromForecast(body, serverDate[0], sent, System.currentTimeMillis());   // one request for both
                     weather = parseWeather(body);
                     weatherAt = System.currentTimeMillis();
                     cache.edit().putString("weather", body).putLong("weatherAt", weatherAt).putString("weatherPlace", weatherPlace()).apply();
@@ -235,6 +237,7 @@ final class HomeData {
                 }
             });
         }
+        if (!fetchingWeather) Clock.refreshIfStale(io);   // a forecast on its way brings the clock's offset too
     }
 
     private static boolean failedRecently(long at, long now) {

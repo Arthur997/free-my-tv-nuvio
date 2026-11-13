@@ -61,7 +61,7 @@ final class RecentsView extends View implements Choreographer.FrameCallback {
 
     private final Activity activity;
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final ExecutorService io = Executors.newSingleThreadExecutor();
+    private final ExecutorService io = Ui.background("recents");
     private final Click click;
     private final Shadows shadows = new Shadows();
     private final FocusRing focusRing = new FocusRing(shadows);

@@ -22,21 +22,51 @@ public class HomeActivity extends Activity {
         super.onCreate(savedInstanceState);
         Watchdog.install(this);
         if (Watchdog.crashedTooOften(this)) {
-            // Don't try to draw again: only show a notice while the main process restores the original home screen.
             HomeMode.requestRevertHome(this);
-            TextView t = new TextView(this);
-            t.setText(Ui.tr("Free My TV's home screen ran into a problem.\nGoing back to the TV's original home screen…"));
-            t.setTextColor(Color.WHITE);
-            t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
-            t.setGravity(Gravity.CENTER);
-            t.setBackgroundColor(Color.rgb(7, 11, 30));
-            setContentView(t);
+            showCrashScreen();
             return;
         }
         Ui.init(this);
         home = new HomeView(this);
         setContentView(home);
         getWindow().setBackgroundDrawable(null);
+    }
+
+    /** How long the crash screen waits for the main process to give the home screen back before saying it couldn't. */
+    private static final long REVERT_WAIT_MS = 20_000;
+    private TextView crashText;
+
+    /**
+     * Doesn't try to draw again: a notice while the main process restores the original home screen. OK always opens
+     * the TV's settings, so a failed revert (the TV's debugging off) never leaves a screen nothing answers on.
+     */
+    private void showCrashScreen() {
+        crashText = new TextView(this);
+        crashText.setText(Ui.tr("A tela inicial do Free My TV teve um problema.\nVoltando para a tela inicial original da TV…",
+                "Free My TV's home screen ran into a problem.\nGoing back to the TV's original home screen…",
+                "La pantalla de inicio de Free My TV tuvo un problema.\nVolviendo a la pantalla de inicio original de la TV…"));
+        crashText.setTextColor(Color.WHITE);
+        crashText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+        crashText.setGravity(Gravity.CENTER);
+        crashText.setBackgroundColor(Color.rgb(7, 11, 30));
+        crashText.setFocusable(true);
+        setContentView(crashText);
+        crashText.postDelayed(this::checkReverted, REVERT_WAIT_MS);
+    }
+
+    private void checkReverted() {
+        if (isFinishing() || HomeMode.state(this).optBoolean("homeReverted")) return;
+        crashText.setText(Ui.tr("Não deu para voltar à tela inicial original da TV.\nOK abre os Ajustes da TV.",
+                "Couldn't go back to the TV's original home screen.\nOK opens the TV's settings.",
+                "No se pudo volver a la pantalla de inicio original de la TV.\nOK abre los Ajustes de la TV."));
+    }
+
+    /** On the crash screen: OK, Enter or Back open the TV's settings. */
+    private boolean onCrashScreenKey(KeyEvent event) {
+        int key = event.getKeyCode();
+        boolean opens = key == KeyEvent.KEYCODE_DPAD_CENTER || key == KeyEvent.KEYCODE_ENTER || key == KeyEvent.KEYCODE_BACK;
+        if (opens && event.getAction() == KeyEvent.ACTION_UP) HomeApps.openSettings(this, android.provider.Settings.ACTION_SETTINGS);
+        return opens;
     }
 
     @Override protected void onResume() {
@@ -103,6 +133,7 @@ public class HomeActivity extends Activity {
     }
 
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
+        if (crashText != null && onCrashScreenKey(event)) return true;
         if (RemoteKeys.onKey(this, event)) return true;
         if (home != null && home.onKey(event)) return true;
         return super.dispatchKeyEvent(event);

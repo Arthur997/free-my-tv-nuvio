@@ -71,10 +71,14 @@ final class RemoteKeys {
         if (pkg.isEmpty()) return false;   // "Nothing": the key goes on as if we weren't here
         if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) {
             AppLog.w("remote key " + e.getKeyCode() + " -> " + pkg);
-            open(c, pkg);
+            passedOn = open(c, pkg) ? 0 : keyCode;
         }
-        return true;
+        // The app it opens was uninstalled: the key goes on to the TV (its own action), down to the release.
+        return passedOn != keyCode;
     }
+
+    /** The key whose app is missing, until another press: its repeats and its release go to the TV too. */
+    private static int passedOn;
 
     /**
      * The button, as Remote Buttons stores it: its key code, with the cases where one code means several buttons
@@ -108,18 +112,25 @@ final class RemoteKeys {
 
     /**
      * What the button was given: the Control Center or Recent apps over any app (the same button again closes them), or
-     * an app.
+     * an app. False when the app isn't installed (a short notice says so).
      */
-    private static void open(Context c, String target) {
+    private static boolean open(Context c, String target) {
         if (Prefs.OPEN_CONTROL.equals(target)) {
             ControlActivity.open(c);
         } else if (Prefs.OPEN_RECENTS.equals(target)) {
             RecentsActivity.open(c);
         } else {
             Intent intent = launchIntent(c.getPackageManager(), target);
-            if (intent == null) AppLog.w("remote key: " + target + " is not installed");
-            else c.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            if (intent == null) {
+                AppLog.w("remote key: " + target + " is not installed");
+                android.widget.Toast.makeText(c, Ui.tr("O app deste botão não está instalado.",
+                        "The app for this button isn't installed.", "La app de este botón no está instalada."),
+                        android.widget.Toast.LENGTH_SHORT).show();
+                return false;
+            }
+            c.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         }
+        return true;
     }
 
     /** The app's TV launcher, or its plain one (kept here, not in HomeApps, so the key process stays small). */

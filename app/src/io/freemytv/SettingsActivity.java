@@ -225,7 +225,7 @@ public class SettingsActivity extends Activity {
         private boolean hasKey;
         private int screen = PAGE, focus;
         private Page page, main;
-        private boolean running, okDown, backDown, wasBusy;
+        private boolean running, okDown, backDown, wasBusy, framePosted;
         private StaticLayout errorLayout;   // the last error, wrapped (rebuilt only when it changes)
         private String errorShown;
         private final Spoken spoken;
@@ -240,29 +240,60 @@ public class SettingsActivity extends Activity {
         private final Click click;   // the same click as the home screen's
         private String cityStatus = "";
 
+        /** The files and the system setting the poll reads: off the UI thread (two files and a binder call). */
+        private final java.util.concurrent.ExecutorService pollIo = Ui.background("settings");
+        private String drawnSignature = "";
+
+        /** Every 500 ms: reads the state in the background, then applies it here. */
         private final Runnable poll = new Runnable() {
             @Override public void run() {
                 if (!running) return;
-                state = HomeMode.state(getContext());
-                hasKey = Recs.hasKey(getContext());
-                recs = Recs.status(getContext());
-                String services = android.provider.Settings.Secure.getString(getContext().getContentResolver(),
-                        android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-                keysServiceOn = services != null && services.contains(HomeMode.PKG + "/");
-                boolean nowBusy = !HomeMode.busyText(state).isEmpty();
-                if (nowBusy) pendingAt = 0;
-                // A switch just ended: TalkBack reads how it went (the newest notice).
-                JSONArray notices = state.optJSONArray("notices");
-                if (wasBusy && !nowBusy && notices != null && notices.length() > 0) {
-                    JSONObject newest = notices.optJSONObject(0);
-                    if (newest != null) announceForAccessibility(newest.optString("text"));
-                }
-                wasBusy = nowBusy;
-                checkLearned();
-                invalidate();
-                handler.postDelayed(this, 500);
+                Context c = getContext();
+                pollIo.execute(() -> {
+                    JSONObject newState = HomeMode.state(c);
+                    boolean newHasKey = Recs.hasKey(c);
+                    JSONObject newRecs = Recs.status(c);
+                    String services = android.provider.Settings.Secure.getString(c.getContentResolver(),
+                            android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+                    boolean serviceOn = services != null && services.contains(HomeMode.PKG + "/");
+                    handler.post(() -> applyPoll(newState, newHasKey, newRecs, serviceOn));
+                });
             }
         };
+
+        private void applyPoll(JSONObject newState, boolean newHasKey, JSONObject newRecs, boolean serviceOn) {
+            if (!running) return;
+            state = newState;
+            hasKey = newHasKey;
+            recs = newRecs;
+            keysServiceOn = serviceOn;
+            boolean nowBusy = !HomeMode.busyText(state).isEmpty();
+            if (nowBusy) pendingAt = 0;
+            // A switch just ended: TalkBack reads how it went (the newest notice).
+            JSONArray notices = state.optJSONArray("notices");
+            if (wasBusy && !nowBusy && notices != null && notices.length() > 0) {
+                JSONObject newest = notices.optJSONObject(0);
+                if (newest != null) announceForAccessibility(newest.optString("text"));
+            }
+            wasBusy = nowBusy;
+            checkLearned();
+            checkUpdating();
+            // Still: no redraw. What's on screen comes from the state and the rows' values, so a change shows in either.
+            String signature = screenSignature();
+            if (!signature.equals(drawnSignature)) {
+                drawnSignature = signature;
+                invalidate();
+            }
+            handler.postDelayed(poll, 500);
+        }
+
+        private String screenSignature() {
+            StringBuilder b = new StringBuilder(512).append(screen).append('|').append(state).append('|').append(recs)
+                    .append('|').append(hasKey).append(keysServiceOn).append('|').append(page.hint.get()).append(page.hint2.get());
+            int first = firstShown(), last = Math.min(rowCount(), first + visibleRows() + 1);
+            for (int i = first; i < last; i++) b.append('|').append(rowText(i));
+            return b.toString();
+        }
 
         SettingsView(SettingsActivity a) {
             super(a);
@@ -393,7 +424,26 @@ public class SettingsActivity extends Activity {
                         if (at != 0) return;
                         Updater.requestNow(getContext());
                         updating = true;
+                        updatingSince = SystemClock.uptimeMillis();
+                        noticeBeforeUpdate = newestNoticeAt();
                     });
+        }
+
+        /** A working update restarts the app; if it's still here, a new notice (the failure) or 3 min end "Updating…". */
+        private static final long UPDATE_WAIT_MS = 3 * 60_000L;
+        private long updatingSince, noticeBeforeUpdate;
+
+        private void checkUpdating() {
+            if (!updating) return;
+            if (newestNoticeAt() != noticeBeforeUpdate || SystemClock.uptimeMillis() - updatingSince > UPDATE_WAIT_MS) {
+                updating = false;
+            }
+        }
+
+        private long newestNoticeAt() {
+            JSONArray notices = state.optJSONArray("notices");
+            JSONObject newest = notices == null ? null : notices.optJSONObject(0);
+            return newest == null ? 0 : newest.optLong("at");
         }
 
         private void readRelease() {
@@ -1135,12 +1185,13 @@ public class SettingsActivity extends Activity {
             lastNanos = 0;
             retheme();
             handler.post(poll);
-            Choreographer.getInstance().postFrameCallback(this);
+            askFrame();
             spoken.readAgain();
         }
 
         void release() {
             click.release();
+            pollIo.shutdown();
         }
 
         void pause() {
@@ -1149,13 +1200,24 @@ public class SettingsActivity extends Activity {
             running = false;
             handler.removeCallbacks(poll);
             Choreographer.getInstance().removeFrameCallback(this);
+            framePosted = false;
         }
 
+        /**
+         * Redraws while something moves, then stops asking for frames: onDraw asks again, so anything that redraws
+         * (a key, the poll seeing a change) starts it again.
+         */
         @Override public void doFrame(long frameTimeNanos) {
+            framePosted = false;
             if (!running) return;
             boolean moving = busy() || !scroll.settled();
             for (Spring s : pop) moving |= !s.settled();
-            if (moving) invalidate();   // still: nothing to redraw
+            if (moving) invalidate();
+        }
+
+        private void askFrame() {
+            if (framePosted || !running) return;
+            framePosted = true;
             Choreographer.getInstance().postFrameCallback(this);
         }
 
@@ -1236,6 +1298,7 @@ public class SettingsActivity extends Activity {
 
         @Override protected void onDraw(Canvas c) {
             if (w == 0) return;
+            askFrame();
             long now = System.nanoTime();
             float dt = lastNanos == 0 ? 1 / 60f : Math.min(0.05f, (now - lastNanos) / 1e9f);
             lastNanos = now;
@@ -1255,7 +1318,7 @@ public class SettingsActivity extends Activity {
             Symbols.draw(getContext(), c, "sparkles", cx, 400 * k, 150 * k, fg(0xEBFFFFFF));
             c.drawText("Free My TV", cx, 612 * k, title);
             c.drawText(Ui.tr("Início e tela de descanso da TV", "Your TV's home screen and screensaver"), cx, 660 * k, subtitle);
-            c.drawText(versionName(getContext()), cx, 704 * k, version);
+            c.drawText(versionText(), cx, 704 * k, version);
 
             if (screen == HOME_CHOICE) drawChoice(c);
             else if (screen == STATUS) drawStatus(c);
@@ -1502,6 +1565,13 @@ public class SettingsActivity extends Activity {
             if (minutes < 60) return Ui.tr("há " + minutes + " min", minutes + " min ago");
             if (minutes < 48 * 60) return Ui.tr("há " + (minutes / 60) + " h", (minutes / 60) + " h ago");
             return Ui.tr("há " + (minutes / 1440) + " dias", (minutes / 1440) + " days ago");
+        }
+
+        private String versionText;   // read once: drawn on every frame of a focus animation
+
+        private String versionText() {
+            if (versionText == null) versionText = versionName(getContext());
+            return versionText;
         }
 
         private static String versionName(Context c) {

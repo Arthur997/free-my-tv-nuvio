@@ -129,7 +129,7 @@ final class Recs {
 
     private final Context context;
     private final SharedPreferences cache;
-    private final ExecutorService io = Executors.newSingleThreadExecutor();
+    private final ExecutorService io = Ui.background("recs");
     private final Handler main = new Handler(Looper.getMainLooper());
     private final List<Listener> listeners = new ArrayList<>();
     // Built and ready to draw, least recently drawn first (onTrimMemory lets them go when the TV is short of memory).
@@ -139,8 +139,8 @@ final class Recs {
     // Each card's big picture saved as a JPEG when it's built: decoded in a few ms (the whole build takes ~0.5 s), it
     // shows the cards right away after the home screen restarts, until the full one is ready. By Pick.backdrop.
     private final Map<String, Bitmap> previews = new LinkedHashMap<>(16, 0.75f, true);
-    private final ExecutorService previewIo = Executors.newSingleThreadExecutor();
-    private final ExecutorService builder = Executors.newSingleThreadExecutor();   // decoding and building photos
+    private final ExecutorService previewIo = Ui.background("previews");
+    private final ExecutorService builder = Ui.background("builder");   // decoding and building photos
     // Room for every card a screen can ask for at once (this tab's on screen and next, the first of each tab, and the
     // suggestions in Continue Watching): fewer made them push each other out and be built again in a loop.
     private static final int READY_LIGHT = 24, READY_GLASS = 4;
@@ -398,7 +398,8 @@ final class Recs {
         final String key = p.backdrop;    // the details may swap the image midway
         synchronized (images) {
             Backdrop b = images.get(key);
-            if (b != null) return b;
+            if (b != null && b.withGlass == Backdrop.glassShown()) return b;
+            if (b != null) images.remove(key);   // made for the other look (performance mode changed): made again
             Long failed = failedAtByKey.get(key);
             // A card asks on every frame: one that just failed (no internet) waits a minute before trying again.
             if (failed != null && SystemClock.uptimeMillis() - failed < 60_000L) return null;

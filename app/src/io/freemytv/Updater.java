@@ -104,14 +104,26 @@ final class Updater {
         }
     }
 
+    /** A check that couldn't reach GitHub (no internet) tries again after this, not 6 h later. */
+    private static final long RETRY_MS = 30 * 60_000L;
+
     /** From the home screen: a check every 6 h, when updates on their own are on. */
     static void maybeCheck(Context c) {
         if (!Prefs.autoUpdate()) return;
-        SharedPreferences sp = c.getSharedPreferences("update", Context.MODE_PRIVATE);   // not Prefs: no redraw for this
         long now = System.currentTimeMillis();
-        if (Math.abs(now - sp.getLong("checkedAt", 0)) < CHECK_EVERY_MS) return;
-        sp.edit().putLong("checkedAt", now).apply();
+        if (Math.abs(now - prefs(c).getLong("checkedAt", 0)) < CHECK_EVERY_MS) return;
+        // Counts as checked for the next 10 min (the job runs meanwhile); the job then says when the next one is.
+        nextCheckIn(c, 10 * 60_000L);
         ModeJob.schedule(c, ModeJob.UPDATE, "auto", 0);
+    }
+
+    /** Not Prefs: no redraw for this. */
+    private static SharedPreferences prefs(Context c) {
+        return c.getSharedPreferences("update", Context.MODE_PRIVATE);
+    }
+
+    private static void nextCheckIn(Context c, long ms) {
+        prefs(c).edit().putLong("checkedAt", System.currentTimeMillis() - CHECK_EVERY_MS + ms).apply();
     }
 
     /** Asked in More Settings > Updates: installs at once, the app starts again. */
@@ -121,19 +133,54 @@ final class Updater {
 
     /** The job: a newer release is downloaded, checked and handed to the TV's shell. `now`: without waiting for the person to leave the app. */
     static void updateNow(Context c, boolean now) {
+        Release r;
         try {
-            Release r = latest();
-            if (r == null || r.code <= installedCode(c)) {
-                AppLog.w("update: " + installedName(c) + " is the newest");
+            r = latest();
+        } catch (IOException e) {
+            nextCheckIn(c, RETRY_MS);
+            failed(c, now, e);
+            return;
+        }
+        nextCheckIn(c, CHECK_EVERY_MS);
+        if (r == null || r.code <= installedCode(c)) {
+            AppLog.w("update: " + installedName(c) + " is the newest");
+            return;
+        }
+        try {
+            // A version the TV refused (storage, signature) isn't downloaded again every 6 h: only when asked, or a newer one.
+            String refused = refusedBy(c, r);
+            if (refused != null && !now) {
+                AppLog.w("update: " + r.version() + " was refused before, waiting for a newer one");
+                noticeRefusedOnce(c, r, refused);
                 return;
             }
             File apk = download(c, r);
             HomeMode.installUpdateNow(c, apk.getAbsolutePath(), r.version(), now);
         } catch (IOException e) {
-            AppLog.w("update: " + e.getMessage());
-            if (now) HomeMode.notice(c, Ui.trf(Ui.tr("Não deu para atualizar: {error}", "Couldn't update: {error}",
-                    "No se pudo actualizar: {error}"), "error", e.getMessage()));
+            failed(c, now, e);
         }
+    }
+
+    private static void failed(Context c, boolean now, IOException e) {
+        AppLog.w("update: " + e.getMessage());
+        if (now) HomeMode.notice(c, Ui.trf(Ui.tr("Não deu para atualizar: {error}", "Couldn't update: {error}",
+                "No se pudo actualizar: {error}"), "error", e.getMessage()));
+    }
+
+    /** What the TV's installer answered when this release was installed before and failed; null otherwise. */
+    private static String refusedBy(Context c, Release r) throws IOException {
+        String last = HomeMode.lastUpdateResult(c);   // "2.2.0 Success" or "2.2.0 Failure [INSTALL_FAILED_…]"
+        String prefix = r.version() + " ";
+        if (!last.startsWith(prefix) || last.contains("Success")) return null;
+        return last.substring(prefix.length()).trim();
+    }
+
+    private static void noticeRefusedOnce(Context c, Release r, String answer) {
+        if (r.tag.equals(prefs(c).getString("refusedNoticed", ""))) return;
+        prefs(c).edit().putString("refusedNoticed", r.tag).apply();
+        String shortAnswer = answer.length() > 120 ? answer.substring(0, 120) + "…" : answer;
+        HomeMode.notice(c, Ui.trf(Ui.tr("A TV recusou a atualização {version}: {error}", "The TV refused update {version}: {error}",
+                "La TV rechazó la actualización {version}: {error}"), "version", r.version(), "error", shortAnswer));
     }
 
     /** The release's APK, checked: its size, its SHA-256 when GitHub gives one, and that it's this app at that version. */

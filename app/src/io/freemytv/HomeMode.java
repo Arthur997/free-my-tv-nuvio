@@ -221,6 +221,9 @@ final class HomeMode {
         ModeJob.schedule(c, ModeJob.REVERT, null, 0);
     }
 
+    private static final int VERIFY_TRIES = 3;
+    private static final long VERIFY_RETRY_MS = 2 * 60_000L;
+
     /** After the TV boots (and after a TV update): wait for the system to settle and check Free My TV mode. */
     static void bootCheck(Context c) {
         ensureRemoteService(c, 30_000);
@@ -372,8 +375,7 @@ final class HomeMode {
             }
             if (metrics(latest, ORIGINAL) == null && !home.isEmpty()) {
                 busy(c, Ui.tr("Measuring the original home screen…"));
-                measureHomeTime(c, adb, ORIGINAL);
-                measureMemory(c, adb, ORIGINAL);
+                measureSafely(c, adb, ORIGINAL, true);
             }
             busy(c, Ui.tr("Switching the home screen and screensaver…"));
             Watchdog.clear(c);
@@ -452,7 +454,7 @@ final class HomeMode {
                             "Free My TV is on: new home screen, " + disabled.size() + " apps turned off.",
                             "Free My TV está activo: nueva pantalla de inicio, " + disabled.size() + " apps desactivadas."));
             busy(c, Ui.tr("Measuring Free My TV…"));
-            measureHomeTime(c, adb, FREE);
+            measureSafely(c, adb, FREE, false);
             done(c, null);
             adb.shell("am start -a android.intent.action.MAIN -c android.intent.category.HOME");
             ModeJob.schedule(c, ModeJob.MEMORY, FREE, 120_000);
@@ -517,7 +519,7 @@ final class HomeMode {
                 notice(c, Ui.trf("Original mode, but I couldn't turn back on: {list}.", "list", String.join(", ", problems)));
             }
             busy(c, Ui.tr("Measuring the original home screen…"));
-            measureHomeTime(c, adb, ORIGINAL);
+            measureSafely(c, adb, ORIGINAL, false);
             done(c, null);
             adb.shell("am start -a android.intent.action.MAIN -c android.intent.category.HOME");
             ModeJob.schedule(c, ModeJob.MEMORY, ORIGINAL, 120_000);
@@ -569,8 +571,11 @@ final class HomeMode {
         return found;
     }
 
-    /** Safety net: our home screen crashed 3 times in a row. The home screen and the screensaver go back; the rest stays. */
-    static void revertHomeNow(Context app) {
+    /**
+     * Safety net: our home screen crashed 3 times in a row. The home screen and the screensaver go back; the rest stays.
+     * A failure tries once more 30 s later (`retry`: this is that try); the crash screen's OK opens the TV's settings.
+     */
+    static void revertHomeNow(Context app, boolean retry) {
         synchronized (RUN) {
             JSONObject s = state(app);
             try (Adb adb = Adb.connect(app, 10_000, null)) {
@@ -580,6 +585,7 @@ final class HomeMode {
                 List<String> keptOff = stringList(s, "keptOff");
                 if (!restoreHome(adb, home)) {
                     AppLog.w("could not give the home screen back");
+                    revertFailed(app, retry);
                     return;
                 }
                 // Google TV's setup app only now, with its home screen back (alone, its recovery screen takes Home).
@@ -606,20 +612,27 @@ final class HomeMode {
                 adb.shell("am start -a android.intent.action.MAIN -c android.intent.category.HOME");
             } catch (Exception e) {
                 AppLog.w("could not give the home screen back: " + e.getMessage());
+                revertFailed(app, retry);
             }
         }
+    }
+
+    private static void revertFailed(Context app, boolean retry) {
+        if (!retry) ModeJob.schedule(app, ModeJob.REVERT, "retry", 30_000);
     }
 
     /**
      * In Free My TV mode, checks that everything is still as we left it (the listed apps off, our home screen and
      * screensaver) and completes whatever is missing, with a notice. Runs after the TV boots (TV updates can turn
-     * things back on) and after an update of this app.
+     * things back on) and after an update of this app. `retry` ("2", "3:updated"…): the TV's debugging wasn't up yet
+     * on the earlier try (a slow TV after boot), so this one tries again, VERIFY_TRIES times in all.
      */
-    static void verifyNow(Context app) {
+    static void verifyNow(Context app, String retry) {
         synchronized (RUN) {
             JSONObject s = state(app);
             String fingerprint = Build.FINGERPRINT;
-            boolean updated = !fingerprint.equals(s.optString("fingerprint", fingerprint));
+            int attempt = retry == null || retry.isEmpty() ? 1 : Integer.parseInt(retry.split(":")[0]);
+            boolean updated = !fingerprint.equals(s.optString("fingerprint", fingerprint)) || (retry != null && retry.endsWith(":updated"));
             try {
                 s.put("fingerprint", fingerprint);
                 s.remove("busy");
@@ -713,6 +726,14 @@ final class HomeMode {
                 JSONObject latest = state(app);
                 latest.put("disabled", new JSONArray(sorted(disabled)));
                 save(app, latest);
+            } catch (java.io.IOException e) {
+                if (attempt < VERIFY_TRIES) {
+                    AppLog.w("check " + attempt + " failed, trying again in 2 min: " + e.getMessage());
+                    ModeJob.schedule(app, ModeJob.VERIFY, (attempt + 1) + (updated ? ":updated" : ""), VERIFY_RETRY_MS);
+                } else {
+                    notice(app, Ui.trf("Couldn't check Free My TV: {error}", "error", e.getMessage()));
+                }
+                return;
             } catch (Exception e) {
                 notice(app, Ui.trf("Couldn't check Free My TV: {error}", "error", e.getMessage()));
                 return;
@@ -912,6 +933,16 @@ final class HomeMode {
     }
 
     // MARK: - Measurements (without opening apps: memory and the home button)
+
+    /** The measurements are extras: one failing (in the log) never makes a switch that worked read as failed. */
+    private static void measureSafely(Context c, Adb adb, String mode, boolean withMemory) {
+        try {
+            measureHomeTime(c, adb, mode);
+            if (withMemory) measureMemory(c, adb, mode);
+        } catch (IOException | JSONException | RuntimeException e) {
+            AppLog.w("measurement failed: " + e.getMessage());
+        }
+    }
 
     private static void measureHomeTime(Context c, Adb adb, String mode) throws IOException, JSONException {
         List<Integer> samples = new ArrayList<>();
@@ -1281,10 +1312,18 @@ final class HomeMode {
             "log -t FreeMyTV \"update: installing $2\"",
             "cp \"$1\" $F.apk; rm -f \"$1\"",   // the installer (system_server) can't read the shared storage, only here
             "out=$(pm install -r $F.apk 2>&1)",
+            "echo \"$2 $out\" > $F.result",   // Updater.refusedBy reads it: a refused version isn't fetched again
             "rm -f $F.apk $F.pid",
             "log -t FreeMyTV \"update to $2: $out\"",
             "[ \"$3\" = now ] && am start -a android.intent.action.MAIN -c android.intent.category.HOME >/dev/null",   // asked in Settings, which closed
             "");
+
+    /** The shell's last install: "2.2.0 Success", "2.2.0 Failure [INSTALL_FAILED_…]", or "" when there was none. */
+    static String lastUpdateResult(Context c) throws IOException {
+        try (Adb adb = Adb.connect(c, 10_000, null)) {
+            return adb.shell("cat " + UPDATE_FILES + ".result 2>/dev/null").trim();
+        }
+    }
 
     static void installUpdateNow(Context c, String apk, String version, boolean now) throws IOException {
         try (Adb adb = Adb.connect(c, 10_000, null)) {

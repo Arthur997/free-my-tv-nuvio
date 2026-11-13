@@ -475,6 +475,17 @@ final class Ui {
         return Ui.datePattern("format|EEEE, MMMM d").format(now);
     }
 
+    /**
+     * One background thread at background priority: decoding photos and reading files mustn't take CPU from the frames
+     * on a weak TV (the default priority is the UI thread's).
+     */
+    static java.util.concurrent.ExecutorService background(String name) {
+        return java.util.concurrent.Executors.newSingleThreadExecutor(task -> new Thread(() -> {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
+            task.run();
+        }, "free-my-tv-" + name));
+    }
+
     /** Spinning arc (work in progress). */
     static void spinner(Canvas c, float cx, float cy, float r, float seconds, Paint stroke) {
         OVAL.set(cx - r, cy - r, cx + r, cy + r);

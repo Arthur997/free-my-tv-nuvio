@@ -27,8 +27,8 @@ public class ModeJob extends JobService {
             try {
                 switch (action) {
                     case APPLY: HomeMode.applyNow(app, mode); break;
-                    case VERIFY: HomeMode.verifyNow(app); break;
-                    case REVERT: HomeMode.revertHomeNow(app); break;
+                    case VERIFY: HomeMode.verifyNow(app, mode); break;
+                    case REVERT: HomeMode.revertHomeNow(app, "retry".equals(mode)); break;
                     case MEMORY: HomeMode.measureMemoryNow(app, mode); break;
                     case REMOTE: HomeMode.ensureRemoteServiceNow(app); break;
                     case DREAM: HomeMode.screensaverNow(app, "own".equals(mode)); break;

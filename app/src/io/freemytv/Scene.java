@@ -126,10 +126,10 @@ final class Scene {
 
     /** Photo transition: both photos in the glass, blended by setGlassMix (0 = the first one). */
     void setGlassImages(int[] from, int[] to) {
+        if (liquid == null || from == null) return;   // the flat look (or a photo built for it): nothing reads the pixels
         imageGlass = true;
         glassA = fill(glassA, from);
         if (to != null) glassB = fill(glassB, to);
-        if (liquid == null) return;
         glassShaderA = linear(glassA);
         liquid.setInputShader("imageA", glassShaderA);
         liquid.setInputShader("imageB", to != null ? linear(glassB) : glassShaderA);
@@ -186,10 +186,10 @@ final class Scene {
 
     /** The glass now reads the blurred background image (Backdrop.FW × FH, ARGB). */
     void setFrost(int[] pixels) {
+        if (glass == null || pixels == null) return;   // as setGlassImages
         if (frostImage == null) frostImage = Bitmap.createBitmap(Backdrop.FW, Backdrop.FH, Bitmap.Config.ARGB_8888);
         frostImage.setPixels(pixels, 0, Backdrop.FW, 0, 0, Backdrop.FW, Backdrop.FH);
         imageFrost = true;
-        if (glass == null) return;
         BitmapShader s = new BitmapShader(frostImage, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
         s.setFilterMode(BitmapShader.FILTER_MODE_LINEAR);
         glass.setInputShader("frost", s);
@@ -202,11 +202,6 @@ final class Scene {
         imageFrost = false;
         setFrostScale();
         advance(time);
-    }
-
-    /** The current blurred image (so the bottom drawer can blur the background), or null with the aurora. */
-    Bitmap frostImage() {
-        return imageFrost ? frostImage : null;
     }
 
     /** Offset (px) of the layer that will draw glass, if it was moved on screen without being redrawn. */
