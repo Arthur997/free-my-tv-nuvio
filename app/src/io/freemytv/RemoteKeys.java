@@ -119,6 +119,9 @@ final class RemoteKeys {
             ControlActivity.open(c);
         } else if (Prefs.OPEN_RECENTS.equals(target)) {
             RecentsActivity.open(c);
+        } else if (Prefs.SLEEP_CYCLE.equals(target)) {
+            SleepTimer.cycle(c);
+            android.widget.Toast.makeText(c, SleepTimer.describe(c), android.widget.Toast.LENGTH_SHORT).show();
         } else {
             Intent intent = launchIntent(c.getPackageManager(), target);
             if (intent == null) {

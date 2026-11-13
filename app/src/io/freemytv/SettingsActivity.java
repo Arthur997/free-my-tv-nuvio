@@ -1807,6 +1807,8 @@ public class SettingsActivity extends Activity {
             appLabels.add(Ui.tr("Central de controle", "Control Center", "Centro de control"));
             appPkgs.add(Prefs.OPEN_RECENTS);
             appLabels.add(Ui.tr("Apps recentes", "Recent apps", "Apps recientes"));
+            appPkgs.add(Prefs.SLEEP_CYCLE);
+            appLabels.add(Ui.tr("Timer de desligar", "Sleep timer", "Temporizador de apagado"));
             for (String[] f : found) {
                 appPkgs.add(f[0]);
                 appLabels.add(f[1]);

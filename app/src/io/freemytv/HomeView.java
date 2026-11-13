@@ -1623,8 +1623,14 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         fill.setColor(tone(0x1A000000, 0x24FFFFFF));
         c.drawRoundRect(split - k, r.top + 34 * k, split + k, r.bottom - 34 * k, k, k, fill);
         float hx = split + 30 * k, hw = (r.right - 30 * k - hx) / 6;
-        for (int i = 0; i < wx.hours.size() && i < 6; i++) {
-            float hc = hx + hw * (i + 0.5f);
+        // Offline for a while: the hours already gone leave (the rest slide left), and the card says how old it is.
+        long now = System.currentTimeMillis();
+        int gone = 0;
+        while (gone < wx.hours.size() && gone < 6 && wx.hours.get(gone) <= now) gone++;
+        String stale = HomeData.staleness(data.weatherAt, HomeData.WEATHER_EVERY);
+        if (!stale.isEmpty()) c.drawText(stale, r.right - 34 * k, r.top + 54 * k, cardDimRight);
+        for (int i = gone; i < wx.hours.size() && i < 6; i++) {
+            float hc = hx + hw * (i - gone + 0.5f);
             c.drawText(wxHours[i], hc, r.top + 96 * k, hourPaint);
             Symbols.draw(getContext(), c, Symbols.weather(wx.hourCode.get(i), wx.hourDay.get(i)), hc, r.top + 142 * k, 30 * k, drawerInk(0.9f));
             c.drawText(wxHourTemps[i], hc, r.top + 196 * k, hourTemp);

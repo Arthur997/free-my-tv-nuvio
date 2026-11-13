@@ -471,10 +471,7 @@ final class ControlCenter {
         SleepTimer.set(activity, minutes);
         updateTexts();
         hostRedraw();
-        String said = minutes == 0 ? Ui.tr("Timer desligado. A TV fica ligada.", "Sleep timer off. The TV stays on.",
-                "Temporizador apagado. La TV sigue encendida.")
-                : Ui.trf(Ui.tr("A TV desliga em {n} min, às {time}.", "The TV turns off in {n} min, at {time}.",
-                        "La TV se apaga en {n} min, a las {time}."), "n", minutes, "time", Ui.clock(SleepTimer.endsAt(activity)));
+        String said = SleepTimer.describe(activity);
         host.toast(said);
         host.view().announceForAccessibility(said);
     }

@@ -35,14 +35,15 @@ final class Updater {
     private static final String APK = "FreeMyTV.apk";
     private static final long CHECK_EVERY_MS = 6 * 3600_000L;
 
-    /** A release: its tag ("v2.0.1"), the version code it stands for, and its APK. */
+    /** A release: its tag ("v2.0.1"), the version code it stands for, its APK and the first line of its notes. */
     static final class Release {
-        final String tag, url, sha256;
+        final String tag, url, sha256, notes;
         final int code;
         final long size;
 
-        Release(String tag, int code, String url, long size, String sha256) {
+        Release(String tag, int code, String url, long size, String sha256, String notes) {
             this.tag = tag;
+            this.notes = notes;
             this.code = code;
             this.url = url;
             this.size = size;
@@ -94,7 +95,8 @@ final class Updater {
                 if (!APK.equals(a.optString("name"))) continue;
                 String digest = a.optString("digest", "");   // "sha256:…", on releases since 2025
                 return new Release(tag, code(tag), a.getString("browser_download_url"), a.getLong("size"),
-                        digest.startsWith("sha256:") ? digest.substring(7).toLowerCase(Locale.ROOT) : "");
+                        digest.startsWith("sha256:") ? digest.substring(7).toLowerCase(Locale.ROOT) : "",
+                        firstLine(release.optString("body", "")));
             }
             return null;
         } catch (JSONException e) {
@@ -155,10 +157,32 @@ final class Updater {
                 return;
             }
             File apk = download(c, r);
+            // Said by the new version once it's in (announceInstalled): what changed, from the release's notes.
+            prefs(c).edit().putString("installing", r.version()).putString("installingNotes", r.notes).apply();
             HomeMode.installUpdateNow(c, apk.getAbsolutePath(), r.version(), now);
         } catch (IOException e) {
             failed(c, now, e);
         }
+    }
+
+    /** After this app was replaced: a notice "Updated to 2.3.0: <notes>" when that's the version Updater installed. */
+    static void announceInstalled(Context c) {
+        String version = prefs(c).getString("installing", "");
+        if (version.isEmpty() || !version.equals(installedName(c))) return;
+        String notes = prefs(c).getString("installingNotes", "");
+        prefs(c).edit().remove("installing").remove("installingNotes").apply();
+        String said = Ui.trf(Ui.tr("Atualizado para {version}.", "Updated to {version}.", "Actualizado a {version}."), "version", version);
+        HomeMode.notice(c, notes.isEmpty() ? said : said + " " + notes);
+    }
+
+    /** The notes' first line, without Markdown marks, at most ~160 characters (a notice, not the changelog). */
+    private static String firstLine(String body) {
+        for (String line : body.split("\n")) {
+            String s = line.replaceAll("^[#*\\-\\s]+", "").trim();
+            if (s.isEmpty()) continue;
+            return s.length() > 160 ? s.substring(0, 157).trim() + "…" : s;
+        }
+        return "";
     }
 
     private static void failed(Context c, boolean now, IOException e) {

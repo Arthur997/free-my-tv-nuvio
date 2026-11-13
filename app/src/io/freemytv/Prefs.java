@@ -31,7 +31,7 @@ final class Prefs {
     static final int KEY_GLOBOPLAY = 4097, KEY_DISNEY = 4141, KEY_TCL_MENU = 4514, KEY_TCL_123 = 4056,
             KEY_INFO = KeyEvent.KEYCODE_INFO;
     /** Besides an app, a button can open these (Remote Buttons): the Control Center or Recent apps, over any app. */
-    static final String OPEN_CONTROL = "@control", OPEN_RECENTS = "@recents";
+    static final String OPEN_CONTROL = "@control", OPEN_RECENTS = "@recents", SLEEP_CYCLE = "@sleep";
     /** The Netflix button on Vestel TVs and Formovie projectors: STEM_1, which the TV hands to its Netflix key receiver (dumpsys window policy). */
     static final int KEY_STEM_NETFLIX = KeyEvent.KEYCODE_STEM_1;
     /** KTC's (NextStar) Tabii button: BUTTON_8, which the TV hands to its hot-key receiver (its log: "keycode = 195"). */
@@ -398,7 +398,7 @@ final class Prefs {
         }
     }
 
-    /** What the key opens: a package, OPEN_CONTROL or OPEN_RECENTS ("" = nothing: the TV keeps the button). */
+    /** What the key opens: a package, OPEN_CONTROL, OPEN_RECENTS or SLEEP_CYCLE ("" = nothing: the TV keeps the button). */
     static String keyApp(int keyCode) {
         synchronized (keyApps) {
             readKeys();

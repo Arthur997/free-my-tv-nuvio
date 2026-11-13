@@ -61,7 +61,7 @@ final class HomeData {
     private static String weatherUrl() {
         return "https://api.open-meteo.com/v1/forecast?latitude=" + Prefs.latitude() + "&longitude=" + Prefs.longitude() + WEATHER_QUERY;
     }
-    private static final long WEATHER_EVERY = 30 * 60_000L;   // prices: Prefs.PRICES_EVERY
+    static final long WEATHER_EVERY = 30 * 60_000L;   // prices: Prefs.PRICES_EVERY
     interface Listener { void onData(); }
 
     static int coinCount() {

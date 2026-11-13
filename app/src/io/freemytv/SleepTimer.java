@@ -24,7 +24,28 @@ final class SleepTimer {
     private SleepTimer() {}
 
     /** The choices, in minutes; 0 = no timer. */
-    static final int[] OPTIONS = {0, 15, 30, 45, 60, 90};
+    static final int[] OPTIONS = {0, 15, 30, 45, 60, 90, 120};
+
+    /** "The TV turns off in 30 min, at 22:15." or "Sleep timer off.": what a change of the timer says. */
+    static String describe(Context c) {
+        int minutes = minutes(c);
+        return minutes == 0 ? Ui.tr("Timer desligado. A TV fica ligada.", "Sleep timer off. The TV stays on.",
+                "Temporizador apagado. La TV sigue encendida.")
+                : Ui.trf(Ui.tr("A TV desliga em {n} min, às {time}.", "The TV turns off in {n} min, at {time}.",
+                        "La TV se apaga en {n} min, a las {time}."), "n", minutes, "time", Ui.clock(endsAt(c)));
+    }
+
+    /** The remote's sleep button (Remote Buttons > Sleep timer): each press, the next choice (after the last, off). */
+    static void cycle(Context c) {
+        int now = minutes(c), next = 0;
+        for (int i = 0; i < OPTIONS.length; i++) {
+            if (OPTIONS[i] > now) {
+                next = OPTIONS[i];
+                break;
+            }
+        }
+        set(c, next);
+    }
 
     /** How long after the end the alarm checks that the shell turned the TV off (it takes a few seconds). */
     private static final long FALLBACK_MS = 90_000L;
