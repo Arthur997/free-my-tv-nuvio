@@ -2812,8 +2812,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 if (s != null) setShelf(s);
                 setStatusItems(st);
                 setDrawerItems(d);
-                // All Apps open: its new list waits until it closes (the grid doesn't change under the focus).
-                if (o != null && sheetOpen) pendingOthers = o;
+                // All Apps open: its new list waits until it closes (the grid doesn't change under the focus), unless
+                // it's still empty (opened right after the home screen started, before the first list came).
+                if (o != null && sheetOpen && !others.isEmpty()) pendingOthers = o;
                 else if (o != null) setOthers(o);
             });
         });

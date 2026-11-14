@@ -229,9 +229,9 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
                 } catch (Exception e) {
                     AppLog.w("football table " + slug + ": " + e.getMessage());
                 }
-                Football.Table result = t;
+                Football.Table result = t == null || t.rows.isEmpty() ? null : t;   // a knockout stage has none
                 handler.post(() -> {
-                    tables.put(slug, result);   // null: none (a cup's knockout stage)
+                    tables.put(slug, result);   // null: none
                     layers[TEAM].invalidate();
                     layers[TABLE].invalidate();
                 });
@@ -926,7 +926,7 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
             }
             int keep = p.getColor();
             if (i == league && zone == ON_CHIPS && tab == TABLE) p.setColor(INK);
-            c.drawText(label, rect.left + 24 * k, rect.centerY() + Ui.halfCap(p), p);
+            c.drawText(label, cx + 24 * k, 188 * k + Ui.halfCap(p), p);   // not rect: the focus pill moved it for its shadow
             p.setColor(keep);
             cx += wd + 16 * k;
         }
@@ -937,13 +937,13 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
             return;
         }
         Football.Table t = tables.get(leagues.get(league));
-        if (t == null) {
+        if (t == null || t.rows.isEmpty()) {
             c.drawText(tables.containsKey(leagues.get(league)) ? Ui.tr("Sem tabela nesta fase.", "No table at this stage.", "Sin tabla en esta fase.")
                     : Ui.tr("Carregando…", "Loading…", "Cargando…"), x, 300 * k, dim);
             return;
         }
         int g = group(t);
-        String group = t.groups.isEmpty() ? "" : t.groups.get(g);
+        String group = g < t.groups.size() ? t.groups.get(g) : "";
         c.drawText(group.isEmpty() ? t.name : group, x, 282 * k, panelTitle);
         float[] cols = {1300, 1410, 1510, 1610, 1710, 1800};
         String[] heads = {Ui.tr("P", "Pts", "Pts"), Ui.tr("J", "P", "J"), Ui.tr("V", "W", "G"), Ui.tr("E", "D", "E"), Ui.tr("D", "L", "P"),
