@@ -179,6 +179,18 @@
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|fontScale|locale|layoutDirection"
             android:theme="@style/FreeMyTV.Home" />
 
+        <!-- The football screen, opened only from the drawer's football card: its own process (:sports), as the weather's. -->
+        <activity
+            android:name=".FootballActivity"
+            android:process=":sports"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity="io.freemytv.sports"
+            android:excludeFromRecents="true"
+            android:screenOrientation="landscape"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|fontScale|locale|layoutDirection"
+            android:theme="@style/FreeMyTV.Home" />
+
         <!-- The sleep timer's alarm (Control Center): the TV goes to sleep, from the main process. -->
         <receiver
             android:name=".SleepTimer$Fire"
