@@ -172,6 +172,8 @@ public class SettingsActivity extends Activity {
         private static final float ROW_H = 68, ROW_GAP = 6, STEP = ROW_H + ROW_GAP, CHOICE_H = 104;
         private static final float LIST_X = 1000, LIST_R = 1824, LIST_TOP = 186, LIST_BOTTOM = 930;
         private static final int AMBER = 0xFFFFC266, INK = 0xFF1C1C1E;
+        /** The main menu's Home Screen row: its value shows the switch while it runs. */
+        private static final int HOME_ROW = 1;
 
         /** One row: its name and value (read when drawn), OK, ← → (null: none), and whether it's greyed out. */
         private static final class Row {
@@ -358,34 +360,121 @@ public class SettingsActivity extends Activity {
 
         // MARK: - The pages
 
-        /** The main menu: the home screen, one row per topic, then the shelf, the remote, the status and the TV's own. */
+        /**
+         * The main menu, in six groups: Prepare the TV, the home screen switch, and one page per topic. Every row says
+         * on the left what it does.
+         */
         private Page mainPage() {
             Page p = new Page(null);
-            p.rows.add(opens(() -> Ui.tr("Preparar a TV", "Prepare the TV", "Preparar la TV"), this::openPrepare));
-            p.rows.add(new Row(() -> Ui.tr("Início", "Home Screen"),
-                    () -> busy() ? "" : freeActive() ? "Free My TV" : Ui.tr("Original", "Original"), this::openHomeChoice, null, null));
-            p.rows.add(opens(() -> Ui.tr("Aparência", "Appearance", "Apariencia"), () -> open(appearancePage())));
-            p.rows.add(opens(() -> Ui.tr("Desempenho", "Performance", "Rendimiento"), () -> open(performancePage())));
-            p.rows.add(opens(() -> Ui.tr("Recomendações", "Picks"), () -> open(picksPage())));
-            p.rows.add(opens(() -> Ui.tr("Clima, cotações e futebol", "Weather, prices and football", "Clima, cotizaciones y fútbol"),
-                    () -> open(weatherPage())));
-            p.rows.add(opens(() -> Ui.tr("Relógio", "Clock", "Reloj"), () -> open(clockPage())));
-            p.rows.add(opens(() -> Ui.tr("Tela de descanso", "Screensaver"), () -> open(screensaverPage())));
-            p.rows.add(opens(() -> Ui.tr("Prateleira", "Shelf"), this::openShelfEditor));
-            p.rows.add(opens(() -> Ui.tr("Apps da TV", "TV Apps", "Apps de la TV"), this::openTvApps));
-            p.rows.add(opens(() -> Ui.tr("Botões do Controle", "Remote Buttons"), () -> {
+            // The last switch failed because the TV's debugging is off (a TV update can do that): the first row then
+            // goes straight to where it's turned on.
+            p.rows.add(helped(opens(() -> debuggingOff() ? Ui.tr("Ligar a depuração", "Turn on debugging", "Activar la depuración")
+                    : Ui.tr("Preparar a TV", "Prepare the TV", "Preparar la TV"), () -> {
+                        if (debuggingOff()) open(debuggingPage());
+                        else openPrepare();
+                    }), () -> debuggingOff()
+                    ? Ui.tr("A depuração da TV desligou (uma atualização da TV faz isso). Sem ela, o Free My TV não troca o Início nem desliga apps.",
+                            "The TV's debugging went off (a TV update does that). Without it, Free My TV can't switch the home screen or turn off apps.",
+                            "La depuración de la TV se apagó (una actualización lo hace). Sin ella, Free My TV no cambia el inicio ni apaga apps.")
+                    : Ui.tr("Guia passo a passo: depuração, autorização, Início, limpeza e chave do TMDB.",
+                            "A step-by-step guide: debugging, allowing the app, the home screen, the cleanup and the TMDB key.",
+                            "Guía paso a paso: depuración, autorización, inicio, limpieza y clave de TMDB.")));
+            p.rows.add(helped(new Row(() -> Ui.tr("Início", "Home Screen"),
+                    () -> busy() ? "" : freeActive() ? "Free My TV" : Ui.tr("Original", "Original"), this::openHomeChoice, null, null),
+                    () -> Ui.tr("Escolhe entre o Início do Free My TV e o original da TV. A troca leva alguns segundos e dá para voltar quando quiser.",
+                            "Picks Free My TV's home screen or the TV's original one. Switching takes a few seconds, and you can go back any time.",
+                            "Elige entre el inicio de Free My TV y el original de la TV. El cambio tarda unos segundos y se puede volver.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Aparência", "Appearance", "Apariencia"), () -> open(appearancePage())),
+                    () -> Ui.tr("Idioma, tema claro ou escuro, temperatura, relógio, capas dos apps e sons.",
+                            "Language, light or dark theme, temperature, clock, app art and sounds.",
+                            "Idioma, tema claro u oscuro, temperatura, reloj, portadas de las apps y sonidos.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Conteúdo do Início", "Home screen content", "Contenido del inicio"), () -> open(contentPage())),
+                    () -> Ui.tr("O que aparece no Início: a prateleira de apps, as recomendações, clima, cotações e futebol, e a tela de descanso.",
+                            "What the home screen shows: the app shelf, the picks, weather, prices and football, and the screensaver.",
+                            "Lo que muestra el inicio: la estantería de apps, las recomendaciones, clima, cotizaciones y fútbol, y el protector.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Apps e controle", "Apps and remote", "Apps y control"), () -> open(appsPage())),
+                    () -> Ui.tr("Liga e desliga apps da TV, limpa a TV e escolhe o que cada botão do controle abre.",
+                            "Turns the TV's apps on and off, cleans up the TV and picks what each remote button opens.",
+                            "Enciende y apaga apps de la TV, limpia la TV y elige qué abre cada botón del control.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Sistema", "System", "Sistema"), () -> open(systemPage())),
+                    () -> Ui.tr("Desempenho, atualizações do app, o estado da troca e os ajustes da própria TV.",
+                            "Performance, app updates, the switch's status and the TV's own settings.",
+                            "Rendimiento, actualizaciones de la app, el estado del cambio y los ajustes de la propia TV.")));
+            return p;
+        }
+
+        /** The home screen's parts: the shelf, the picks, the drawer's cards and the screensaver. */
+        private Page contentPage() {
+            Page p = new Page(Ui.tr("Conteúdo do Início", "Home screen content", "Contenido del inicio"));
+            p.symbol = "home";
+            p.rows.add(helped(opens(() -> Ui.tr("Prateleira", "Shelf"), this::openShelfEditor),
+                    () -> Ui.tr("Os apps da fileira do Início: quais aparecem e em que ordem.", "The apps in the home screen's row: which ones and in what order.",
+                            "Las apps de la fila del inicio: cuáles y en qué orden.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Recomendações", "Picks"), () -> open(picksPage())),
+                    () -> Ui.tr("Filmes e séries sugeridos no topo do Início, a chave do TMDB e o Continuar assistindo.",
+                            "Movies and shows suggested on top of the home screen, the TMDB key and Continue Watching.",
+                            "Películas y series sugeridas arriba del inicio, la clave de TMDB y Seguir viendo.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Clima, cotações e futebol", "Weather, prices and football", "Clima, cotizaciones y fútbol"),
+                    () -> open(weatherPage())),
+                    () -> Ui.tr("Os cartões da gaveta: o clima da sua cidade e, ao lado, cotações ou o seu time.",
+                            "The drawer's cards: your city's weather and, beside it, prices or your team.",
+                            "Las tarjetas del cajón: el clima de tu ciudad y, al lado, cotizaciones o tu equipo.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Tela de descanso", "Screensaver"), () -> open(screensaverPage())),
+                    () -> Ui.tr("O que a TV mostra parada: as fotos do Google ou a tela de descanso do Free My TV.",
+                            "What the TV shows when idle: Google's photos or Free My TV's screensaver.",
+                            "Lo que muestra la TV en reposo: las fotos de Google o el protector de Free My TV.")));
+            return p;
+        }
+
+        /** The TV's apps by hand, the cleanup and the remote's buttons. */
+        private Page appsPage() {
+            Page p = new Page(Ui.tr("Apps e controle", "Apps and remote", "Apps y control"));
+            p.symbol = "apps";
+            p.rows.add(helped(opens(() -> Ui.tr("Apps da TV", "TV Apps", "Apps de la TV"), this::openTvApps),
+                    () -> Ui.tr("Todos os apps da TV, um a um: liga ou desliga (nunca desinstala). O que a TV precisa fica protegido.",
+                            "Every app on the TV, one by one: on or off (never uninstalled). What the TV needs stays protected.",
+                            "Todas las apps de la TV, una a una: enciende o apaga (nunca desinstala). Lo que la TV necesita queda protegido.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Limpar a TV", "Clean up the TV", "Limpiar la TV"), this::openCleanup),
+                    () -> Ui.tr("Desliga de uma vez demonstrações, telemetria e propaganda do fabricante, em três níveis. Dá para desfazer.",
+                            "Turns off the maker's demos, telemetry and ads at once, in three levels. It can be undone.",
+                            "Apaga de una vez demos, telemetría y publicidad del fabricante, en tres niveles. Se puede deshacer.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Botões do Controle", "Remote Buttons"), () -> {
                 HomeMode.ensureRemoteService(getContext(), 0);   // the buttons work from inside other apps through this service
                 loadApps();
                 open(keysPage());
-            }));
-            p.rows.add(opens(() -> Ui.tr("Atualizações", "Updates", "Actualizaciones"), () -> open(updatesPage())));
-            p.rows.add(opens(() -> Ui.tr("Estado", "Status", "Estado"), () -> go(STATUS, null)));
-            // The last switch failed because the TV's debugging is off (a TV update can do that): this row then goes
-            // straight to where it's turned on.
-            p.rows.add(opens(() -> debuggingOff() ? Ui.tr("Ligar a depuração USB", "Turn on USB debugging", "Activar la depuración USB")
-                    : Ui.tr("Ajustes da TV", "TV Settings"), () -> HomeApps.openSettings(activity,
-                    debuggingOff() ? Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS : Settings.ACTION_SETTINGS)));
+            }), () -> Ui.tr("Escolhe o que cada botão de app do controle abre (Netflix, YouTube, Prime…), de qualquer app.",
+                    "Picks what each app button on the remote opens (Netflix, YouTube, Prime…), from any app.",
+                    "Elige qué abre cada botón de app del control (Netflix, YouTube, Prime…), desde cualquier app.")));
             return p;
+        }
+
+        /** How fast it runs, the updates, the switch's status and the TV's own settings. */
+        private Page systemPage() {
+            Page p = new Page(Ui.tr("Sistema", "System", "Sistema"));
+            p.symbol = "settings";
+            p.rows.add(helped(opens(() -> Ui.tr("Desempenho", "Performance", "Rendimiento"), () -> open(performancePage())),
+                    () -> Ui.tr("Para TVs lentas: sem o efeito de vidro, animações rápidas, otimizar apps e serviços em segundo plano.",
+                            "For slow TVs: no glass effect, fast animations, optimizing apps and background services.",
+                            "Para TVs lentas: sin efecto de vidrio, animaciones rápidas, optimizar apps y servicios en segundo plano.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Atualizações", "Updates", "Actualizaciones"), () -> open(updatesPage())),
+                    () -> Ui.tr("A versão instalada, procurar uma nova e atualizar sozinho.", "The installed version, checking for a new one and updating on its own.",
+                            "La versión instalada, buscar una nueva y actualizar sola.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Estado", "Status", "Estado"), () -> go(STATUS, null)),
+                    () -> Ui.tr("O que a última troca fez, os avisos e a memória e o tempo do Início em cada modo.",
+                            "What the last switch did, the notices, and the home screen's memory and time in each mode.",
+                            "Lo que hizo el último cambio, los avisos, y la memoria y el tiempo del inicio en cada modo.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Ajustes da TV", "TV Settings"), () -> HomeApps.openSettings(activity, Settings.ACTION_SETTINGS)),
+                    () -> Ui.tr("Abre as configurações da própria TV (rede, imagem, som, contas).", "Opens the TV's own settings (network, picture, sound, accounts).",
+                            "Abre la configuración de la propia TV (red, imagen, sonido, cuentas).")));
+            return p;
+        }
+
+        /** Each row's description on the left, in order (a null leaves that row with the page's). */
+        private static void describe(Page p, String[]... texts) {
+            for (int i = 0; i < texts.length && i < p.rows.size(); i++) {
+                String[] t = texts[i];
+                if (t != null) p.rows.get(i).help = () -> Ui.tr(t[0], t[1], t[2]);
+            }
         }
 
         /** Language, theme, units, the top of the home screen, the shelf's art and the sounds. */
@@ -406,6 +495,16 @@ public class SettingsActivity extends Activity {
                     () -> Prefs.originalArt() ? 0 : 1, at -> Prefs.setOriginalArt(at == 0)));
             p.rows.add(choice(() -> Ui.tr("Volume dos sons", "Sound volume", "Volumen de los sonidos"), SettingsView::soundLevels,
                     Prefs::soundLevel, Prefs::setSoundLevel));
+            p.rows.add(opens(() -> Ui.tr("Relógio", "Clock", "Reloj"), () -> open(clockPage())));
+            p.symbol = "visibility";
+            describe(p,
+                    new String[] {"O idioma dos textos do Free My TV. Automático segue o da TV.", "The language of Free My TV's text. Automatic follows the TV's.", "El idioma de los textos de Free My TV. Automático sigue el de la TV."},
+                    new String[] {"Claro, escuro, ou automático: claro de dia e escuro à noite.", "Light, dark, or automatic: light by day and dark at night.", "Claro, oscuro o automático: claro de día y oscuro de noche."},
+                    new String[] {"Graus Celsius ou Fahrenheit no clima. Automático segue o país.", "Celsius or Fahrenheit for the weather. Automatic follows the country.", "Grados Celsius o Fahrenheit en el clima. Automático sigue el país."},
+                    new String[] {"O que fica no alto do Início: o relógio com o clima, ou as cotações.", "What sits on top of the home screen: the clock with the weather, or the prices.", "Lo que va arriba del inicio: el reloj con el clima, o las cotizaciones."},
+                    new String[] {"Na prateleira, a imagem que o próprio app traz ou só o logo dele.", "On the shelf, the app's own picture or just its logo.", "En la estantería, la imagen de la propia app o solo su logo."},
+                    new String[] {"O volume do clique ao mover o foco e abrir itens.", "The volume of the click when moving and opening.", "El volumen del clic al moverse y abrir."},
+                    new String[] {"A hora do relógio: automática pela internet, ou fuso e ajuste à mão.", "The clock's time: automatic from the internet, or a zone and adjustment by hand.", "La hora del reloj: automática por internet, o zona y ajuste a mano."});
             p.hint = () -> Ui.tr("OK abre as opções; ← e → mudam direto.", "OK opens the choices; ← and → change it right away.");
             return p;
         }
@@ -805,6 +904,11 @@ public class SettingsActivity extends Activity {
                             "Las versiones nuevas vienen del GitHub del proyecto.");
             p.hint2 = () -> Ui.tr("Ao atualizar, o app reinicia sozinho.", "When it updates, the app starts again by itself.",
                     "Al actualizar, la app se reinicia sola.");
+            p.symbol = "sync";
+            describe(p,
+                    new String[] {"A versão do Free My TV nesta TV.", "The Free My TV version on this TV.", "La versión de Free My TV en esta TV."},
+                    new String[] {"Procura uma versão nova no GitHub do projeto; se houver, OK instala.", "Looks for a new version on the project's GitHub; if there is one, OK installs it.", "Busca una versión nueva en el GitHub del proyecto; si hay, OK la instala."},
+                    new String[] {"Procura a cada 6 horas e instala quando você sai do app.", "Checks every 6 hours and installs once you leave the app.", "Busca cada 6 horas e instala cuando sales de la app."});
             readRelease();
             return p;
         }
@@ -895,27 +999,13 @@ public class SettingsActivity extends Activity {
                     () -> "", this::openBackgroundApps, null, null);
             background.opens = true;
             p.rows.add(background);
-            // Two short lines: a hint isn't wrapped.
-            p.hint = () -> {
-                switch (focus) {
-                    case 1: return Ui.tr("Janelas e transições na metade do tempo.", "Windows and transitions in half the time.",
-                            "Ventanas y transiciones en la mitad del tiempo.");
-                    case 2: return Ui.tr("Compila o código mais usado: os apps abrem mais rápido.", "Compiles the most used code: apps open faster.",
-                            "Compila el código más usado: las apps abren más rápido.");
-                    case 3: return Ui.tr("Apps da TV que rodam escondidos e ocupam memória.", "The TV's apps that run out of sight and hold memory.",
-                            "Apps de la TV que corren ocultas y ocupan memoria.");
-                    default: return Ui.tr("OK abre as opções; ← e → mudam direto.", "OK opens the choices; ← and → change it right away.");
-                }
-            };
-            p.hint2 = () -> {
-                switch (focus) {
-                    case 1: return Ui.tr("O modo Original volta como era.", "Original brings them back as they were.", "El modo Original las deja como estaban.");
-                    case 2: return Ui.tr("A TV só faz isso parada. Enquanto roda, ela fica lenta.", "The TV only does it when idle. While it runs, it's slower.",
-                            "La TV solo lo hace en reposo. Mientras corre, va más lenta.");
-                    case 3: return Ui.tr("Você escolhe o que fica ligado.", "You pick what stays on.", "Tú eliges qué queda encendido.");
-                    default: return "";
-                }
-            };
+            p.hint = () -> Ui.tr("OK abre as opções; ← e → mudam direto.", "OK opens the choices; ← and → change it right away.");
+            p.symbol = "speed";
+            describe(p,
+                    new String[] {"Tira o efeito de vidro e as sombras: mais leve para TVs lentas.", "Drops the glass effect and the shadows: lighter for slow TVs.", "Quita el efecto de vidrio y las sombras: más liviano para TVs lentas."},
+                    new String[] {"Janelas e transições da TV na metade do tempo. O modo Original volta como era.", "The TV's windows and transitions in half the time. Original brings them back.", "Ventanas y transiciones de la TV en la mitad del tiempo. Original las devuelve."},
+                    new String[] {"Compila o código mais usado dos apps para abrirem mais rápido. A TV fica lenta enquanto roda.", "Compiles the apps' most used code so they open faster. The TV is slower while it runs.", "Compila el código más usado para que las apps abran más rápido. La TV va lenta mientras corre."},
+                    new String[] {"Apps da TV que rodam escondidos e ocupam memória: você escolhe o que fica ligado.", "The TV's apps that run out of sight and hold memory: you pick what stays on.", "Apps de la TV que corren ocultas y ocupan memoria: tú eliges qué queda."});
             readOptimize();
             return p;
         }
@@ -1162,6 +1252,13 @@ public class SettingsActivity extends Activity {
             p.hint = () -> Ui.tr("OK abre as opções; ← e → mudam direto.", "OK opens the choices; ← and → change it right away.");
             p.hint2 = () -> Ui.tr("Usa a API do TMDB, sem endosso ou certificação do TMDB.",
                     "This product uses the TMDB API but is not endorsed or certified by TMDB.");
+            p.symbol = "play";
+            describe(p,
+                    new String[] {"Original: cinco títulos novos por hora. Top do dia: os mais vistos hoje.", "Original: five new titles an hour. Today's top: the most watched today.", "Original: cinco títulos nuevos por hora. Top del día: los más vistos hoy."},
+                    new String[] {"Quantos títulos o Top do dia mostra.", "How many titles Today's top shows.", "Cuántos títulos muestra el Top del día."},
+                    new String[] {"Onde um título abre quando você aperta OK nele.", "Where a title opens when you press OK on it.", "Dónde abre un título al pulsar OK."},
+                    new String[] {"A sua chave grátis do TMDB: sem ela não há recomendações nem fotos na tela de descanso.", "Your free TMDB key: without it there are no picks or screensaver photos.", "Tu clave gratis de TMDB: sin ella no hay recomendaciones ni fotos en el protector."},
+                    new String[] {"Os apps cujos episódios e filmes começados aparecem no Início.", "The apps whose started episodes and movies show on the home screen.", "Las apps cuyos episodios y películas empezados aparecen en el inicio."});
             return p;
         }
 
@@ -1193,9 +1290,19 @@ public class SettingsActivity extends Activity {
                 int coin = i;
                 String name = coins[i];
                 // No quotes widget, nowhere to show prices: the coins read as off (and stay locked) until it is back on.
-                p.rows.add(onOff(() -> name, () -> Prefs.quotes() && Prefs.coin(coin), on -> Prefs.setCoin(coin, on),
-                        () -> !Prefs.quotes()));
+                p.rows.add(helped(onOff(() -> name, () -> Prefs.quotes() && Prefs.coin(coin), on -> Prefs.setCoin(coin, on),
+                        () -> !Prefs.quotes()), () -> Ui.trf(Ui.tr("Mostra a cotação de {coin} no cartão de cotações.",
+                        "Shows {coin}'s price on the prices card.", "Muestra la cotización de {coin} en la tarjeta."), "coin", name)));
             }
+            p.symbol = "partly_cloudy_day";
+            describe(p,
+                    new String[] {"O cartão do clima na gaveta do Início.", "The weather card in the home screen's drawer.", "La tarjeta del clima en el cajón del inicio."},
+                    new String[] {"A cidade da previsão (e do fuso do relógio automático).", "The forecast's city (and the automatic clock's time zone).", "La ciudad del pronóstico (y de la zona del reloj automático)."},
+                    new String[] {"O segundo cartão: cotações, o seu time de futebol ou nada.", "The second card: prices, your football team or nothing.", "La segunda tarjeta: cotizaciones, tu equipo de fútbol o nada."},
+                    new String[] {"O time do cartão de futebol: da lista ou buscando pelo nome.", "The football card's team: from the list or searched by name.", "El equipo de la tarjeta de fútbol: de la lista o buscando por nombre."},
+                    new String[] {"Um aviso na tela quando o jogo do seu time começa e a cada gol.", "A notice on screen when your team's game starts and at every goal.", "Un aviso en pantalla cuando empieza el partido de tu equipo y en cada gol."},
+                    new String[] {"O placar ao vivo também na tela de descanso.", "The live score on the screensaver too.", "El marcador en vivo también en el protector."},
+                    new String[] {"De quanto em quanto tempo as cotações se atualizam.", "How often the prices refresh.", "Cada cuánto se actualizan las cotizaciones."});
             p.hint = () -> Ui.tr("OK abre as opções; ← e → mudam direto.", "OK opens the choices; ← and → change it right away.");
             return p;
         }
@@ -1215,6 +1322,12 @@ public class SettingsActivity extends Activity {
                     () -> automatic.getAsBoolean() ? nearest(Clock.ADJUSTS, 0) : nearest(Clock.ADJUSTS, Prefs.clockAdjust()),
                     at -> Prefs.setClockAdjust(Clock.ADJUSTS[at])), automatic));
             p.rows.add(new Row(() -> Ui.tr("Agora", "Now", "Ahora"), () -> Ui.clock(System.currentTimeMillis()), () -> {}, null, null));
+            p.symbol = "recents";
+            describe(p,
+                    new String[] {"Automática: a hora certa da internet no fuso da cidade do clima. Manual: você escolhe.", "Automatic: the exact time from the internet in the weather city's zone. Manual: you pick.", "Automática: la hora exacta de internet en la zona de la ciudad. Manual: tú eliges."},
+                    new String[] {"O fuso do relógio, na hora manual.", "The clock's time zone, for the manual time.", "La zona del reloj, en la hora manual."},
+                    new String[] {"Minutos a mais ou a menos, se a hora ainda estiver errada.", "Minutes more or less, if the time is still off.", "Minutos de más o de menos, si la hora sigue mal."},
+                    new String[] {"A hora que o Free My TV mostra agora.", "The time Free My TV shows now.", "La hora que muestra Free My TV ahora."});
             p.hint = () -> Prefs.manualClock()
                     ? Ui.tr("Escolha o fuso e, se a hora ainda estiver errada, ajuste com ← e →.",
                             "Pick the zone and, if the time is still off, adjust it with ← and →.",
@@ -1260,6 +1373,10 @@ public class SettingsActivity extends Activity {
                         pause();
                         activity.showPreview();
                     }, null, null));
+            p.symbol = "bedtime";
+            describe(p,
+                    new String[] {"No modo Free My TV: a da TV (fotos do Google) ou a do Free My TV, com relógio, clima e cartazes.", "In Free My TV mode: the TV's own (Google photos) or Free My TV's, with clock, weather and posters.", "En modo Free My TV: el de la TV (fotos de Google) o el de Free My TV, con reloj, clima y carteles."},
+                    new String[] {"Mostra a tela de descanso do Free My TV agora. Qualquer botão fecha.", "Shows Free My TV's screensaver now. Any button closes it.", "Muestra el protector de Free My TV ahora. Cualquier botón lo cierra."});
             return p;
         }
 
@@ -1283,6 +1400,10 @@ public class SettingsActivity extends Activity {
                 }
                 keepVisible(false);
             };
+            p.symbol = "control";
+            p.about = () -> Ui.tr("“Identificar um botão”: aperte o botão no controle e escolha o que ele abre. Os botões já escolhidos vêm abaixo.",
+                    "“Identify a button”: press the button on the remote and pick what it opens. The buttons already set are below.",
+                    "“Identificar un botón”: pulsa el botón en el control y elige qué abre. Los botones ya elegidos van abajo.");
             p.hint = this::keysHint;
             p.hint2 = () -> learningKeys ? Ui.tr("Setas, OK, Voltar, Home, energia e volume não mudam. Voltar cancela.",
                     "Arrows, OK, Back, Home, power and volume don't change. Back cancels.",
@@ -1577,7 +1698,7 @@ public class SettingsActivity extends Activity {
             }
             if (page == null || row >= page.rows.size()) return "";
             Row r = page.rows.get(row);
-            String value = page == main && row == 0 && busy() ? busyLine() : r.value.get();
+            String value = page == main && row == HOME_ROW && busy() ? busyLine() : r.value.get();
             return r.label.get() + (value.isEmpty() ? "" : ", " + value) + (r.check ? Ui.tr(", escolhido", ", selected") : "")
                     + ", " + (row + 1) + Ui.tr(" de ", " of ") + page.rows.size();
         }
@@ -1884,7 +2005,7 @@ public class SettingsActivity extends Activity {
             rowLabel.setColor(Ui.alpha(ink, alpha * ((ink >>> 24) / 255f)));
             float base = rowRect.centerY() + Ui.halfCap(rowLabel), right = rowRect.right - 30 * k, left = rowRect.left + 30 * k;
             float valueRoom = 0;
-            if (page == main && i == 0 && busy()) {
+            if (page == main && i == HOME_ROW && busy()) {
                 // Switching: the current step in place of the value, with the spinning arc.
                 rowValue.setColor(Ui.alpha(blend(fg(0xB3FFFFFF), 0xB31C1C1E, f), alpha));
                 String shown = TextUtils.ellipsize(busyLine(), fitted(rowValue), 470 * k, TextUtils.TruncateAt.END).toString();
