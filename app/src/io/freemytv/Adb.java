@@ -32,8 +32,9 @@ import java.security.spec.X509EncodedKeySpec;
 import javax.crypto.Cipher;
 
 /**
- * ADB client that talks to the TV itself (127.0.0.1:5555, open while debugging is on). It's what lets the app switch
- * the home screen and the screensaver, and turn off apps, without a computer. The first time, the TV asks
+ * ADB client that talks to the TV itself: on 127.0.0.1:5555 (USB or network debugging), or else on the port of
+ * "Wireless debugging" (Android 11+, TLS, after pairing with its code: AdbTls). It's what lets the app switch the home
+ * screen and the screensaver, and turn off apps, without a computer. The first time on 5555, the TV asks
  * "Allow USB debugging?" and you accept with "Always allow". Only HomeMode uses it, and only with its own fixed
  * commands (nothing from outside).
  * Protocol: https://android.googlesource.com/platform/packages/modules/adb/+/refs/heads/main/protocol.txt
@@ -41,7 +42,7 @@ import javax.crypto.Cipher;
 final class Adb implements Closeable {
     private static final int CNXN = 0x4e584e43, AUTH = 0x48545541, OPEN = 0x4e45504f, OKAY = 0x59414b4f,
             CLSE = 0x45534c43, WRTE = 0x45545257, STLS = 0x534c5453;
-    private static final int VERSION = 0x01000001, MAX_DATA = 256 * 1024;
+    private static final int VERSION = 0x01000001, MAX_DATA = 256 * 1024, STLS_VERSION = 0x01000000;
     private static final int AUTH_TOKEN = 1, AUTH_SIGNATURE = 2, AUTH_RSAPUBLICKEY = 3;
     /** Start of the PKCS#1 block of a SHA-1 signature (adbd treats the token as if it were the digest). */
     private static final byte[] SHA1_PREFIX = {0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a, 0x05, 0x00, 0x04, 0x14};
@@ -54,13 +55,18 @@ final class Adb implements Closeable {
         byte[] data;
     }
 
-    private final Socket socket;
-    private final DataInputStream in;
-    private final OutputStream out;
+    private Socket socket;
+    private DataInputStream in;
+    private OutputStream out;
+    /** The port it's connected to (5555, or wireless debugging's), for the TLS upgrade. */
+    private final int port;
+    /** The TV's newest wireless debugging port that worked, tried before searching the network again. */
+    private static volatile int tlsPort;
     private int nextLocalId = 1;
 
-    private Adb(Socket socket) throws IOException {
+    private Adb(Socket socket, int port) throws IOException {
         this.socket = socket;
+        this.port = port;
         in = new DataInputStream(socket.getInputStream());
         out = socket.getOutputStream();
     }
@@ -68,7 +74,15 @@ final class Adb implements Closeable {
     /** Connects and authenticates. If the TV doesn't know our key yet, waits up to `approvalMs` for you to accept. */
     static Adb connect(Context c, int approvalMs, Approval approval) throws IOException {
         KeyPair keys = keys(c);
-        Adb adb = open();
+        Adb adb;
+        try {
+            adb = open(5555);
+        } catch (IOException closed) {
+            // No USB/network debugging: wireless debugging (paired before, in Prepare the TV), if it's on.
+            Adb wireless = wireless(c, keys);
+            if (wireless == null) throw closed;
+            return wireless;
+        }
         try {
             if (adb.handshake(keys, true)) return adb;
             // Unknown key: the TV shows "Allow USB debugging?".
@@ -102,29 +116,62 @@ final class Adb implements Closeable {
 
     private static final int APPROVAL_POLL_MS = 2_000;
 
-    private static Adb open() throws IOException {
-        Socket s = new Socket();
+    private static Adb open(int port) throws IOException {
+        Socket s;
         try {
-            s.connect(new InetSocketAddress("127.0.0.1", 5555), 3000);
+            if (port == 5555) {
+                s = new Socket();
+                s.connect(new InetSocketAddress("127.0.0.1", port), 3000);
+            } else {
+                s = AdbPorts.connect(port, 3000);   // wireless debugging: on the TV's network address
+            }
         } catch (IOException e) {
-            s.close();
             throw new IOException(Ui.tr("a depuração está desligada na TV (porta 5555 fechada)",
                     "debugging is off on the TV (port 5555 closed)", "la depuración está apagada en la TV (puerto 5555 cerrado)"));
         }
         try {
             s.setSoTimeout(10_000);
-            return new Adb(s);
+            return new Adb(s, port);
         } catch (IOException | RuntimeException e) {
             s.close();
             throw e;
         }
     }
 
+    /**
+     * Wireless debugging's connection (TLS, with the key paired before), on its current port: the last one that
+     * worked, else the one the TV announces. null when it's off or the app isn't paired.
+     */
+    private static Adb wireless(Context c, KeyPair keys) {
+        if (!AdbTls.supported() || !wirelessOn(c)) return null;
+        for (int attempt = 0; attempt < 2; attempt++) {
+            int port = attempt == 0 ? tlsPort : AdbPorts.find(c, AdbPorts.CONNECT, 5000);
+            if (port <= 0) continue;
+            Adb adb = null;
+            try {
+                adb = open(port);
+                if (adb.handshake(keys, false)) {
+                    tlsPort = port;
+                    return adb;
+                }
+            } catch (IOException | RuntimeException e) {
+                AppLog.w("wireless debugging " + port + ": " + e.getMessage());
+            }
+            if (adb != null) adb.close();
+        }
+        return null;
+    }
+
+    /** Wireless debugging is on (Developer options); readable by any app. */
+    static boolean wirelessOn(Context c) {
+        return android.provider.Settings.Global.getInt(c.getContentResolver(), "adb_wifi_enabled", 0) == 1;
+    }
+
     /** A new connection that gets in with the key the TV already knows; null if it doesn't know it yet. */
     private static Adb signedIn(KeyPair keys) {
         Adb adb = null;
         try {
-            adb = open();
+            adb = open(5555);
             if (adb.handshake(keys, false)) return adb;
         } catch (IOException | RuntimeException ignored) {
             // Not yet
@@ -151,7 +198,12 @@ final class Adb implements Closeable {
                 socket.setSoTimeout(20_000);
                 return true;
             }
-            if (m.command == STLS) throw new IOException(Ui.tr("the TV asked for TLS (wireless debugging); use USB debugging"));
+            if (m.command == STLS) {
+                // Wireless debugging: everything from here on goes over TLS, signed in by the paired key itself.
+                send(STLS, STLS_VERSION, 0, null);
+                startTls(keys);
+                continue;
+            }
             if (m.command != AUTH || m.arg0 != AUTH_TOKEN) throw new IOException(Ui.tr("unexpected reply from ADB"));
             if (!signed) {
                 send(AUTH, AUTH_SIGNATURE, 0, sign(keys.getPrivate(), m.data));
@@ -160,6 +212,23 @@ final class Adb implements Closeable {
                 if (offerKey) send(AUTH, AUTH_RSAPUBLICKEY, 0, publicKeyBlob(keys.getPublic()));
                 return false;
             }
+        }
+    }
+
+    /** The connection, now over TLS (ADB's STLS): the TV checks the key the app paired with. */
+    private void startTls(KeyPair keys) throws IOException {
+        try {
+            javax.net.ssl.SSLSocket tls = AdbTls.upgrade(keys, socket, port);
+            tls.setSoTimeout(10_000);
+            socket = tls;
+            in = new DataInputStream(tls.getInputStream());
+            out = tls.getOutputStream();
+        } catch (GeneralSecurityException e) {
+            throw new IOException("TLS: " + e.getMessage());
+        } catch (IOException e) {
+            // The TV refuses a key it never paired with.
+            throw new IOException(Ui.tr("a TV não reconhece este app na depuração sem fio; faça o pareamento de novo",
+                    "the TV doesn't know this app on wireless debugging; pair again", "la TV no reconoce esta app; vuelve a emparejar"));
         }
     }
 
@@ -220,7 +289,7 @@ final class Adb implements Closeable {
 
     // MARK: - The app's key (kept in private storage; never goes to the log)
 
-    private static synchronized KeyPair keys(Context c) throws IOException {
+    static synchronized KeyPair keys(Context c) throws IOException {
         File dir = c.getFilesDir();
         File privateFile = new File(dir, "adbkey"), publicFile = new File(dir, "adbkey.pub");
         try {
@@ -262,7 +331,7 @@ final class Adb implements Closeable {
     }
 
     /** Public key in adbd's format (RSAPublicKey struct in base64, plus a name). */
-    private static byte[] publicKeyBlob(PublicKey key) {
+    static byte[] publicKeyBlob(PublicKey key) {
         RSAPublicKey rsa = (RSAPublicKey) key;
         BigInteger n = rsa.getModulus();
         BigInteger r32 = BigInteger.ONE.shiftLeft(32);
