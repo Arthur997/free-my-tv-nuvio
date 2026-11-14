@@ -5,7 +5,7 @@ import android.graphics.Paint;
 import android.graphics.RectF;
 
 /**
- * Free My TV's one glass (the shelf's, tinted as the Control Center's): white by day, smoked at night, a soft drop shadow
+ * Free My TV's one glass (the shelf's, tinted as the Control Center's): light gray by day, smoked at night, a drop shadow
  * and the Liquid Glass rim, its rim and bend scaled down for smaller glass. Every card, button, panel and notice on the
  * home screen and the weather screen is made of it. Performance mode (and Android 8 to 12): Scene's flat look.
  */
@@ -13,7 +13,11 @@ final class DockGlass {
     /** The shelf glass's height, in the 1920 × 1080 space: the rim is sized for it. */
     private static final float REFERENCE_H = 206;
     static final float SHADOW_BLUR = 26;
-    private static final int SMOKE = 0xFF111113;
+    /**
+     * The day glass is a light gray, not white: on the near-white day background a white glass vanished, and with it
+     * the white of a focused item, white app art and the glass's own rim.
+     */
+    private static final int SMOKE = 0xFF111113, DAY = 0xFFC9C9D0;
 
     private final Scene scene;
     private final Shadows shadows;
@@ -32,7 +36,7 @@ final class DockGlass {
         if (alpha <= 0.004f) return;
         drop.set(r);
         drop.offset(0, 10 * k * Math.max(0.4f, scale(r, k)));
-        shadow.setColor(Ui.alpha(mix(0x12000000, 0x52000000, dark), alpha));
+        shadow.setColor(Ui.alpha(mix(0x1F000000, 0x52000000, dark), alpha));
         shadows.draw(c, drop, radius, SHADOW_BLUR * k, shadow);
         body(c, r, radius, dark, k, alpha);
     }
@@ -44,7 +48,7 @@ final class DockGlass {
      */
     void body(Canvas c, RectF r, float radius, float dark, float k, float alpha) {
         float size = scale(r, k);
-        scene.liquid(c, r, radius, mix(0xFFFFFFFF, SMOKE, dark), lerp(0.62f, 0.55f, dark), lerp(0.03f, 0.08f, dark),
+        scene.liquid(c, r, radius, mix(DAY, SMOKE, dark), lerp(0.62f, 0.55f, dark), lerp(0.02f, 0.08f, dark),
                 Math.max(8 * k, lerp(30, 34, dark) * k * size), Math.max(5 * k, lerp(22, 28, dark) * k * size),
                 lerp(0.65f, 0.95f, dark), alpha);
     }
