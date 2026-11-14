@@ -116,19 +116,26 @@ final class HomeData {
         return "/api/v3/ticker/24hr?type=MINI&symbols=%5B" + symbols + "%5D";
     }
 
+    /**
+     * Fails with Binance.com's error: Binance.US lists no pairs outside dollars, so its HTTP 400 after Binance.com failed
+     * for another reason (a timeout, a refusal) must not read as "this currency has no pairs".
+     */
     private static String getPrices() throws IOException {
         IOException failed = null;
-        for (String host : PRICE_HOSTS) {
+        for (int i = 0; i < PRICE_HOSTS.length; i++) {
             try {
-                return get(host + pricesPath());
+                return get(PRICE_HOSTS[i] + pricesPath());
             } catch (IOException e) {
-                failed = e;
+                if (failed == null) failed = e;
                 // A pair Binance doesn't list (HTTP 400) isn't a refusal: the caller falls back to dollars instead.
-                if ("HTTP 400".equals(e.getMessage())) break;
+                if (i == 0 && "HTTP 400".equals(e.getMessage())) break;
             }
         }
         throw failed;
     }
+
+    /** In dollars for lack of pairs: the currency is tried again after a day (Binance may list it again). */
+    private static final long DOLLARS_FOR = 24 * 3600_000L;
 
     /** How many of the next hours the drawer's weather card can show (it shows fewer when it has less room). */
     static final int HOURS = 12;
@@ -168,12 +175,13 @@ final class HomeData {
 
     private HomeData(Context c) {
         cache = c.getSharedPreferences("homedata", Context.MODE_PRIVATE);
-        inDollars = CURRENCY.equals(cache.getString("dollarsFor", ""));
+        long dollarsAt = cache.getLong("dollarsAt", 0), now = System.currentTimeMillis();
+        inDollars = CURRENCY.equals(cache.getString("dollarsFor", "")) && now >= dollarsAt && now - dollarsAt < DOLLARS_FOR;
         try {
             if (Prefs.quotes()) {
                 String p = cache.getString("prices", null);
-                if (p != null) parsePrices(p);
                 pricesAt = cache.getLong("pricesAt", 0);
+                if (p != null) parsePrices(p);   // after: prices cached in another currency set pricesAt to 0 (fetch now)
             }
             String w = cache.getString("weather", null);
             // The cached forecast is for the city it was fetched for; another city means fetch again.
@@ -203,7 +211,7 @@ final class HomeData {
                         if (inDollars || CURRENCY.equals("USD") || !"HTTP 400".equals(e.getMessage())) throw e;
                         inDollars = true;
                         activeCoins = null;   // the dollar and the euro leave the list
-                        cache.edit().putString("dollarsFor", CURRENCY).apply();
+                        cache.edit().putString("dollarsFor", CURRENCY).putLong("dollarsAt", System.currentTimeMillis()).apply();
                         AppLog.w("prices: Binance has no " + CURRENCY + " pairs, using dollars");
                         body = getPrices();
                     }
