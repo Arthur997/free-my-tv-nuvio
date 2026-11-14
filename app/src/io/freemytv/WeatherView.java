@@ -25,32 +25,40 @@ import java.util.concurrent.ExecutorService;
 
 /**
  * The weather screen, in the home screen's look: light by day, dark at night, every panel made of the shelf's glass
- * (DockGlass), the focused day on a white pill. Two pages, one above the other:
- *  - Today: now in large type with a sentence about the day (WeatherSummary), the next 24 hours (temperature curve,
- *    symbols and the chance of rain), and eight tiles: rain, humidity, wind, UV, air quality, pressure, visibility,
- *    and the sun's arc between sunrise and sunset.
- *  - The next 7 days (↓ or OK): one row per day with its range on the week's scale; the focused day's details beside.
+ * (DockGlass), the focused item on a white pill. Two tabs at the top (TabBar), side by side:
+ *  - Today: now in large type with a sentence about the day (WeatherSummary), the next 24 hours every two hours (each
+ *    one's temperature and chance of rain written out, with the day's high, low and likeliest rain in one line), and
+ *    eight tiles: rain, humidity, wind, UV, air quality, pressure, visibility, and the sun's arc.
+ *  - 7 days: one row per day with its range on the week's scale; the focused day's details beside.
+ * One way to move everywhere: ← → change the tab, ↓ goes into the tab's items, ↑ ↓ move between them, Back goes back up
+ * (then closes); a line at the bottom says what the keys do where the focus is.
  * Text is made when the forecast, the minute or the focus changes, never while drawing. The pages are layers (like the
- * home screen's): scrolling moves them without redrawing their glass, and a focus move redraws only the days' rows.
+ * home screen's): changing tabs moves them without redrawing their glass, and a focus move redraws only what it changes.
  * Measurements are in a 1920×1080 space (k = width / 1920).
  */
 final class WeatherView extends ViewGroup implements Choreographer.FrameCallback {
     private static final float M = 80, R = 1840, TITLE_BASE = 116, PANEL_RADIUS = 30;
-    private static final int TODAY = 0, DAYS_BACK = 1, DAYS_FRONT = 2;
-    // Today
-    private static final float HOURS_L = 740, HOURS_T = 160, HOURS_B = 584;
+    private static final int TODAY = 0, DAYS_BACK = 1, DAYS_FRONT = 2, CHROME = 3;
+    private static final int TAB_TODAY = 0, TAB_DAYS = 1;
+    // Today: the next 24 hours in 12 columns of two hours, after a column with the rows' names.
+    private static final float HOURS_L = 740, HOURS_T = 160, HOURS_B = 584, HOURS_NAMES = 92;
+    private static final int COLUMNS = 12, STEP_HOURS = 2;
     private static final float TILES_T = 612, TILE_H = 196, TILE_GAP = 24;
     private static final int TILES = 8, TILE_RAIN = 0, TILE_HUMIDITY = 1, TILE_WIND = 2, TILE_UV = 3, TILE_AIR = 4,
             TILE_PRESSURE = 5, TILE_VISIBILITY = 6, TILE_SUN = 7;
     // Next days
-    private static final float DAYS_L = 80, DAYS_R = 1060, DAYS_T = 160, DAYS_B = 1028, ROW_TOP = 174, ROW_H = 120, ROW_PILL = 112;
+    private static final float DAYS_L = 80, DAYS_R = 1060, DAYS_T = 160, DAYS_B = 1028, ROW_TOP = 214, ROW_H = 114, ROW_PILL = 106;
     private static final float DETAIL_L = 1100;
     private static final int FACTS = 7;
     private static final int INK = 0xFF1D1D1F, DIM = 0xFF6E6E73;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Ui.background("weather");
-    private final Spring page = new Spring(0.34f, 0.92f, 0);   // 0 = today, 1 = the next days
+    private final Spring page = new Spring(0.34f, 0.92f, 0);   // the tab shown: 0 = today, 1 = the next days
+    private final TabBar tabs = new TabBar(Ui.tr("Hoje", "Today", "Hoy"), Ui.tr("7 dias", "7 Days", "7 días"));
+    private int tab;
+    /** The focus is on the tabs (else down in the page: the days). */
+    private boolean onTabs = true;
     private final Spring[] rowFocus = new Spring[Forecast.DAYS];
     private Forecast forecast;
     private WeatherLocation.Place place;
@@ -64,7 +72,7 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
     // Paints (made with the size and the theme)
     private Paint title, headerRight, condition, bigTemp, heroLine, panelTitle, hourLabel, hourTemp, chanceLabel;
     private Paint tileTitle, tileValue, tileSub, dayName, dayTemp, dayDim, dayChance, detailDate, detailTemp, detailText,
-            factLabel, factValue, message;
+            factLabel, factValue, message, tabText, tabOn, hint, rowName, nowLabel, hourDim;
     private TextPaint summaryPaint;
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG), stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint background = new Paint(), shade = new Paint(), shadow = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -72,17 +80,19 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
     private final Paint glassShadow = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Scene scene = new Scene();
     private final DockGlass glass = new DockGlass(scene, shadows, glassShadow);
-    private final Layer today, daysBack, daysFront;
+    private final Layer today, daysBack, daysFront, chrome;
     private final RectF rect = new RectF(), pill = new RectF();
     private final Path curve = new Path();
 
     // Text, made in prepare()
     private String titleText = "", headerText = "", tempText = "", conditionText = "", lineText = "", messageText = "";
-    private String hoursTitle = "", daysTitle = "";
+    private String hoursTitle = "", daysTitle = "", hoursLine = "", hintText = "";
     private StaticLayout summary;
-    private final String[] hourLabels = new String[Forecast.HOURS], hourTemps = new String[Forecast.HOURS],
-            hourChances = new String[Forecast.HOURS];
-    private final float[] curveX = new float[Forecast.HOURS], curveY = new float[Forecast.HOURS];
+    // The 12 columns: their hour, temperature, chance of rain (the higher of their two hours) and its bar's height.
+    private final String[] hourLabels = new String[COLUMNS], hourTemps = new String[COLUMNS], hourChances = new String[COLUMNS];
+    private final int[] columnHour = new int[COLUMNS], columnChance = new int[COLUMNS];
+    private final float[] curveX = new float[COLUMNS], curveY = new float[COLUMNS];
+    private int columns;
     private final String[] tileTitles = new String[TILES], tileValues = new String[TILES], tileSubs = new String[TILES];
     private static final String[] TILE_SYMBOLS = {"umbrella", "humidity", "air", "uv", "air_quality", "pressure", "visibility", "sunrise"};
     private float uvAt = -1, airAt = -1, windTo = Float.NaN, sunAt = -1;
@@ -111,13 +121,14 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
         today = new Layer(a, TODAY);
         daysBack = new Layer(a, DAYS_BACK);
         daysFront = new Layer(a, DAYS_FRONT);
+        chrome = new Layer(a, CHROME);   // the title, the tabs and the keys' line: still while the pages move
         // On the GPU (not on Android 8 to 11, as the home screen): the glass is drawn once, then only moved.
         for (View v : new View[] {today, daysBack}) v.setLayerType(Ui.LEGACY ? LAYER_TYPE_NONE : LAYER_TYPE_HARDWARE, null);
-        for (View v : new View[] {today, daysBack, daysFront}) {
+        for (View v : new View[] {today, daysBack, daysFront, chrome}) {
             v.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
             addView(v);
         }
-        for (int i = 0; i < rowFocus.length; i++) rowFocus[i] = Spring.focus(i == 0 ? 1 : 0);
+        for (int i = 0; i < rowFocus.length; i++) rowFocus[i] = Spring.focus(0);   // no day focused until ↓ from the tabs
         stroke.setStyle(Paint.Style.STROKE);
         stroke.setStrokeCap(Paint.Cap.ROUND);
         stroke.setStrokeJoin(Paint.Join.ROUND);
@@ -212,19 +223,20 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
         });
     }
 
-    // MARK: - Keys: ↓ / OK to the days, ↑ / Back to today; Back on today closes (the activity)
+    // MARK: - Keys: ← → tabs, ↓ into the tab's items (the days), ↑ ↓ between them, Back back up then out
 
     boolean onKey(KeyEvent e) {
         boolean down = e.getAction() == KeyEvent.ACTION_DOWN;
         switch (e.getKeyCode()) {
-            case KeyEvent.KEYCODE_DPAD_DOWN:
-                if (down) moveDay(1);
-                return true;
-            case KeyEvent.KEYCODE_DPAD_UP:
-                if (down) moveDay(-1);
-                return true;
             case KeyEvent.KEYCODE_DPAD_LEFT:
             case KeyEvent.KEYCODE_DPAD_RIGHT:
+                if (down && onTabs) showTab(tab + (e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1));
+                return true;
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                if (down) moveDown(1);
+                return true;
+            case KeyEvent.KEYCODE_DPAD_UP:
+                if (down) moveDown(-1);
                 return true;
             case KeyEvent.KEYCODE_DPAD_CENTER:
             case KeyEvent.KEYCODE_ENTER:
@@ -232,16 +244,16 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
                 if (down) {
                     if (e.getRepeatCount() == 0) okDown = true;
                 } else {
-                    if (okDown && !e.isCanceled() && page.target == 0) showDays(true);
+                    if (okDown && !e.isCanceled() && onTabs) moveDown(1);   // OK on a tab: into it
                     okDown = false;
                 }
                 return true;
             case KeyEvent.KEYCODE_BACK:
-                if (page.target == 0) return false;   // the activity closes
+                if (onTabs && tab == TAB_TODAY) return false;   // the activity closes
                 if (down) {
                     if (e.getRepeatCount() == 0) backDown = true;
                 } else {
-                    if (backDown && !e.isCanceled()) showDays(false);
+                    if (backDown && !e.isCanceled()) back();
                     backDown = false;
                 }
                 return true;
@@ -254,40 +266,64 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
         return forecast == null ? 0 : forecast.dayCount;
     }
 
-    private void moveDay(int dy) {
-        if (page.target == 0) {
-            if (dy > 0) showDays(true);
+    private void showTab(int to) {
+        if (to < 0 || to >= tabs.count() || to == tab) return;
+        tab = to;
+        page.target = to;
+        afterFocus();
+        announceForAccessibility(tabs.label(to));
+    }
+
+    /** ↓ (or ↑): from the tabs into the days, between the days, and from the first day back up to the tabs. */
+    private void moveDown(int dy) {
+        if (onTabs) {
+            if (dy < 0 || tab != TAB_DAYS || dayCount() == 0) return;   // today has nothing to pick
+            onTabs = false;
+            day = 0;
+            aimRows();
+            for (Spring s : rowFocus) s.snap(s.target);
+            prepareDay();
+            afterFocus();
             return;
         }
         int next = day + dy;
         if (next < 0) {
-            showDays(false);
+            onTabs = true;
+            aimRows();
+            afterFocus();
             return;
         }
         if (next >= dayCount()) return;
         day = next;
         aimRows();
         prepareDay();
+        afterFocus();
+    }
+
+    /** Back: from the days to the tabs, from the second tab to the first (the first closes, in onKey). */
+    private void back() {
+        if (!onTabs) moveDown(-day - 1);
+        else showTab(TAB_TODAY);
+    }
+
+    private void afterFocus() {
+        hintText = hint();
+        chrome.invalidate();
         daysFront.invalidate();
         wake();
     }
 
-    private void showDays(boolean on) {
-        if (on && dayCount() == 0) return;
-        page.target = on ? 1 : 0;
-        if (on) {
-            day = 0;
-            aimRows();
-            for (Spring s : rowFocus) s.snap(s.target);
-            prepareDay();
-            daysFront.invalidate();
-        }
-        announceForAccessibility(on ? daysTitle : summary != null ? summary.getText().toString() : conditionText);
-        wake();
+    /** What the keys do where the focus is, in the line at the bottom. */
+    private String hint() {
+        if (!onTabs) return Ui.tr("↑ ↓ escolhe o dia  ·  Voltar volta às abas", "↑ ↓ pick a day  ·  Back returns to the tabs",
+                "↑ ↓ elige el día  ·  Volver regresa a las pestañas");
+        if (tab == TAB_DAYS) return Ui.tr("↓ escolhe um dia  ·  ← → troca de aba", "↓ pick a day  ·  ← → change tabs",
+                "↓ elige un día  ·  ← → cambia de pestaña");
+        return Ui.tr("→ próximos 7 dias  ·  Voltar sai", "→ next 7 days  ·  Back exits", "→ próximos 7 días  ·  Volver sale");
     }
 
     private void aimRows() {
-        for (int i = 0; i < rowFocus.length; i++) rowFocus[i].target = i == day ? 1 : 0;
+        for (int i = 0; i < rowFocus.length; i++) rowFocus[i].target = !onTabs && i == day ? 1 : 0;
     }
 
     // MARK: - Frames: only while the page or the focus moves
@@ -331,28 +367,29 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
 
     @Override protected void onMeasure(int widthSpec, int heightSpec) {
         int width = MeasureSpec.getSize(widthSpec), height = MeasureSpec.getSize(heightSpec);
-        for (View v : new View[] {today, daysBack, daysFront}) {
+        for (View v : new View[] {today, daysBack, daysFront, chrome}) {
             v.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
         }
         setMeasuredDimension(width, height);
     }
 
     @Override protected void onLayout(boolean changed, int l, int t, int r, int b) {
-        for (View v : new View[] {today, daysBack, daysFront}) v.layout(0, 0, r - l, b - t);
+        for (View v : new View[] {today, daysBack, daysFront, chrome}) v.layout(0, 0, r - l, b - t);
     }
 
-    /** The pages where the scroll has them (only moved, not redrawn). */
+    /** The pages side by side, where the tab has them (only moved, not redrawn). */
     private void place() {
-        float scroll = page.value * h;
-        today.setTranslationY(-scroll);
-        daysBack.setTranslationY(h - scroll);
-        daysFront.setTranslationY(h - scroll);
+        float scroll = page.value * w;
+        today.setTranslationX(-scroll);
+        daysBack.setTranslationX(w - scroll);
+        daysFront.setTranslationX(w - scroll);
     }
 
     private void redraw() {
         today.invalidate();
         daysBack.invalidate();
         daysFront.invalidate();
+        chrome.invalidate();
     }
 
     /**
@@ -377,7 +414,8 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
             if (w == 0) return;
             if (kind == TODAY) drawToday(c);
             else if (kind == DAYS_BACK) drawDaysBack(c);
-            else drawDaysFront(c);
+            else if (kind == DAYS_FRONT) drawDaysFront(c);
+            else drawChrome(c);
         }
     }
 
@@ -428,6 +466,15 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
         factValue.setTextAlign(Paint.Align.RIGHT);
         message = Ui.text(Ui.medium, 30 * k, dim());
         message.setTextAlign(Paint.Align.CENTER);
+        tabText = Ui.text(Ui.medium, 28 * k, dim());
+        tabOn = Ui.text(Ui.semibold, 28 * k, ink(1));
+        hint = Ui.text(Ui.medium, 21 * k, dim());
+        hint.setTextAlign(Paint.Align.CENTER);
+        rowName = Ui.text(Ui.semibold, 21 * k, dim());
+        nowLabel = Ui.numbers(Ui.semibold, 22 * k, ink(1));
+        nowLabel.setTextAlign(Paint.Align.CENTER);
+        hourDim = Ui.numbers(Ui.medium, 21 * k, dim());
+        hourDim.setTextAlign(Paint.Align.CENTER);
         shadow.setMaskFilter(new BlurMaskFilter(22 * k, BlurMaskFilter.Blur.NORMAL));
         glassShadow.setMaskFilter(new BlurMaskFilter(DockGlass.SHADOW_BLUR * k, BlurMaskFilter.Blur.NORMAL));
         summary = null;   // laid out again with the new paint
@@ -440,6 +487,8 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
         Forecast f = forecast;
         long now = System.currentTimeMillis();
         titleText = Prefs.city().isEmpty() ? Ui.tr("Previsão do tempo", "Forecast", "Pronóstico") : Prefs.city();
+        tabs.layout(M * k + title.measureText(titleText) + 40 * k, 98 * k, k, tabOn);
+        hintText = hint();
         hoursTitle = Ui.tr("Próximas 24 horas", "Next 24 Hours", "Próximas 24 horas");
         daysTitle = Ui.tr("Próximos 7 dias", "Next 7 Days", "Próximos 7 días");
         headerText = header(f);
@@ -486,28 +535,58 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
         return b.toString();
     }
 
+    /**
+     * The next 24 hours in 12 columns of two hours: each one's temperature and chance of rain written out (the rain:
+     * the higher of its two hours, so none is missed), the curve through the temperatures, and above it one line with
+     * the high, the low and the likeliest rain, which says it without reading the chart.
+     */
     private void prepareHours(Forecast f) {
-        int n = f.hourCount;
-        if (n == 0) return;
-        double low = Double.MAX_VALUE, high = -Double.MAX_VALUE;
-        for (int i = 0; i < n; i++) {
-            low = Math.min(low, f.hourTemp[i]);
-            high = Math.max(high, f.hourTemp[i]);
-            hourLabels[i] = i == 0 ? Ui.tr("Agora", "Now", "Ahora") : HomeData.hour(f.hourAt[i]);
-            hourTemps[i] = HomeData.degrees(f.hourTemp[i]);
-            hourChances[i] = f.hourChance[i] >= 10 ? f.hourChance[i] + "%" : "";
+        columns = Math.min(COLUMNS, (f.hourCount + STEP_HOURS - 1) / STEP_HOURS);
+        if (columns == 0) {
+            hoursLine = "";
+            return;
         }
-        float left = (HOURS_L + 34) * k, width = (R - 34 - HOURS_L - 34) * k, col = width / Forecast.HOURS;
-        float top = 368 * k, bottom = 440 * k;
+        double low = Double.MAX_VALUE, high = -Double.MAX_VALUE;
+        int highAt = 0, lowAt = 0, rainAt = -1;
+        for (int c = 0; c < columns; c++) {
+            int i = c * STEP_HOURS;
+            columnHour[c] = i;
+            int chance = f.hourChance[i];
+            if (i + 1 < f.hourCount) chance = Math.max(chance, f.hourChance[i + 1]);
+            columnChance[c] = chance;
+            if (f.hourTemp[i] > high) {
+                high = f.hourTemp[i];
+                highAt = i;
+            }
+            if (f.hourTemp[i] < low) {
+                low = f.hourTemp[i];
+                lowAt = i;
+            }
+            if (chance >= 0 && (rainAt < 0 || chance > columnChance[rainAt])) rainAt = c;
+            hourLabels[c] = i == 0 ? Ui.tr("Agora", "Now", "Ahora") : HomeData.hour(f.hourAt[i]);
+            hourTemps[c] = HomeData.degrees(f.hourTemp[i]);
+            hourChances[c] = chance < 0 ? "—" : chance + "%";
+        }
+        String rain = rainAt < 0 || columnChance[rainAt] < 20
+                ? Ui.tr("Sem chuva prevista", "No rain expected", "Sin lluvia prevista")
+                : Ui.trf(Ui.tr("Chuva mais provável às {time} ({p})", "Rain likeliest at {time} ({p})", "Lluvia más probable a las {time} ({p})"),
+                        "time", HomeData.hour(f.hourAt[columnHour[rainAt]]), "p", columnChance[rainAt] + "%");
+        hoursLine = Ui.trf(Ui.tr("Máx. {max} às {at}", "High {max} at {at}", "Máx. {max} a las {at}"), "max", HomeData.degrees(high),
+                "at", HomeData.hour(f.hourAt[highAt])) + "  ·  "
+                + Ui.trf(Ui.tr("Mín. {min} às {at}", "Low {min} at {at}", "Mín. {min} a las {at}"), "min", HomeData.degrees(low),
+                "at", HomeData.hour(f.hourAt[lowAt])) + "  ·  " + rain;
+        float left = (HOURS_L + 34 + HOURS_NAMES) * k, col = (R - 34 - HOURS_L - 34 - HOURS_NAMES) * k / COLUMNS;
+        float top = 404 * k, bottom = 446 * k;
         double span = Math.max(1, high - low);   // a flat day stays a flat line in the middle
         curve.rewind();
-        for (int i = 0; i < n; i++) {
-            curveX[i] = left + col * (i + 0.5f);
-            curveY[i] = high - low < 1 ? (top + bottom) / 2 : (float) (bottom - (f.hourTemp[i] - low) / span * (bottom - top));
-            if (i == 0) curve.moveTo(curveX[i], curveY[i]);
+        for (int c = 0; c < columns; c++) {
+            curveX[c] = left + col * (c + 0.5f);
+            double t = f.hourTemp[columnHour[c]];
+            curveY[c] = high - low < 1 ? (top + bottom) / 2 : (float) (bottom - (t - low) / span * (bottom - top));
+            if (c == 0) curve.moveTo(curveX[c], curveY[c]);
             else {
-                float mid = (curveX[i - 1] + curveX[i]) / 2;   // a soft curve: each step eased through the middle
-                curve.cubicTo(mid, curveY[i - 1], mid, curveY[i], curveX[i], curveY[i]);
+                float mid = (curveX[c - 1] + curveX[c]) / 2;   // a soft curve: each step eased through the middle
+                curve.cubicTo(mid, curveY[c - 1], mid, curveY[c], curveX[c], curveY[c]);
             }
         }
     }
@@ -594,9 +673,12 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
         c.drawRect(0, 0, w, h, shade);
     }
 
-    private void drawHeader(Canvas c, String text) {
-        c.drawText(text, M * k - Ui.leftBearing(title, text), TITLE_BASE * k, title);
+    /** Still while the pages move: the city, the tabs, when it was updated, and what the keys do. */
+    private void drawChrome(Canvas c) {
+        c.drawText(titleText, M * k - Ui.leftBearing(title, titleText), TITLE_BASE * k, title);
+        tabs.draw(c, glass, shadows, light, k, tab, onTabs, tabText, tabOn, INK);
         c.drawText(headerText, R * k, TITLE_BASE * k, headerRight);
+        c.drawText(hintText, w / 2f, 1064 * k, hint);
     }
 
     /** A panel of the shelf's glass (DockGlass; flat in performance mode). */
@@ -606,7 +688,6 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
     }
 
     private void drawToday(Canvas c) {
-        drawHeader(c, titleText);
         Forecast f = forecast;
         if (f == null || !f.hasNow()) {
             drawMessage(c);
@@ -644,31 +725,41 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
     private void drawHours(Canvas c, Forecast f) {
         panel(c, HOURS_L, HOURS_T, R, HOURS_B);
         float x = (HOURS_L + 34) * k;
-        c.drawText(hoursTitle, x, 210 * k, panelTitle);
-        int n = f.hourCount;
-        if (n == 0) return;
-        float col = (R - 34 - HOURS_L - 34) * k / Forecast.HOURS;
-        // Rain chance: a bar per hour along the bottom.
-        float barBottom = 548 * k, barMax = 40 * k, barW = Math.max(2 * k, col - 12 * k);
+        c.drawText(hoursTitle, x, 206 * k, panelTitle);
+        c.drawText(hoursLine, x, 242 * k, tileSub);
+        if (columns == 0) return;
+        float col = (R - 34 - HOURS_L - 34 - HOURS_NAMES) * k / COLUMNS;
+        // "Now" sits on a faint column, so the row reads from there.
+        rect.set(curveX[0] - col / 2 + 4 * k, 262 * k, curveX[0] + col / 2 - 4 * k, 572 * k);
         fill.setShader(null);
-        for (int i = 0; i < n; i++) {
-            if (f.hourChance[i] < 0) continue;
-            float hgt = Math.max(3 * k, barMax * f.hourChance[i] / 100f);
-            fill.setColor(Ui.alpha(blue(), f.hourChance[i] >= 10 ? 0.55f : 0.18f));
-            rect.set(curveX[i] - barW / 2, barBottom - hgt, curveX[i] + barW / 2, barBottom);
-            c.drawRoundRect(rect, 3 * k, 3 * k, fill);
-        }
-        stroke.setStrokeWidth(3 * k);
-        stroke.setColor(ink(0.8f));
+        fill.setColor(ink(0.06f));
+        c.drawRoundRect(rect, 14 * k, 14 * k, fill);
+        // The rows' names.
+        c.drawText(Ui.tr("Temp.", "Temp.", "Temp."), x, 372 * k + Ui.halfCap(rowName) - 8 * k, rowName);
+        c.drawText(Ui.tr("Chuva", "Rain", "Lluvia"), x, 516 * k + Ui.halfCap(rowName), rowName);
+        stroke.setStrokeWidth(2.5f * k);
+        stroke.setColor(ink(0.35f));
         c.drawPath(curve, stroke);
-        // Every third hour: its time, symbol, temperature (on its point) and chance of rain.
-        for (int i = 0; i < n; i += 3) {
-            c.drawText(hourLabels[i], curveX[i], 262 * k, hourLabel);
-            Symbols.draw(getContext(), c, Symbols.weather(f.hourCode[i], f.hourDay[i]), curveX[i], 304 * k, 28 * k, ink(0.9f));
-            fill.setColor(ink(1));
-            c.drawCircle(curveX[i], curveY[i], 6 * k, fill);
-            c.drawText(hourTemps[i], curveX[i], curveY[i] - 18 * k, hourTemp);
-            if (!hourChances[i].isEmpty()) c.drawText(hourChances[i], curveX[i], 574 * k, chanceLabel);
+        float barBottom = 562 * k, barMax = 30 * k, barW = Math.min(36 * k, col - 18 * k);
+        for (int i = 0; i < columns; i++) {
+            float cx = curveX[i];
+            c.drawText(hourLabels[i], cx, 290 * k, i == 0 ? nowLabel : hourDim);
+            int hour = columnHour[i];
+            Symbols.draw(getContext(), c, Symbols.weather(f.hourCode[hour], f.hourDay[hour]), cx, 326 * k, 26 * k, ink(0.9f));
+            c.drawText(hourTemps[i], cx, 376 * k, hourTemp);
+            fill.setColor(ink(0.85f));
+            c.drawCircle(cx, curveY[i], 4.5f * k, fill);
+            // The chance written, then its bar: blue when it's worth noticing (20% or more).
+            int chance = columnChance[i];
+            boolean likely = chance >= 20;
+            chanceLabel.setColor(likely ? blue() : dim());
+            c.drawText(hourChances[i], cx, 516 * k + Ui.halfCap(chanceLabel), chanceLabel);
+            if (chance > 0) {
+                float hgt = Math.max(3 * k, barMax * chance / 100f);
+                fill.setColor(Ui.alpha(blue(), likely ? 0.7f : 0.25f));
+                rect.set(cx - barW / 2, barBottom - hgt, cx + barW / 2, barBottom);
+                c.drawRoundRect(rect, 3 * k, 3 * k, fill);
+            }
         }
     }
 
@@ -742,13 +833,19 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
         tileSub.setTextAlign(Paint.Align.LEFT);
     }
 
-    /** The days page's still part: the title and the two glass panels. */
+    /** The days page's still part: the two glass panels and the columns' names. */
     private void drawDaysBack(Canvas c) {
-        drawHeader(c, daysTitle);
         Forecast f = forecast;
         if (f == null || f.dayCount == 0) return;
         panel(c, DAYS_L, DAYS_T, DAYS_R, DAYS_B);
         panel(c, DETAIL_L, DAYS_T, R, DAYS_B);
+        float y = 196 * k;
+        c.drawText(daysTitle, (DAYS_L + 44) * k, y, panelTitle);
+        c.drawText(Ui.tr("Chuva", "Rain", "Lluvia"), (DAYS_L + 384) * k, y, rowName);
+        rowName.setTextAlign(Paint.Align.RIGHT);
+        c.drawText(Ui.tr("Mín.", "Low", "Mín."), (DAYS_L + 570) * k, y, rowName);
+        rowName.setTextAlign(Paint.Align.LEFT);
+        c.drawText(Ui.tr("Máx.", "High", "Máx."), (DAYS_L + 864) * k, y, rowName);
     }
 
     /** What the focus changes: the rows (and the pill) and the focused day's details. */
