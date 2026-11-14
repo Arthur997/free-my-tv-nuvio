@@ -99,6 +99,12 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
 
     private final Scene scene = new Scene(false);
     private final HomeData data;
+    private final FootballData football;
+    /** The followed team's live score in the corner (Prefs.footballInDream): redrawn when it changes. */
+    private final FootballData.Listener footballListener = new FootballData.Listener() {
+        @Override public void onFootball() { onData(); }
+        @Override public void onFootballNotice(String text) {}
+    };
     private final Recs recs;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private ExecutorService worker = Ui.background("dream");
@@ -133,6 +139,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         @Override public void run() {
             if (!running) return;
             data.refreshIfStale();
+            if (Prefs.footballInDream()) football.refreshIfStale();
             recs.refreshIfStale();
             recs.prefetchAll();
             dirty = true;
@@ -145,6 +152,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     DreamView(Context c) {
         super(c);
         data = HomeData.get(c);
+        football = FootballData.get(c);
         recs = Recs.get(c);
         Shaders.dream(scene.palette);
         scene.setMotion(0.4f, 0.32f);
@@ -171,6 +179,8 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         fallback = recs.showcase().isEmpty();
         data.addListener(this);
         recs.addListener(this);
+        football.addListener(footballListener);
+        if (Prefs.footballInDream()) football.refreshIfStale();
         data.refreshIfStale();
         recs.refreshIfStale();
         recs.prefetchAll();
@@ -189,6 +199,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         handler.removeCallbacks(tick);
         data.removeListener(this);
         recs.removeListener(this);
+        football.removeListener(footballListener);
         // The photos stay in GPU memory until the garbage collector runs: release them now (after the last frame).
         final java.util.Set<Bitmap> gone = new java.util.HashSet<>();
         for (Slide s : new Slide[] {current, incoming, prepared}) {
@@ -551,10 +562,22 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             }
             String stale = HomeData.staleness(data.pricesAt, 5 * 60_000L);
             if (!stale.isEmpty() && n > 0) c.drawText(stale, right - total - 24 * k - cornerStale.measureText(stale), base, cornerStale);
+            String score = liveScore();
+            if (!score.isEmpty()) c.drawText(score, right - cornerQuote.measureText(score), base + (n > 0 ? 44 : 0) * k, cornerQuote);
         } finally {
             chrome.endRecording();
         }
         chromeDirty = false;
+    }
+
+    /** "FLA 2 × 1 PAL  ·  67'" while the followed team plays (and the screensaver may show it), else "". */
+    private String liveScore() {
+        if (!Prefs.football() || !Prefs.footballInDream()) return "";
+        Football.Match m = football.live();
+        if (m == null) return "";
+        String home = m.home.abbreviation.isEmpty() ? m.home.label() : m.home.abbreviation;
+        String away = m.away.abbreviation.isEmpty() ? m.away.label() : m.away.abbreviation;
+        return home + " " + Math.max(0, m.homeScore) + " × " + Math.max(0, m.awayScore) + " " + away + (m.clock.isEmpty() ? "" : "  ·  " + m.clock);
     }
 
     private void drawGlass(Canvas c, float alpha, float e) {
@@ -773,6 +796,10 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             x += weatherPaint.measureText(now) + 18 * k;
             c.drawText(range, x, base, weatherDim);
         }
+
+        // The team's live score under the weather.
+        String score = liveScore();
+        if (!score.isEmpty()) c.drawText(score, cx - weatherDim.measureText(score) / 2, clockBase + 132 * k, weatherDim);
 
         // Prices near the bottom edge: small white logo + value, all four on one line.
         float cap = Ui.cap(quotePaint), spacing = 56 * k, gap = 10 * k;
