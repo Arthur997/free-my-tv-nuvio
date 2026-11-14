@@ -830,7 +830,8 @@ public class SettingsActivity extends Activity {
                     "Light: store demos, manuals, telemetry and ads.\nRecommended: also promo channels and the maker's stores and accounts.\nComplete: also extras some people use (screen mirroring, the voice assistant).",
                     "Ligera: demos de tienda, manuales, telemetría y anuncios.\nRecomendada: también canales promocionales, tiendas y cuentas del fabricante.\nCompleta: también extras que algunos usan (duplicar pantalla, asistente de voz).");
             p.rows.add(level);
-            Row apply = dimmed(new Row(() -> Ui.plural(Ui.tr("plural|one:Desligar {n} app|other:Desligar {n} apps",
+            Row apply = dimmed(new Row(() -> pickedApps().isEmpty() ? Ui.tr("Nada a desligar neste nível", "Nothing to turn off at this level",
+                    "Nada que apagar en este nivel") : Ui.plural(Ui.tr("plural|one:Desligar {n} app|other:Desligar {n} apps",
                     "plural|one:Turn off {n} app|other:Turn off {n} apps", "plural|one:Apagar {n} app|other:Apagar {n} apps"), pickedApps().size()),
                     () -> busy() ? HomeMode.busyText(state) : pickedMb() > 0 ? Ui.trf(Ui.tr("~{mb} MB livres", "~{mb} MB freed", "~{mb} MB libres"), "mb", pickedMb()) : "",
                     () -> {
@@ -839,7 +840,7 @@ public class SettingsActivity extends Activity {
                         Debloat.request(getContext(), off, new ArrayList<>());
                         cleanAdd.clear();
                         cleanSkip.clear();
-                    }, null, null), this::busy);
+                    }, null, null), () -> busy() || pickedApps().isEmpty());
             apply.help = () -> Ui.tr("Desliga os apps marcados com “Vai desligar” abaixo. A memória é o que eles usam agora.",
                     "Turns off the apps marked “Goes off” below. The memory is what they're using now.",
                     "Apaga las apps marcadas con “Se apaga” abajo. La memoria es la que usan ahora.");

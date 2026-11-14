@@ -55,7 +55,44 @@ final class EspnFootball implements FootballSource {
         } catch (Exception e) {
             AppLog.w("football fixtures: " + e.getMessage());
         }
+        // Nothing under way in the fixtures: today's match in its main league, if any (live, or just over: in Portuguese
+        // the "next event" is empty right after the final whistle, and a season's last match has no fixtures after it).
+        long now = System.currentTimeMillis();
+        if (o.match == null || !o.match.underway(now) && !sameDay(o.match.at, now)) {
+            try {
+                Football.Match today = today(o.team.league, o.team.leagueName, teamId, now);
+                if (today != null) o.match = today;
+            } catch (Exception e) {
+                AppLog.w("football today: " + e.getMessage());
+            }
+        }
         return o;
+    }
+
+    /** ESPN's days (US Eastern), as its scoreboards group the matches. */
+    private static SimpleDateFormat espnDay() {
+        SimpleDateFormat day = new SimpleDateFormat("yyyyMMdd", Locale.US);
+        day.setTimeZone(TimeZone.getTimeZone("America/New_York"));
+        return day;
+    }
+
+    private static boolean sameDay(long a, long b) {
+        SimpleDateFormat day = espnDay();
+        return day.format(a).equals(day.format(b));
+    }
+
+    /** The team's match today in this league's scoreboard; null when it doesn't play today. */
+    private Football.Match today(String league, String leagueName, String teamId, long now) throws Exception {
+        if (league == null || league.isEmpty()) return null;
+        JSONArray events = json(SITE + league + "/scoreboard?dates=" + espnDay().format(now)).optJSONArray("events");
+        for (int i = 0; events != null && i < events.length(); i++) {
+            Football.Match m = match(events.getJSONObject(i));
+            if (!m.has(teamId)) continue;
+            m.league = league;
+            m.leagueName = leagueName;
+            return m;
+        }
+        return null;
     }
 
     /** The match under way, else the next one, from the team's fixtures; null when it has none. */
@@ -76,10 +113,8 @@ final class EspnFootball implements FootballSource {
     /** The match as its league's scoreboard has it now (the team's lists lag minutes behind); null if it isn't there. */
     private Football.Match scoreboard(Football.Match old) throws Exception {
         if (old.league.isEmpty()) return null;
-        // The scoreboard's days are ESPN's (US Eastern): the match's own day there.
-        SimpleDateFormat day = new SimpleDateFormat("yyyyMMdd", Locale.US);
-        day.setTimeZone(TimeZone.getTimeZone("America/New_York"));
-        JSONArray events = json(SITE + old.league + "/scoreboard?dates=" + day.format(old.at)).optJSONArray("events");
+        // The scoreboard's days are ESPN's: the match's own day there.
+        JSONArray events = json(SITE + old.league + "/scoreboard?dates=" + espnDay().format(old.at)).optJSONArray("events");
         for (int i = 0; events != null && i < events.length(); i++) {
             JSONObject e = events.getJSONObject(i);
             if (!old.id.equals(e.optString("id"))) continue;

@@ -305,9 +305,12 @@ final class Debloat {
 
     private static String summary(int off, int on, long mb) {
         if (off == 0 && on == 0) return Ui.tr("Limpeza: nada mudou", "Cleanup: nothing changed", "Limpieza: nada cambió");
-        if (off == 0) return Ui.trf(Ui.tr("Limpeza desfeita: {n} apps ligados de novo", "Cleanup undone: {n} apps back on",
-                "Limpieza deshecha: {n} apps encendidas de nuevo"), "n", on);
-        String text = Ui.trf(Ui.tr("Limpeza: {n} apps desligados", "Cleanup: {n} apps turned off", "Limpieza: {n} apps apagadas"), "n", off);
+        if (off == 0) return Ui.plural(Ui.tr("plural|one:Limpeza desfeita: {n} app ligado de novo|other:Limpeza desfeita: {n} apps ligados de novo",
+                "plural|one:Cleanup undone: {n} app back on|other:Cleanup undone: {n} apps back on",
+                "plural|one:Limpieza deshecha: {n} app encendida de nuevo|other:Limpieza deshecha: {n} apps encendidas de nuevo"), on);
+        String text = Ui.plural(Ui.tr("plural|one:Limpeza: {n} app desligado|other:Limpeza: {n} apps desligados",
+                "plural|one:Cleanup: {n} app turned off|other:Cleanup: {n} apps turned off",
+                "plural|one:Limpieza: {n} app apagada|other:Limpieza: {n} apps apagadas"), off);
         if (mb > 0) text += Ui.trf(Ui.tr(", cerca de {mb} MB de memória livres", ", about {mb} MB of memory freed",
                 ", unos {mb} MB de memoria libres"), "mb", mb);
         return text;

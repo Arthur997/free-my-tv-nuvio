@@ -255,6 +255,8 @@ final class HomeMode {
     }
 
     private static final String REMOTE_SERVICE = PKG + "/" + PKG + ".RemoteKeyService";
+    /** The same service as Android writes it back after another service turns itself off (PairingAssist). */
+    private static final String REMOTE_SERVICE_SHORT = PKG + "/.RemoteKeyService";
     private static final Pattern SERVICE = Pattern.compile("[\\w.]+/[\\w.$]+");
     private static final String REMOTE_WATCH_FILES = "/data/local/tmp/freemytv-keys";
 
@@ -267,6 +269,7 @@ final class HomeMode {
     private static final String REMOTE_WATCH = String.join("\n",
             "F=" + REMOTE_WATCH_FILES,
             "S=" + REMOTE_SERVICE,
+            "T=" + REMOTE_SERVICE_SHORT,
             "echo $$ > $F.pid",
             "while [ \"$(cat $F.pid 2>/dev/null)\" = \"$$\" ]; do",
             "  sleep 5",
@@ -276,7 +279,7 @@ final class HomeMode {
             "  pm path " + PKG + " >/dev/null 2>&1 || exit 0",
             "  now=$(settings get secure enabled_accessibility_services)",
             "  case \"$now\" in",
-            "    *$S*) sleep 60; continue ;;",
+            "    *$S*|*$T*) sleep 60; continue ;;",
             "    null|'') next=$S ;;",
             "    *) next=\"$now:$S\" ;;",
             "  esac",
@@ -293,7 +296,7 @@ final class HomeMode {
         if (current.equals("null")) current = "";
         List<String> others = new ArrayList<>();
         for (String one : current.split(":")) {
-            if (one.isEmpty() || one.equals(REMOTE_SERVICE)) continue;
+            if (one.isEmpty() || one.equals(REMOTE_SERVICE) || one.equals(REMOTE_SERVICE_SHORT)) continue;
             // Only plain component names go back into the shell command; anything else is left alone.
             if (!SERVICE.matcher(one).matches()) {
                 AppLog.w("accessibility services left as they are: unexpected entry");
@@ -301,7 +304,9 @@ final class HomeMode {
             }
             others.add(one);
         }
-        if (on == current.contains(REMOTE_SERVICE)) return;
+        boolean full = current.contains(REMOTE_SERVICE), brief = current.contains(REMOTE_SERVICE_SHORT);
+        // Already as it should be; both spellings at once get written again as one.
+        if (on == (full || brief) && !(full && brief)) return;
         List<String> list = new ArrayList<>(others);
         JSONObject s = state(c);
         if (on) {
