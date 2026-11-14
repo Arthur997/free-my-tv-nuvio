@@ -60,6 +60,15 @@ public class WeatherActivity extends Activity {
         if (!asking) finish();
     }
 
+    /**
+     * Closed for good: its process ends with it. It holds only this screen, and Android would otherwise keep it cached
+     * (~130 MB on a C6K) until it needed the memory.
+     */
+    @Override protected void onDestroy() {
+        super.onDestroy();
+        if (isFinishing()) android.os.Process.killProcess(android.os.Process.myPid());
+    }
+
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         if (RemoteKeys.onKey(this, event)) return true;
         if (view.onKey(event)) return true;
