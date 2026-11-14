@@ -89,7 +89,7 @@ public class PairingAssist extends AccessibilityService {
     private void paired() {
         toast(Ui.tr("Free My TV pareado com a TV", "Free My TV paired with the TV", "Free My TV emparejado con la TV"));
         try {
-            startActivity(new Intent().setClassName(getPackageName(), getPackageName() + ".PrepareActivity")
+            startActivity(new Intent(this, SettingsActivity.class).putExtra("prepare", true)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP));
         } catch (RuntimeException e) {
             AppLog.w("pairing assistant: " + e.getMessage());

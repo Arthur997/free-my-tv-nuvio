@@ -242,6 +242,10 @@ final class Prefs {
     static void setPricesEveryIndex(int i) { put("pricesEvery", i); }
 
     /** The shelf shows each app's own TV banner instead of its logo lifted onto a brand-colored card. */
+    /** Prepare the TV was finished once (it then opens only from the settings). */
+    static boolean prepared() { return sp().getBoolean("prepared", false); }
+    static void setPrepared(boolean on) { put("prepared", on); }
+
     static boolean originalArt() { return sp().getBoolean("originalArt", true); }
     static void setOriginalArt(boolean on) { put("originalArt", on); }
 

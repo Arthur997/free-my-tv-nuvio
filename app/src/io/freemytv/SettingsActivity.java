@@ -43,6 +43,7 @@ import java.util.Set;
 public class SettingsActivity extends Activity {
     private SettingsView view;
     private DreamView preview;   // "Screensaver": the screensaver right here, without changing the system setting
+    private boolean askedPrepare;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -61,6 +62,14 @@ public class SettingsActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         view.resume();
+        // The pairing assistant (wireless debugging paired), or the first time on a TV not switched yet.
+        if (getIntent().getBooleanExtra("prepare", false)) {
+            getIntent().removeExtra("prepare");
+            view.openPrepare();
+        } else if (!Prefs.prepared() && !askedPrepare && !HomeMode.state(this).has("since")) {
+            askedPrepare = true;
+            view.openPrepare();
+        }
         // From ADB: am start -n io.freemytv/.SettingsActivity --ez screensaver true (straight to the preview).
         if (preview == null && getIntent().getBooleanExtra("screensaver", false)) {
             getIntent().removeExtra("screensaver");
@@ -172,6 +181,8 @@ public class SettingsActivity extends Activity {
             final java.util.function.BooleanSupplier dim;
             boolean opens;   // OK opens a page or a list: a chevron instead of a value
             boolean check;   // the choice in use, in a list of choices
+            /** What it does, on the left while it has the focus (null: the page's). */
+            java.util.function.Supplier<String> help;
 
             Row(java.util.function.Supplier<String> label, java.util.function.Supplier<String> value, Runnable ok,
                 java.util.function.IntConsumer adjust, java.util.function.BooleanSupplier dim) {
@@ -189,6 +200,11 @@ public class SettingsActivity extends Activity {
             final List<Row> rows = new ArrayList<>();
             java.util.function.Supplier<String> hint = () -> "", hint2 = () -> "";
             Runnable rebuild;   // lists that change (the shelf): rows read again after a change
+            /** The big symbol on the left, and the page's text there when the focused row has none. */
+            String symbol = "sparkles";
+            java.util.function.Supplier<String> about;
+            /** Prepare the TV's pages: the poll also reads the TV's debugging settings. */
+            boolean live;
 
             Page(String title) {
                 this.title = title;
@@ -238,7 +254,7 @@ public class SettingsActivity extends Activity {
         private int w, h;
         private float k = 1;
         private Paint title, subtitle, version, rowLabel, rowValue, rowSub, header, cellLabel, cellValue, warn, spinner, white, shadow;
-        private TextPaint notice;
+        private TextPaint notice, aboutPaint;
         // Made with the size and the theme, not on every frame: a list redraws on every frame of its focus animation.
         private Paint heading, hint;
         private final TextPaint fit = new TextPaint();   // for cutting a long name to its row
@@ -254,14 +270,19 @@ public class SettingsActivity extends Activity {
             @Override public void run() {
                 if (!running) return;
                 Context c = getContext();
+                boolean live = screen == PAGE && page != null && page.live;
                 pollIo.execute(() -> {
+                    boolean[] checks = live ? prepareChecks(c) : null;
                     JSONObject newState = HomeMode.state(c);
                     boolean newHasKey = Recs.hasKey(c);
                     JSONObject newRecs = Recs.status(c);
                     String services = android.provider.Settings.Secure.getString(c.getContentResolver(),
                             android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
                     boolean serviceOn = services != null && services.contains(HomeMode.PKG + "/");
-                    handler.post(() -> applyPoll(newState, newHasKey, newRecs, serviceOn));
+                    handler.post(() -> {
+                        if (checks != null) applyChecks(checks);
+                        applyPoll(newState, newHasKey, newRecs, serviceOn);
+                    });
                 });
             }
         };
@@ -280,6 +301,7 @@ public class SettingsActivity extends Activity {
                 JSONObject newest = notices.optJSONObject(0);
                 if (newest != null) announceForAccessibility(newest.optString("text"));
             }
+            if (wasBusy && !nowBusy && page == cleanupPage && cleanupPage != null) analyzeCleanup();
             wasBusy = nowBusy;
             checkLearned();
             checkUpdating();
@@ -339,6 +361,7 @@ public class SettingsActivity extends Activity {
         /** The main menu: the home screen, one row per topic, then the shelf, the remote, the status and the TV's own. */
         private Page mainPage() {
             Page p = new Page(null);
+            p.rows.add(opens(() -> Ui.tr("Preparar a TV", "Prepare the TV", "Preparar la TV"), this::openPrepare));
             p.rows.add(new Row(() -> Ui.tr("Início", "Home Screen"),
                     () -> busy() ? "" : freeActive() ? "Free My TV" : Ui.tr("Original", "Original"), this::openHomeChoice, null, null));
             p.rows.add(opens(() -> Ui.tr("Aparência", "Appearance", "Apariencia"), () -> open(appearancePage())));
@@ -385,6 +408,381 @@ public class SettingsActivity extends Activity {
                     Prefs::soundLevel, Prefs::setSoundLevel));
             p.hint = () -> Ui.tr("OK abre as opções; ← e → mudam direto.", "OK opens the choices; ← and → change it right away.");
             return p;
+        }
+
+        // MARK: - Prepare the TV: step by step, each step checked on the TV as it changes
+
+        private boolean devOn, usbOn, wirelessOn, port5555, assistOn;
+        private boolean adbOk, testingAdb;
+        private String adbText = "";
+        private Page preparePage;
+
+        /** Read in the background by the poll, while a Prepare page is on screen. */
+        private static boolean[] prepareChecks(Context c) {
+            android.content.ContentResolver r = c.getContentResolver();
+            String services = Settings.Secure.getString(r, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            return new boolean[] {
+                Settings.Global.getInt(r, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) == 1,
+                Settings.Global.getInt(r, Settings.Global.ADB_ENABLED, 0) == 1,
+                Adb.wirelessOn(c),
+                portOpen(5555),
+                services != null && services.contains(HomeMode.PKG + "/" + HomeMode.PKG + ".PairingAssist"),
+            };
+        }
+
+        private void applyChecks(boolean[] v) {
+            devOn = v[0];
+            usbOn = v[1];
+            wirelessOn = v[2];
+            port5555 = v[3];
+            assistOn = v[4];
+        }
+
+        /** Only a TCP connection (no ADB message): it doesn't make the TV ask anything. */
+        private static boolean portOpen(int port) {
+            try (java.net.Socket s = new java.net.Socket()) {
+                s.connect(new java.net.InetSocketAddress("127.0.0.1", port), 300);
+                return true;
+            } catch (java.io.IOException e) {
+                return false;
+            }
+        }
+
+        private static String done(boolean ok) {
+            return ok ? Ui.tr("Pronto", "Done", "Listo") : Ui.tr("Falta fazer", "To do", "Por hacer");
+        }
+
+        void openPrepare() {
+            if (preparePage == null) preparePage = preparePage();
+            adbOk = adbOk || state.optBoolean("adbAuthorized");
+            if (page != preparePage) open(preparePage);
+            invalidate();
+        }
+
+        private Page preparePage() {
+            Page p = new Page(Ui.tr("Preparar a TV", "Prepare the TV", "Preparar la TV"));
+            p.symbol = "tv_settings";
+            p.live = true;
+            p.about = () -> Ui.tr("Seis passos, uma vez só. Cada um mostra à esquerda o que fazer e se confere sozinho.",
+                    "Six steps, once. Each one shows on the left what to do, and checks itself.",
+                    "Seis pasos, una sola vez. Cada uno muestra a la izquierda qué hacer y se revisa solo.");
+            Row dev = opens(() -> Ui.tr("1. Opções do desenvolvedor", "1. Developer options", "1. Opciones de desarrollador"),
+                    () -> open(developerPage()));
+            dev.help = () -> Ui.tr("Libera os ajustes que o Free My TV usa. Fica escondido até você apertar 7 vezes o número da versão da TV.",
+                    "Unlocks the settings Free My TV uses. It stays hidden until you press the TV's build number 7 times.",
+                    "Desbloquea los ajustes que usa Free My TV. Queda oculto hasta pulsar 7 veces el número de versión de la TV.");
+            p.rows.add(withValue(dev, () -> done(devOn)));
+            Row debug = opens(() -> Ui.tr("2. Depuração", "2. Debugging", "2. Depuración"), () -> open(debuggingPage()));
+            debug.help = () -> Ui.tr("Deixa o Free My TV dar comandos à própria TV (trocar o Início, desligar apps), sem computador.",
+                    "Lets Free My TV give the TV its own commands (switch the home screen, turn off apps), with no computer.",
+                    "Deja que Free My TV dé órdenes a la propia TV (cambiar el inicio, apagar apps), sin computadora.");
+            p.rows.add(withValue(debug, () -> done(port5555 || wirelessOn)));
+            Row allow = new Row(() -> Ui.tr("3. Autorizar o Free My TV", "3. Allow Free My TV", "3. Autorizar Free My TV"),
+                    () -> testingAdb || !adbText.isEmpty() && !adbOk ? adbText : done(adbOk), this::testAdb, null, null);
+            allow.help = () -> Ui.tr("OK testa a conexão. Na primeira vez a TV pergunta “Permitir depuração?”: marque “Sempre permitir” e aceite.",
+                    "OK tests the connection. The first time the TV asks “Allow debugging?”: tick “Always allow” and accept.",
+                    "OK prueba la conexión. La primera vez la TV pregunta “¿Permitir depuración?”: marca “Permitir siempre” y acepta.");
+            p.rows.add(allow);
+            Row home = new Row(() -> Ui.tr("4. Início do Free My TV", "4. Free My TV home screen", "4. Inicio de Free My TV"),
+                    () -> busy() ? "" : freeActive() ? "Free My TV" : Ui.tr("Original", "Original"), this::openHomeChoice, null, null);
+            home.help = () -> Ui.tr("Troca o Início e desliga uma lista curta de apps de propaganda (nunca desinstala). “Original” traz tudo de volta.",
+                    "Switches the home screen and turns off a short list of promo apps (never uninstalled). “Original” brings it all back.",
+                    "Cambia el inicio y apaga una lista corta de apps promocionales (nunca las desinstala). “Original” devuelve todo.");
+            p.rows.add(home);
+            Row clean = opens(() -> Ui.tr("5. Limpar a TV", "5. Clean up the TV", "5. Limpiar la TV"), this::openCleanup);
+            clean.help = () -> Ui.tr("Desliga demonstrações, telemetria e propaganda do fabricante, para sobrar memória. Dá para desfazer.",
+                    "Turns off the maker's demos, telemetry and ads, to free memory. It can be undone.",
+                    "Apaga demos, telemetría y publicidad del fabricante, para liberar memoria. Se puede deshacer.");
+            p.rows.add(withValue(clean, () -> {
+                int n = HomeMode.stringList(state, "cleaned").size();
+                return n == 0 ? Ui.tr("Opcional", "Optional", "Opcional") : Ui.trf(Ui.tr("{n} desligados", "{n} off", "{n} apagadas"), "n", n);
+            }));
+            Row key = opens(() -> Ui.tr("6. Recomendações (chave do TMDB)", "6. Picks (TMDB key)", "6. Recomendaciones (clave de TMDB)"),
+                    () -> open(tmdbPage()));
+            key.help = () -> Ui.tr("Os filmes e séries do Início e as fotos do protetor de tela vêm do TMDB, com uma chave grátis sua.",
+                    "The home screen's movies and shows and the screensaver's photos come from TMDB, with a free key of your own.",
+                    "Las películas y series del inicio y las fotos del protector vienen de TMDB, con una clave gratis tuya.");
+            p.rows.add(withValue(key, () -> Prefs.tmdbKey().isEmpty() ? Ui.tr("Opcional", "Optional", "Opcional") : done(true)));
+            Row finish = new Row(() -> Ui.tr("Concluir", "Finish", "Terminar"), () -> "", () -> {
+                Prefs.setPrepared(true);
+                goBack();
+            }, null, null);
+            finish.help = () -> Ui.tr("Volta às configurações. Este assistente fica em “Preparar a TV”.",
+                    "Back to the settings. This guide stays in “Prepare the TV”.", "Vuelve a la configuración. Esta guía queda en “Preparar la TV”.");
+            p.rows.add(finish);
+            return p;
+        }
+
+        /** The row with this value instead of a chevron (its OK still opens). */
+        private static Row withValue(Row r, java.util.function.Supplier<String> value) {
+            Row out = new Row(r.label, value, r.ok, r.adjust, r.dim);
+            out.help = r.help;
+            return out;
+        }
+
+        private static Row helped(Row r, java.util.function.Supplier<String> help) {
+            r.help = help;
+            return r;
+        }
+
+        private Page developerPage() {
+            Page p = new Page(Ui.tr("Opções do desenvolvedor", "Developer options", "Opciones de desarrollador"));
+            p.symbol = "settings";
+            p.live = true;
+            p.about = () -> Ui.tr("1. OK em “Abrir Sobre”.\n2. Desça até “Build” (ou “Versão do Android TV OS”) e aperte OK 7 vezes, até a TV dizer que você é desenvolvedor.\n3. Volte aqui com Voltar.",
+                    "1. OK on “Open About”.\n2. Go down to “Build” (or “Android TV OS build”) and press OK 7 times, until the TV says you're a developer.\n3. Come back with Back.",
+                    "1. OK en “Abrir Acerca de”.\n2. Baja hasta “Compilación” y pulsa OK 7 veces, hasta que la TV diga que eres desarrollador.\n3. Vuelve con Atrás.");
+            p.rows.add(new Row(() -> Ui.tr("Abrir Sobre", "Open About", "Abrir Acerca de"), () -> "",
+                    () -> HomeApps.openSettings(activity, Settings.ACTION_DEVICE_INFO_SETTINGS), null, null));
+            p.rows.add(new Row(() -> Ui.tr("Situação", "Status", "Estado"),
+                    () -> devOn ? Ui.tr("Ligadas", "On", "Activadas") : Ui.tr("Ainda escondidas", "Still hidden", "Aún ocultas"), () -> {}, null, null));
+            return p;
+        }
+
+        private Page debuggingPage() {
+            Page p = new Page(Ui.tr("Depuração", "Debugging", "Depuración"));
+            p.symbol = "control";
+            p.live = true;
+            p.about = () -> Ui.tr("Um dos dois basta. Comece pela depuração USB; se ela não abrir a conexão, use a depuração por Wi-Fi.",
+                    "One of the two is enough. Start with USB debugging; if it doesn't open the connection, use wireless debugging.",
+                    "Basta uno de los dos. Empieza por la depuración USB; si no abre la conexión, usa la inalámbrica.");
+            p.rows.add(helped(new Row(() -> Ui.tr("Depuração USB", "USB debugging", "Depuración USB"),
+                    () -> port5555 ? Ui.tr("Funcionando", "Working", "Funcionando") : usbOn ? Ui.tr("Ligada, sem conexão", "On, no connection", "Activada, sin conexión")
+                            : Ui.tr("Desligada", "Off", "Desactivada"),
+                    () -> HomeApps.openSettings(activity, Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS), null, null),
+                    () -> Ui.tr("OK abre as Opções do desenvolvedor: ligue “Depuração USB” e volte. Na maioria das TVs isso já basta.",
+                            "OK opens Developer options: turn on “USB debugging” and come back. On most TVs that's all it takes.",
+                            "OK abre Opciones de desarrollador: activa “Depuración USB” y vuelve. En la mayoría de las TVs alcanza.")));
+            if (AdbTls.supported()) {
+                Row wireless = opens(() -> Ui.tr("Depuração por Wi-Fi", "Wireless debugging", "Depuración inalámbrica"), () -> open(wirelessPage()));
+                wireless.help = () -> Ui.tr("Para TVs em que a depuração USB não abre a conexão (Google TV novas): pareia com um código de 6 números.",
+                        "For TVs where USB debugging doesn't open the connection (newer Google TVs): pairs with a 6-digit code.",
+                        "Para TVs donde la depuración USB no abre la conexión (Google TV nuevas): se empareja con un código de 6 números.");
+                p.rows.add(withValue(wireless, () -> wirelessOn ? Ui.tr("Ligada", "On", "Activada") : Ui.tr("Desligada", "Off", "Desactivada")));
+            }
+            return p;
+        }
+
+        private Page wirelessPage() {
+            Page p = new Page(Ui.tr("Depuração por Wi-Fi", "Wireless debugging", "Depuración inalámbrica"));
+            p.symbol = "wifi";
+            p.live = true;
+            p.rows.add(helped(new Row(() -> Ui.tr("1. Ligar o assistente de pareamento", "1. Turn on the pairing assistant", "1. Activar el asistente"),
+                    () -> assistOn ? Ui.tr("Ligado", "On", "Activado") : Ui.tr("Desligado", "Off", "Desactivado"),
+                    () -> HomeApps.openSettings(activity, Settings.ACTION_ACCESSIBILITY_SETTINGS), null, null),
+                    () -> Ui.tr("OK abre Acessibilidade: escolha “Free My TV: pareamento” e ligue. Ele só lê o código da tela de pareamento e se desliga depois.",
+                            "OK opens Accessibility: pick “Free My TV pairing” and turn it on. It only reads the pairing screen's code, and turns off afterwards.",
+                            "OK abre Accesibilidad: elige “Free My TV: emparejamiento” y actívalo. Solo lee el código de emparejamiento y luego se apaga.")));
+            p.rows.add(helped(new Row(() -> Ui.tr("2. Ligar a depuração por Wi-Fi", "2. Turn on wireless debugging", "2. Activar la depuración inalámbrica"),
+                    () -> wirelessOn ? Ui.tr("Ligada", "On", "Activada") : Ui.tr("Desligada", "Off", "Desactivada"),
+                    () -> HomeApps.openSettings(activity, Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS), null, null),
+                    () -> Ui.tr("OK abre as Opções do desenvolvedor: abra “Depuração por Wi-Fi”, ligue e aceite a pergunta da TV.",
+                            "OK opens Developer options: open “Wireless debugging”, turn it on and accept the TV's question.",
+                            "OK abre Opciones de desarrollador: abre “Depuración inalámbrica”, actívala y acepta la pregunta de la TV.")));
+            p.rows.add(helped(new Row(() -> Ui.tr("3. Parear com código", "3. Pair with a code", "3. Emparejar con código"),
+                    () -> adbOk ? Ui.tr("Pareado", "Paired", "Emparejado") : "",
+                    () -> HomeApps.openSettings(activity, Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS), null, null),
+                    () -> Ui.tr("Em “Depuração por Wi-Fi”, escolha “Parear o dispositivo com um código de pareamento”. Com o assistente ligado, o Free My TV lê o código, pareia sozinho e volta para cá.",
+                            "In “Wireless debugging”, pick “Pair device with pairing code”. With the assistant on, Free My TV reads the code, pairs by itself and comes back here.",
+                            "En “Depuración inalámbrica”, elige “Vincular dispositivo con código”. Con el asistente activado, Free My TV lee el código, se empareja solo y vuelve aquí.")));
+            return p;
+        }
+
+        /** Connects to the TV's ADB once (the TV may ask to allow it); on TCL also lets the switch run in the background. */
+        private void testAdb() {
+            if (testingAdb) return;
+            testingAdb = true;
+            adbText = Ui.tr("Conectando…", "Connecting…", "Conectando…");
+            Context app = getContext().getApplicationContext();
+            new Thread(() -> {
+                boolean ok = false;
+                String text;
+                try (Adb adb = Adb.connect(app, 120_000, () -> handler.post(() -> {
+                    adbText = Ui.tr("Aceite na TV", "Accept on the TV", "Acepta en la TV");
+                    invalidate();
+                }))) {
+                    adb.shell("echo ok");
+                    if (Ui.brand().toLowerCase(Locale.ROOT).contains("tcl")) {
+                        // TCL blocks background jobs by default: the switch (ModeJob) would never run.
+                        adb.shell("appops set " + HomeMode.PKG + " AUTO_START allow || appops set " + HomeMode.PKG + " APP_AUTO_START allow");
+                    }
+                    JSONObject s = HomeMode.state(app);
+                    s.put("adbAuthorized", true);
+                    HomeMode.save(app, s);
+                    ok = true;
+                    text = "";
+                } catch (Exception e) {
+                    AppLog.w("prepare: " + e.getMessage());
+                    text = Ui.tr("Não conectou", "No connection", "No conectó");
+                }
+                boolean result = ok;
+                String shown = text;
+                handler.post(() -> {
+                    testingAdb = false;
+                    adbOk = result;
+                    adbText = shown;
+                    invalidate();
+                });
+            }, "prepare-adb").start();
+        }
+
+        private Page tmdbPage() {
+            Page p = new Page(Ui.tr("Chave do TMDB", "TMDB key", "Clave de TMDB"));
+            p.symbol = "play";
+            p.about = () -> Ui.tr("1. No celular ou computador, crie uma conta grátis em themoviedb.org.\n2. Em Settings → API, peça uma chave (uso pessoal) e copie a “API Key”.\n3. Aqui, OK em “Digitar a chave”. O app Google TV no celular serve de teclado e cola.",
+                    "1. On a phone or computer, create a free account at themoviedb.org.\n2. In Settings → API, ask for a key (personal use) and copy the “API Key”.\n3. Here, OK on “Type the key”. The Google TV app on a phone works as a keyboard and pastes.",
+                    "1. En el celular o la computadora, crea una cuenta gratis en themoviedb.org.\n2. En Settings → API, pide una clave (uso personal) y copia la “API Key”.\n3. Aquí, OK en “Escribir la clave”. La app Google TV del celular sirve de teclado y pega.");
+            p.rows.add(new Row(() -> Ui.tr("Digitar a chave", "Type the key", "Escribir la clave"), this::tmdbKeyState, activity::askTmdbKey, null, null));
+            return p;
+        }
+
+        // MARK: - Cleanup (Debloat): the TV's list, a level, and app by app
+
+        private Page cleanupPage;
+        private List<Debloat.App> cleanupApps;
+        private boolean analyzing;
+        private String cleanupError = "";
+        private int cleanLevel = Debloat.RECOMMENDED;
+        private final Set<String> cleanAdd = new HashSet<>(), cleanSkip = new HashSet<>();
+
+        private void openCleanup() {
+            if (cleanupPage == null) {
+                cleanupPage = new Page(Ui.tr("Limpar a TV", "Clean up the TV", "Limpiar la TV"));
+                cleanupPage.symbol = "clean";
+                cleanupPage.rebuild = this::fillCleanup;
+            }
+            fillCleanup();
+            open(cleanupPage);
+            if (cleanupApps == null && !analyzing) analyzeCleanup();
+        }
+
+        private void analyzeCleanup() {
+            if (analyzing) return;
+            analyzing = true;
+            cleanupError = "";
+            fillCleanup();
+            Context app = getContext().getApplicationContext();
+            new Thread(() -> {
+                List<Debloat.App> found = null;
+                String error = "";
+                try {
+                    found = Debloat.analyze(app);
+                } catch (Exception e) {
+                    AppLog.w("cleanup analysis: " + e.getMessage());
+                    error = String.valueOf(e.getMessage());
+                }
+                List<Debloat.App> result = found;
+                String why = error;
+                handler.post(() -> {
+                    analyzing = false;
+                    if (result != null) cleanupApps = result;
+                    cleanupError = why;
+                    fillCleanup();
+                    invalidate();
+                });
+            }, "cleanup").start();
+        }
+
+        private boolean picked(Debloat.App a) {
+            if (!a.on || !a.locked.isEmpty() || cleanSkip.contains(a.pkg)) return false;
+            return cleanAdd.contains(a.pkg) || a.pickedBy(cleanLevel);
+        }
+
+        private List<String> pickedApps() {
+            List<String> out = new ArrayList<>();
+            if (cleanupApps != null) for (Debloat.App a : cleanupApps) if (picked(a)) out.add(a.pkg);
+            return out;
+        }
+
+        private long pickedMb() {
+            long mb = 0;
+            if (cleanupApps != null) for (Debloat.App a : cleanupApps) if (picked(a)) mb += a.mb;
+            return mb;
+        }
+
+        private static String levelName(int level) {
+            switch (level) {
+                case Debloat.LIGHT: return Ui.tr("Leve", "Light", "Ligera");
+                case Debloat.COMPLETE: return Ui.tr("Completa", "Complete", "Completa");
+                default: return Ui.tr("Recomendada", "Recommended", "Recomendada");
+            }
+        }
+
+        /** The page's rows from the last analysis (kept in place: the focus stays where it was). */
+        private void fillCleanup() {
+            Page p = cleanupPage;
+            if (p == null) return;
+            p.rows.clear();
+            p.about = () -> Ui.tr("Desliga apps do fabricante que você não usa (nunca desinstala). Cada app é conferido antes: o que a TV precisa fica ligado.",
+                    "Turns off the maker's apps you don't use (never uninstalled). Each one is checked first: what the TV needs stays on.",
+                    "Apaga apps del fabricante que no usas (nunca las desinstala). Cada una se revisa antes: lo que la TV necesita queda.");
+            if (analyzing || cleanupApps == null) {
+                p.rows.add(new Row(() -> cleanupError.isEmpty() ? Ui.tr("Analisando os apps da TV…", "Looking at the TV's apps…", "Analizando las apps de la TV…")
+                        : Ui.tr("Não deu para analisar", "Couldn't look at the apps", "No se pudo analizar"),
+                        () -> cleanupError.isEmpty() ? "" : Ui.tr("Tentar de novo", "Try again", "Reintentar"), this::analyzeCleanup, null, null));
+                if (!cleanupError.isEmpty()) p.rows.get(0).help = () -> cleanupError
+                        + Ui.tr("\n\nConfira os passos 2 e 3 de “Preparar a TV”.", "\n\nCheck steps 2 and 3 of “Prepare the TV”.", "\n\nRevisa los pasos 2 y 3 de “Preparar la TV”.");
+                return;
+            }
+            Row level = choice(() -> Ui.tr("Nível", "Level", "Nivel"),
+                    () -> list(levelName(Debloat.LIGHT), levelName(Debloat.RECOMMENDED), levelName(Debloat.COMPLETE)),
+                    () -> cleanLevel - 1, at -> cleanLevel = at + 1);
+            level.help = () -> Ui.tr("Leve: demonstrações de loja, manuais, telemetria e anúncios.\nRecomendada: também canais de propaganda, lojas e contas do fabricante.\nCompleta: também extras que algumas pessoas usam (espelhar a tela, assistente de voz).",
+                    "Light: store demos, manuals, telemetry and ads.\nRecommended: also promo channels and the maker's stores and accounts.\nComplete: also extras some people use (screen mirroring, the voice assistant).",
+                    "Ligera: demos de tienda, manuales, telemetría y anuncios.\nRecomendada: también canales promocionales, tiendas y cuentas del fabricante.\nCompleta: también extras que algunos usan (duplicar pantalla, asistente de voz).");
+            p.rows.add(level);
+            Row apply = dimmed(new Row(() -> Ui.plural(Ui.tr("plural|one:Desligar {n} app|other:Desligar {n} apps",
+                    "plural|one:Turn off {n} app|other:Turn off {n} apps", "plural|one:Apagar {n} app|other:Apagar {n} apps"), pickedApps().size()),
+                    () -> busy() ? HomeMode.busyText(state) : pickedMb() > 0 ? Ui.trf(Ui.tr("~{mb} MB livres", "~{mb} MB freed", "~{mb} MB libres"), "mb", pickedMb()) : "",
+                    () -> {
+                        List<String> off = pickedApps();
+                        if (off.isEmpty()) return;
+                        Debloat.request(getContext(), off, new ArrayList<>());
+                        cleanAdd.clear();
+                        cleanSkip.clear();
+                    }, null, null), this::busy);
+            apply.help = () -> Ui.tr("Desliga os apps marcados com “Vai desligar” abaixo. A memória é o que eles usam agora.",
+                    "Turns off the apps marked “Goes off” below. The memory is what they're using now.",
+                    "Apaga las apps marcadas con “Se apaga” abajo. La memoria es la que usan ahora.");
+            p.rows.add(apply);
+            int cleaned = HomeMode.stringList(state, "cleaned").size();
+            if (cleaned > 0) {
+                Row undo = dimmed(new Row(() -> Ui.tr("Desfazer a limpeza", "Undo the cleanup", "Deshacer la limpieza"),
+                        () -> String.valueOf(HomeMode.stringList(state, "cleaned").size()), () -> Debloat.requestUndo(getContext()), null, null), this::busy);
+                undo.help = () -> Ui.tr("Liga de novo tudo o que a limpeza desligou.", "Turns back on everything the cleanup turned off.",
+                        "Vuelve a encender todo lo que la limpieza apagó.");
+                p.rows.add(undo);
+            }
+            for (Debloat.App a : cleanupApps) p.rows.add(cleanupRow(a));
+            if (page == p) focus = Math.min(focus, p.rows.size() - 1);
+        }
+
+        private Row cleanupRow(Debloat.App a) {
+            Row r = new Row(() -> a.label, () -> {
+                if (!a.on) return a.cleaned ? Ui.tr("Desligado pela limpeza", "Off (cleanup)", "Apagada (limpieza)") : Ui.tr("Desligado", "Off", "Apagada");
+                if (!a.locked.isEmpty()) return Ui.tr("Protegido", "Protected", "Protegida");
+                return picked(a) ? Ui.tr("Vai desligar", "Goes off", "Se apaga") : Ui.tr("Fica ligado", "Stays on", "Queda encendida");
+            }, () -> {
+                if (!a.on && a.cleaned && !busy()) Debloat.request(getContext(), new ArrayList<>(), Collections.singletonList(a.pkg));
+                if (!a.on || !a.locked.isEmpty()) return;
+                boolean now = picked(a);
+                cleanAdd.remove(a.pkg);
+                cleanSkip.remove(a.pkg);
+                if (now) cleanSkip.add(a.pkg);
+                else if (!a.pickedBy(cleanLevel)) cleanAdd.add(a.pkg);
+            }, null, null);
+            r.help = () -> {
+                StringBuilder b = new StringBuilder(a.why);
+                if (a.level == Debloat.SUGGESTED) b.append(Ui.tr("\n\nNão está na lista: só desliga se você marcar.", "\n\nNot on the list: it goes off only if you pick it.",
+                        "\n\nNo está en la lista: solo se apaga si la marcas."));
+                else b.append("\n\n").append(Ui.tr("Nível: ", "Level: ", "Nivel: ")).append(levelName(a.level));
+                if (!a.locked.isEmpty()) b.append("\n").append(Ui.tr("Fica ligado: ", "Stays on: ", "Queda encendida: ")).append(a.locked);
+                if (a.mb > 0) b.append("\n").append(Ui.trf(Ui.tr("Usando {mb} MB agora", "Using {mb} MB now", "Usando {mb} MB ahora"), "mb", a.mb));
+                if (!a.on && a.cleaned) b.append("\n").append(Ui.tr("OK liga de novo.", "OK turns it back on.", "OK la vuelve a encender."));
+                b.append("\n").append(a.pkg);
+                return b.toString();
+            };
+            return r;
         }
 
         // MARK: - Updates: the newest GitHub release (Updater), now or on its own
@@ -1275,6 +1673,8 @@ public class SettingsActivity extends Activity {
             heading = Ui.text(Ui.displaySemibold, 34 * k, fg(0xFFFFFFFF));
             hint = Ui.text(Ui.regular, 23 * k, secondary(0x8CFFFFFF));
             hintLayouts.clear();   // made with the old paint (theme or size)
+            aboutPaint = new TextPaint(Ui.text(Ui.regular, 26 * k, fg(0xB3FFFFFF)));
+            aboutLayouts.clear();
             spinner = new Paint(Paint.ANTI_ALIAS_FLAG);
             spinner.setStyle(Paint.Style.STROKE);
             spinner.setStrokeCap(Paint.Cap.ROUND);
@@ -1352,16 +1752,51 @@ public class SettingsActivity extends Activity {
             c.drawRect(0, 0, w, h, backdrop);
             c.drawRect(0, 0, w, h, shade);
 
-            // On the left: big symbol, title, description.
+            // On the left: the page's symbol, then what the focused row does (or the page's steps).
             float cx = 500 * k;
-            Symbols.draw(getContext(), c, "sparkles", cx, 400 * k, 150 * k, fg(0xEBFFFFFF));
-            c.drawText("Free My TV", cx, 612 * k, title);
-            c.drawText(Ui.tr("Início e tela de descanso da TV", "Your TV's home screen and screensaver"), cx, 660 * k, subtitle);
-            c.drawText(versionText(), cx, 704 * k, version);
+            boolean onPage = screen == PAGE && page != null;
+            Symbols.draw(getContext(), c, onPage ? page.symbol : "sparkles", cx, 330 * k, 150 * k, fg(0xEBFFFFFF));
+            float ty = 548 * k;
+            if (!onPage || page == main) {
+                c.drawText("Free My TV", cx, ty, title);
+                ty += 58 * k;
+                c.drawText(versionText(), cx, 1000 * k, version);
+            }
+            drawAbout(c, leftText(), cx, ty);
 
             if (screen == HOME_CHOICE) drawChoice(c);
             else if (screen == STATUS) drawStatus(c);
             else drawPage(c, seconds);
+        }
+
+        /** The focused row's description, else the page's, else what Free My TV is (main menu and Home Screen). */
+        private String leftText() {
+            if (screen == PAGE && page != null) {
+                if (focus < page.rows.size() && page.rows.get(focus).help != null) return page.rows.get(focus).help.get();
+                if (page.about != null) return page.about.get();
+                if (page != main) return "";
+            }
+            return Ui.tr("Início e tela de descanso da TV", "Your TV's home screen and screensaver", "Inicio y protector de pantalla de la TV");
+        }
+
+        private final java.util.HashMap<String, StaticLayout> aboutLayouts = new java.util.HashMap<>();
+
+        /** A description on the left, centered under the symbol, wrapped (each text laid out once). */
+        private void drawAbout(Canvas c, String text, float cx, float top) {
+            if (text.isEmpty()) return;
+            int width = Math.round(780 * k);
+            StaticLayout layout = aboutLayouts.get(text);
+            if (layout == null) {
+                if (aboutLayouts.size() > 40) aboutLayouts.clear();
+                layout = StaticLayout.Builder.obtain(text, 0, text.length(), aboutPaint, width)
+                        .setAlignment(android.text.Layout.Alignment.ALIGN_CENTER).setLineSpacing(0, 1.18f)
+                        .setMaxLines(11).setEllipsize(TextUtils.TruncateAt.END).build();
+                aboutLayouts.put(text, layout);
+            }
+            c.save();
+            c.translate(cx - width / 2f, top - layout.getLineBaseline(0) + Ui.cap(aboutPaint));
+            layout.draw(c);
+            c.restore();
         }
 
         /** The rows of the page (scrolled), arrows when there are more above or below, then its hint. */
