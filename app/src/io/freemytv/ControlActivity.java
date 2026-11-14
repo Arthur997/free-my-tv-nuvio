@@ -101,8 +101,12 @@ public class ControlActivity extends Activity {
         void resume() {
             running = true;
             applyTheme();
+            // A team chosen: its match on top of the panel (only here, over other apps).
+            if (Prefs.footballTeam().isEmpty()) cc.showControls();
+            else cc.showControlsWithSports();
             cc.open();
-            appear.target = 1;
+            // The button again (onNewIntent) arrives between a pause and a resume: closing wins over coming back.
+            appear.target = leaving ? 0 : 1;
             handler.postDelayed(minute, 30_000);
             wake();
         }

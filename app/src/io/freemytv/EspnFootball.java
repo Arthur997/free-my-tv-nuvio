@@ -47,17 +47,73 @@ final class EspnFootball implements FootballSource {
         o.standing = t.optString("standingSummary");
         JSONArray next = t.optJSONArray("nextEvent");
         if (next != null && next.length() > 0) o.match = match(next.getJSONObject(0));
+        // The team's "next event" skips the match being played (it already names the one after), so the live or
+        // next one comes from the fixtures, and a match under way from its league's scoreboard (the freshest).
+        try {
+            Football.Match current = current(teamId);
+            if (current != null) o.match = current;
+        } catch (Exception e) {
+            AppLog.w("football fixtures: " + e.getMessage());
+        }
         return o;
+    }
+
+    /** The match under way, else the next one, from the team's fixtures; null when it has none. */
+    private Football.Match current(String teamId) throws Exception {
+        long now = System.currentTimeMillis();
+        Football.Match best = null;
+        for (Football.Match m : events(teamId, "?fixture=true")) {
+            if (m.over() || m.at < now - 3 * 3600_000L) continue;   // over, or long past kickoff without starting (postponed)
+            if (best == null || m.at < best.at) best = m;
+        }
+        if (best != null && best.underway(now)) {
+            Football.Match fresh = scoreboard(best);
+            if (fresh != null) return fresh;
+        }
+        return best;
+    }
+
+    /** The match as its league's scoreboard has it now (the team's lists lag minutes behind); null if it isn't there. */
+    private Football.Match scoreboard(Football.Match old) throws Exception {
+        if (old.league.isEmpty()) return null;
+        // The scoreboard's days are ESPN's (US Eastern): the match's own day there.
+        SimpleDateFormat day = new SimpleDateFormat("yyyyMMdd", Locale.US);
+        day.setTimeZone(TimeZone.getTimeZone("America/New_York"));
+        JSONArray events = json(SITE + old.league + "/scoreboard?dates=" + day.format(old.at)).optJSONArray("events");
+        for (int i = 0; events != null && i < events.length(); i++) {
+            JSONObject e = events.getJSONObject(i);
+            if (!old.id.equals(e.optString("id"))) continue;
+            Football.Match m = match(e);
+            m.league = old.league;
+            m.leagueName = old.leagueName;
+            if (m.broadcast.isEmpty()) m.broadcast = old.broadcast;
+            return m;
+        }
+        return null;
+    }
+
+    private List<Football.Match> events(String teamId, String query) throws Exception {
+        List<Football.Match> out = new ArrayList<>();
+        JSONArray events = json(SITE + "all/teams/" + teamId + "/schedule" + query).optJSONArray("events");
+        for (int i = 0; events != null && i < events.length(); i++) out.add(match(events.getJSONObject(i)));
+        return out;
     }
 
     @Override public List<Football.Match> schedule(String teamId) throws Exception {
         // Played and to come are two lists; the same match can be in both while it's being played.
         Map<String, Football.Match> byId = new LinkedHashMap<>();
         for (String query : new String[] {"", "?fixture=true"}) {
-            JSONArray events = json(SITE + "all/teams/" + teamId + "/schedule" + query).optJSONArray("events");
-            for (int i = 0; events != null && i < events.length(); i++) {
-                Football.Match m = match(events.getJSONObject(i));
-                byId.put(m.id, m);
+            for (Football.Match m : events(teamId, query)) byId.put(m.id, m);
+        }
+        // A match under way, as fresh as its scoreboard.
+        long now = System.currentTimeMillis();
+        for (Football.Match m : new ArrayList<>(byId.values())) {
+            if (!m.underway(now)) continue;
+            try {
+                Football.Match fresh = scoreboard(m);
+                if (fresh != null) byId.put(m.id, fresh);
+            } catch (Exception e) {
+                AppLog.w("football scoreboard: " + e.getMessage());
             }
         }
         List<Football.Match> all = new ArrayList<>(byId.values());

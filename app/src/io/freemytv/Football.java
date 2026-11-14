@@ -43,6 +43,11 @@ final class Football {
             return POST.equals(state);
         }
 
+        /** Live, or past its kickoff and not over yet (the source can take a few minutes to say it started). */
+        boolean underway(long now) {
+            return live() || !over() && at <= now && now - at < 3 * 3600_000L;
+        }
+
         boolean has(String teamId) {
             return home.id.equals(teamId) || away.id.equals(teamId);
         }

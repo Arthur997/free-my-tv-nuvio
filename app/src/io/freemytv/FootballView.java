@@ -268,12 +268,14 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
         });
     }
 
-    /** While a match is live: the team's card, and the open match's details, every minute (not the season). */
+    /**
+     * While a match is under way (or about to be): the team's card, the season's lists (the match moves to "Live", its
+     * score and minute change, then it moves to "Played") and the open match's details, every minute.
+     */
     private void refreshLive() {
         Football.Match o = open;
         if (o != null && (o.live() || details != null && details.match != null && details.match.live())) loadMatch(o);
-        Football.Overview ov = overview;
-        if (ov == null || ov.match == null || !ov.match.live()) return;
+        if (!matchActive()) return;
         io.execute(() -> {
             try {
                 Football.Overview fresh = source.overview(teamId);
@@ -281,10 +283,38 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
                     overview = fresh;
                     redraw();
                 });
+                List<Football.Match> season = source.schedule(teamId);
+                handler.post(() -> keepingFocus(season));
             } catch (Exception e) {
                 AppLog.w("football live: " + e.getMessage());
             }
         });
+    }
+
+    /** A match of the team live, past its kickoff without a result yet, or starting within 15 minutes. */
+    private boolean matchActive() {
+        long now = System.currentTimeMillis();
+        Football.Overview ov = overview;
+        if (ov != null && ov.match != null && (ov.match.underway(now) || !ov.match.over() && ov.match.at - now < 15 * 60_000L)) return true;
+        List<Football.Match> s = schedule;
+        if (s != null) for (Football.Match m : s) if (m.underway(now)) return true;
+        return false;
+    }
+
+    /** The season again, with the focus on the same match in Jogos (not back at the top every minute). */
+    private void keepingFocus(List<Football.Match> season) {
+        Object focused = gameItem < gameRows.size() ? gameRows.get(gameItem) : null;
+        String id = focused instanceof Football.Match ? ((Football.Match) focused).id : null;
+        seasonArrived(season);
+        if (id == null) return;
+        for (int i = 0; i < gameRows.size(); i++) {
+            Object row = gameRows.get(i);
+            if (row instanceof Football.Match && id.equals(((Football.Match) row).id)) {
+                gameItem = i;
+                break;
+            }
+        }
+        redraw();
     }
 
     // MARK: - Keys
