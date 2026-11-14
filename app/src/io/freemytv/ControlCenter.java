@@ -37,7 +37,7 @@ final class ControlCenter {
     }
 
     private static final int WIFI = 0, BLUETOOTH = 1, SPEED = 2, SLEEP = 3, MEMORY = 4, RECENTS = 5, APP_SETTINGS = 6,
-            TV_SETTINGS = 7, NO_INPUTS = 8;
+            TV_SETTINGS = 7, NO_INPUTS = 8, SPORTS = 9;
     /** The inputs' tiles (showInputs): INPUT + the input's place in the list. */
     private static final int INPUT = 100;
     /** The Control Center's tiles in reading order: what each does, its column, its row and how many columns it takes. */
@@ -48,6 +48,16 @@ final class ControlCenter {
         {MEMORY, 0, 3, 1}, {RECENTS, 1, 3, 1},
         {APP_SETTINGS, 0, 4, 1}, {TV_SETTINGS, 1, 4, 1},
     };
+    /** Over other apps, with a team chosen: the team's match on top, across (opens the football screen). */
+    private static final int[][] CONTROLS_SPORTS = withSports();
+
+    private static int[][] withSports() {
+        int[][] t = new int[CONTROLS.length + 1][];
+        t[0] = new int[] {SPORTS, 0, 0, 2};
+        for (int i = 0; i < CONTROLS.length; i++) t[i + 1] = new int[] {CONTROLS[i][0], CONTROLS[i][1], CONTROLS[i][2] + 1, CONTROLS[i][3]};
+        return t;
+    }
+
     // The tiles' corners are concentric with the panel's (panel radius = tile radius + padding), as in the menu.
     // Concentric corners everywhere (outer radius = inner radius + the padding between them): the panel around the
     // tiles, a tile around its time chips.
@@ -114,6 +124,11 @@ final class ControlCenter {
         if (tiles != CONTROLS) setTiles(CONTROLS);
     }
 
+    /** The Control Center's tiles with the football one on top (before open()): over other apps only. */
+    void showControlsWithSports() {
+        if (tiles != CONTROLS_SPORTS) setTiles(CONTROLS_SPORTS);
+    }
+
     /**
      * The inputs instead (before open()), for the HDMI Inputs button: live TV and each HDMI input, two to a row, the
      * last one across when they're odd; OK switches to it.
@@ -132,7 +147,54 @@ final class ControlCenter {
     }
 
     boolean showsInputs() {
-        return tiles != CONTROLS;
+        return tiles != CONTROLS && tiles != CONTROLS_SPORTS;
+    }
+
+    private boolean showsSports() {
+        return tiles == CONTROLS_SPORTS;
+    }
+
+    // MARK: - The football tile: fetched again every time the panel opens, and every minute while a match is on
+
+    private FootballData football;
+    private final FootballData.Listener footballListener = new FootballData.Listener() {
+        @Override public void onFootball() {
+            if (!open) return;
+            updateTexts();
+            hostRedraw();
+        }
+
+        @Override public void onFootballNotice(String text) {
+            if (open) host.toast(text);
+        }
+    };
+
+    private void startSports() {
+        if (football == null) football = FootballData.get(activity);
+        football.addListener(footballListener);
+        football.refreshNow();
+    }
+
+    /** The match shown: the one under way, one just over, or the next. */
+    private Football.Match sportsMatch() {
+        return football == null ? null : football.current();
+    }
+
+    /** {title, detail}: "Flamengo 2 × 1 Palmeiras" and "Ao vivo 67'"; before kickoff, the day and time. */
+    private String[] sportsText() {
+        Football.Match m = sportsMatch();
+        if (m == null) {
+            String team = Prefs.footballTeamName();
+            return new String[] {team.isEmpty() ? Ui.tr("Futebol", "Football", "Fútbol") : team,
+                    Ui.tr("Buscando o jogo…", "Looking for the match…", "Buscando el partido…")};
+        }
+        boolean started = m.homeScore >= 0 && m.awayScore >= 0;
+        String line = started ? m.home.label() + "  " + m.homeScore + " × " + m.awayScore + "  " + m.away.label()
+                : m.home.label() + "  ×  " + m.away.label();
+        String detail = m.live() || m.over() ? FootballText.state(m) : FootballText.when(m.at);
+        if (!m.live() && !m.broadcast.isEmpty() && !m.over()) detail += "  ·  " + m.broadcast;
+        else if (!m.leagueName.isEmpty()) detail += "  ·  " + m.leagueName;
+        return new String[] {line, detail};
     }
 
     /** The panel's height for what it shows (the host places it by its top). */
@@ -197,6 +259,7 @@ final class ControlCenter {
         aim(true);
         SpeedTest.get().setListener(this::onSpeed);
         handler.removeCallbacks(liveRead);
+        if (showsSports()) startSports();
         if (!showsInputs()) {
             cpuPercent = -1;
             cpu.start(activity, percent -> cpuPercent = percent);
@@ -212,6 +275,7 @@ final class ControlCenter {
         handler.removeCallbacks(liveRead);
         cpu.stop();
         SpeedTest.get().setListener(null);
+        if (football != null) football.removeListener(footballListener);
     }
 
     /** The focus springs; true while they move. */
@@ -224,6 +288,10 @@ final class ControlCenter {
     /** A new minute: the timer's "Turns off at" may have passed. */
     void minuteTick() {
         if (!open) return;
+        // During the match the score moves: asked again every minute (the tick comes every 30 s).
+        Football.Match m = sportsMatch();
+        if (showsSports() && m != null && m.underway(System.currentTimeMillis())
+                && System.currentTimeMillis() - football.at > 55_000L) football.refreshNow();
         updateTexts();
         hostRedraw();
     }
@@ -259,6 +327,14 @@ final class ControlCenter {
                 d = it.kind == HomeApps.LIVE_TV ? Ui.tr("Canais da TV", "The TV's channels", "Canales de la TV")
                         : it.connected ? Ui.tr("Com sinal", "Signal", "Con señal") : Ui.tr("Sem sinal", "No signal", "Sin señal");
             } else switch (kind) {
+                case SPORTS: {
+                    String[] text = sportsText();
+                    Football.Match m = sportsMatch();
+                    symbol = m != null && m.live() ? "live_tv" : "calendar";
+                    t = text[0];
+                    d = text[1];
+                    break;
+                }
                 case NO_INPUTS:
                     symbol = "hdmi";
                     t = Ui.tr("Nenhuma entrada", "No inputs", "Ninguna entrada");
@@ -510,6 +586,7 @@ final class ControlCenter {
             case WIFI: opened = HomeApps.openSettings(activity, android.provider.Settings.ACTION_WIFI_SETTINGS); break;
             case BLUETOOTH: opened = HomeApps.openSettings(activity, android.provider.Settings.ACTION_BLUETOOTH_SETTINGS); break;
             case RECENTS: opened = RecentsActivity.open(activity); break;
+            case SPORTS: opened = FootballActivity.open(activity); break;
             case APP_SETTINGS: opened = HomeApps.open(activity, HomeApps.settings(), from, x, y, w, h); break;
             default: opened = HomeApps.open(activity, HomeApps.action(HomeApps.ANDROID_SETTINGS, "settings", "", ""), from, x, y, w, h); break;
         }

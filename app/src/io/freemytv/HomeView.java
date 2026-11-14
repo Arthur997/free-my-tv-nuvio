@@ -1859,9 +1859,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /** Dollar, euro and bitcoin in reais with the 24 h change (green/red, like Apple's Stocks app). */
     private void drawQuotesCard(Canvas c, RectF r) {
+        float f = Ui.clamp(sideFocus.value), radius = 30 * k;
+        focusRing.glow(c, r, radius, f, k, ringGlow());
         drawerCard(c, r);
         if (Ui.LITE) quotesSnapshot.draw(c, r, drawerCardsKey(), cc -> drawPrices(cc, r));
         else drawPrices(c, r);
+        focusRing.ring(c, r, radius, f, k, ringInk());
     }
 
     /**
@@ -2863,7 +2866,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 // then opens nothing.
                 if (down) {
                     if (e.getRepeatCount() == 0) okDown = true;
-                    else if (okDown && !menuOpen && heldLong(e) && openMenu()) okDown = false;
+                    else if (okDown && !menuOpen && heldLong(e) && (refreshCard() || openMenu())) okDown = false;
                 } else {
                     if (okDown && !e.isCanceled() && spoken.keyClick()) {
                         press();
@@ -2886,6 +2889,28 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             default:
                 return false;
         }
+    }
+
+    /** The card beside the weather is on: the football, or prices to show. */
+    private boolean sideShown() {
+        return showFootball || showQuotes && HomeData.active().length > 0;
+    }
+
+    /** OK held on a drawer card: its data fetched again now. False when the focus isn't on one. */
+    private boolean refreshCard() {
+        if (sheetOpen || controlOpen || zone != Z_DRAWER || cardFocused == CARD_NONE) return false;
+        if (cardFocused == CARD_WEATHER) {
+            HomeData.get(activity).refreshWeatherNow();
+            showToast(Ui.tr("Atualizando o clima…", "Refreshing the weather…", "Actualizando el clima…"));
+        } else if (showFootball) {
+            football.refreshNow();
+            showToast(Ui.tr("Atualizando o futebol…", "Refreshing football…", "Actualizando el fútbol…"));
+        } else {
+            HomeData.get(activity).refreshPricesNow();
+            showToast(Ui.tr("Atualizando as cotações…", "Refreshing the prices…", "Actualizando las cotizaciones…"));
+        }
+        click.open();
+        return true;
     }
 
     private static boolean heldLong(KeyEvent e) {
@@ -2983,9 +3008,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             default:
                 if (cardFocused != CARD_NONE) {
                     if (dx != 0) {
-                        // Between the weather and the football (the prices card opens nothing, so it takes no focus).
+                        // Between the weather and the card beside it (football, or the prices: held OK refreshes them).
                         int next = cardFocused + dx;
-                        if (next == CARD_WEATHER && !showWeatherOn || next == CARD_SIDE && !showFootball || next < 0 || next > CARD_SIDE) return;
+                        if (next == CARD_WEATHER && !showWeatherOn || next == CARD_SIDE && !sideShown() || next < 0 || next > CARD_SIDE) return;
                         cardFocused = next;
                     } else if (dy < 0) {
                         cardFocused = CARD_NONE;
@@ -2998,7 +3023,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                     drawerIndex = next;
                 } else if (dy < 0) {
                     closeDrawer();
-                } else if (showWeatherOn || showFootball) {
+                } else if (showWeatherOn || sideShown()) {
                     cardFocused = showWeatherOn ? CARD_WEATHER : CARD_SIDE;
                 } else {
                     openSheet();
@@ -3067,6 +3092,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         } else if (zone == Z_DRAWER && cardFocused == CARD_WEATHER) {
             click.open();
             if (!WeatherActivity.open(activity)) showToast(Ui.tr("Não deu para abrir a previsão.", "Couldn't open the forecast."));
+            return;
+        } else if (zone == Z_DRAWER && cardFocused == CARD_SIDE && !showFootball) {
+            showToast(Ui.tr("Segure OK para atualizar as cotações.", "Hold OK to refresh the prices.", "Mantén OK para actualizar las cotizaciones."));
             return;
         } else if (zone == Z_DRAWER && cardFocused == CARD_SIDE) {
             click.open();

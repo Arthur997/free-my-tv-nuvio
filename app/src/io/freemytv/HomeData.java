@@ -85,6 +85,20 @@ final class HomeData {
         return a;
     }
 
+    /** OK held on the weather card: the forecast fetched again now. */
+    void refreshWeatherNow() {
+        weatherAt = 0;
+        weatherFailedAt = 0;
+        refreshIfStale();
+    }
+
+    /** OK held on the prices card: the prices fetched again now. */
+    void refreshPricesNow() {
+        pricesAt = 0;
+        pricesFailedAt = 0;
+        refreshIfStale();
+    }
+
     /** Settings changed (city, coins): fetch again now. */
     void settingsChanged() {
         pricesAt = 0;

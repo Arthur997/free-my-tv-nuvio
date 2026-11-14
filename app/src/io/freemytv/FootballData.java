@@ -83,12 +83,25 @@ final class FootballData {
         return m != null && m.live() ? m : null;
     }
 
+    /**
+     * Fetched again now: OK held on the card, or the Control Center's football tile opening. Any team chosen, even with
+     * the drawer's card on something else.
+     */
+    void refreshNow() {
+        if (!Prefs.footballTeam().isEmpty()) fetch();
+    }
+
     /** Fetches when stale (the screen asks when it appears and on its tick). Nothing at all with the widget off. */
     void refreshIfStale() {
-        if (!Prefs.football() || fetching) return;
+        if (!Prefs.football()) return;
         long now = System.currentTimeMillis();
         if (failedAt != 0 && now >= failedAt && now - failedAt < 2 * 60_000L) return;
         if (now - at < every(now) && now >= at && sameTeam()) return;
+        fetch();
+    }
+
+    private void fetch() {
+        if (fetching) return;
         fetching = true;
         String team = Prefs.footballTeam();
         io.execute(() -> {
