@@ -343,7 +343,8 @@ public class SettingsActivity extends Activity {
             p.rows.add(opens(() -> Ui.tr("Aparência", "Appearance", "Apariencia"), () -> open(appearancePage())));
             p.rows.add(opens(() -> Ui.tr("Desempenho", "Performance", "Rendimiento"), () -> open(performancePage())));
             p.rows.add(opens(() -> Ui.tr("Recomendações", "Picks"), () -> open(picksPage())));
-            p.rows.add(opens(() -> Ui.tr("Clima e cotações", "Weather and prices", "Clima y cotizaciones"), () -> open(weatherPage())));
+            p.rows.add(opens(() -> Ui.tr("Clima, cotações e futebol", "Weather, prices and football", "Clima, cotizaciones y fútbol"),
+                    () -> open(weatherPage())));
             p.rows.add(opens(() -> Ui.tr("Relógio", "Clock", "Reloj"), () -> open(clockPage())));
             p.rows.add(opens(() -> Ui.tr("Tela de descanso", "Screensaver"), () -> open(screensaverPage())));
             p.rows.add(opens(() -> Ui.tr("Prateleira", "Shelf"), this::openShelfEditor));
@@ -765,13 +766,26 @@ public class SettingsActivity extends Activity {
             return p;
         }
 
-        /** The weather (on/off, the city) and the prices (on/off, how often, which coins). */
+        /** The drawer's two cards: the weather (on/off, the city) and beside it the prices or a football team. */
         private Page weatherPage() {
-            Page p = new Page(Ui.tr("Clima e cotações", "Weather and prices", "Clima y cotizaciones"));
+            Page p = new Page(Ui.tr("Clima, cotações e futebol", "Weather, prices and football", "Clima, cotizaciones y fútbol"));
             p.rows.add(onOff(() -> Ui.tr("Widget do clima", "Weather widget"), Prefs::weather, Prefs::setWeather, null));
             p.rows.add(new Row(() -> Ui.tr("Cidade do clima", "Weather city"), () -> cityStatus.isEmpty() ? Prefs.city() : cityStatus,
                     this::askCity, null, null));
-            p.rows.add(onOff(() -> Ui.tr("Widget de cotações", "Quotes widget"), Prefs::quotes, Prefs::setQuotes, null));
+            String[] sides = {Prefs.SIDE_QUOTES, Prefs.SIDE_FOOTBALL, Prefs.SIDE_NONE};
+            p.rows.add(choice(() -> Ui.tr("Ao lado do clima", "Beside the weather", "Junto al clima"),
+                    () -> list(Ui.tr("Cotações", "Prices", "Cotizaciones"), Ui.tr("Futebol", "Football", "Fútbol"), Ui.tr("Nada", "Nothing", "Nada")),
+                    () -> java.util.Arrays.asList(sides).indexOf(Prefs.sideWidget()), at -> Prefs.setSideWidget(sides[at])));
+            // Football: the team (a list, or a search by name) and the extras.
+            java.util.function.BooleanSupplier noFootball = () -> !Prefs.SIDE_FOOTBALL.equals(Prefs.sideWidget());
+            Row team = new Row(() -> Ui.tr("Time", "Team", "Equipo"),
+                    () -> Prefs.footballTeamName().isEmpty() ? Ui.tr("Escolher", "Choose", "Elegir") : Prefs.footballTeamName(),
+                    this::openTeams, null, null);
+            p.rows.add(dimmed(team, noFootball));
+            p.rows.add(onOff(() -> Ui.tr("Avisos de gol e de início", "Goal and kickoff notices", "Avisos de gol y de inicio"),
+                    Prefs::footballAlerts, Prefs::setFootballAlerts, noFootball));
+            p.rows.add(onOff(() -> Ui.tr("Placar na tela de descanso", "Score on the screensaver", "Marcador en el salvapantallas"),
+                    Prefs::footballInDream, Prefs::setFootballInDream, noFootball));
             p.rows.add(choice(() -> Ui.tr("Atualizar cotações", "Refresh prices"), () -> list(Ui.tr("Tempo real", "Live"), "1 min", "5 min"),
                     Prefs::pricesEveryIndex, Prefs::setPricesEveryIndex));
             String[] coins = dollar() ? new String[] {"Bitcoin", "Ethereum", "Solana", Ui.tr("Dólar", "Dollar"), "Euro"}
@@ -1896,6 +1910,167 @@ public class SettingsActivity extends Activity {
                     }
                     invalidate();
                     if (!message.isEmpty()) handler.postDelayed(() -> { cityStatus = ""; invalidate(); }, 4000);
+                });
+            }).start();
+        }
+
+        // MARK: - Football team: the main leagues' teams, or a search by name
+
+        /** The leagues listed for a quick pick: Brazil's Série A and B and Europe's main leagues. */
+        private static final String[] TEAM_LEAGUES = {"bra.1", "bra.2", "eng.1", "esp.1", "ita.1", "ger.1", "fra.1", "por.1"};
+        private static final long TEAMS_FRESH_FOR = 7 * 24 * 3600_000L;
+        private List<Football.Team> teamList;   // null until read
+        private String teamsStatus = "";
+
+        private void openTeams() {
+            Page p = new Page(Ui.tr("Time", "Team", "Equipo"));
+            p.rebuild = () -> fillTeams(p);
+            fillTeams(p);
+            p.hint = () -> Ui.tr("O time aparece no widget ao lado do clima, com o jogo ao vivo ou o próximo.",
+                    "The team shows in the widget beside the weather, with its live or next match.",
+                    "El equipo aparece en el widget junto al clima, con el partido en vivo o el próximo.");
+            open(p);
+            if (teamList == null) readTeams(p);
+        }
+
+        /** The search first, then every team of the listed leagues, by league; the team followed has a check. */
+        private void fillTeams(Page p) {
+            p.rows.clear();
+            Row search = new Row(() -> teamsStatus.isEmpty() ? Ui.tr("Buscar pelo nome…", "Search by name…", "Buscar por nombre…") : teamsStatus,
+                    () -> "", this::askTeam, null, null);
+            p.rows.add(search);
+            if (teamList == null) {
+                p.rows.add(new Row(() -> Ui.tr("Lendo os times…", "Reading the teams…", "Leyendo los equipos…"), () -> "", () -> {}, null, () -> true));
+                return;
+            }
+            for (Football.Team t : teamList) {
+                Row r = new Row(() -> t.name, () -> t.leagueName, () -> pickTeam(t), null, null);
+                r.check = t.id.equals(Prefs.footballTeam());
+                p.rows.add(r);
+            }
+        }
+
+        /** The listed leagues' teams: from the cache (a week), else from the source, in the background. */
+        private void readTeams(Page p) {
+            new Thread(() -> {
+                List<Football.Team> all = cachedTeams();
+                if (all == null) {
+                    all = new ArrayList<>();
+                    for (String league : TEAM_LEAGUES) {
+                        try {
+                            all.addAll(FootballSource.get().teams(league));
+                        } catch (Exception e) {
+                            AppLog.w("football teams " + league + ": " + e.getMessage());
+                        }
+                    }
+                    if (!all.isEmpty()) saveTeams(all);
+                }
+                List<Football.Team> result = all;
+                handler.post(() -> {
+                    teamList = result;
+                    if (result.isEmpty()) teamsStatus = Ui.tr("Sem conexão: tente buscar pelo nome.", "No connection: try a search.",
+                            "Sin conexión: prueba a buscar.");
+                    if (page == p) {
+                        fillTeams(p);
+                        focus = Math.min(focus, p.rows.size() - 1);
+                        snapPops();
+                    }
+                    invalidate();
+                });
+            }).start();
+        }
+
+        private List<Football.Team> cachedTeams() {
+            android.content.SharedPreferences c = getContext().getSharedPreferences("football-teams", Context.MODE_PRIVATE);
+            long at = c.getLong("at", 0), now = System.currentTimeMillis();
+            if (now - at > TEAMS_FRESH_FOR || now < at || !Ui.language.equals(c.getString("language", ""))) return null;
+            try {
+                JSONArray a = new JSONArray(c.getString("teams", "[]"));
+                List<Football.Team> out = new ArrayList<>();
+                for (int i = 0; i < a.length(); i++) {
+                    JSONObject o = a.getJSONObject(i);
+                    Football.Team t = new Football.Team();
+                    t.id = o.optString("id");
+                    t.name = o.optString("name");
+                    t.league = o.optString("league");
+                    t.leagueName = o.optString("leagueName");
+                    out.add(t);
+                }
+                return out.isEmpty() ? null : out;
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+        private void saveTeams(List<Football.Team> teams) {
+            try {
+                JSONArray a = new JSONArray();
+                for (Football.Team t : teams) {
+                    a.put(new JSONObject().put("id", t.id).put("name", t.name).put("league", t.league).put("leagueName", t.leagueName));
+                }
+                getContext().getSharedPreferences("football-teams", Context.MODE_PRIVATE).edit().putString("teams", a.toString())
+                        .putLong("at", System.currentTimeMillis()).putString("language", Ui.language).apply();
+            } catch (Exception ignored) {
+            }
+        }
+
+        private void pickTeam(Football.Team t) {
+            Prefs.setFootballTeam(t.id, t.name, t.league);
+            // Choosing a team means wanting it on the home screen.
+            if (!Prefs.SIDE_FOOTBALL.equals(Prefs.sideWidget())) Prefs.setSideWidget(Prefs.SIDE_FOOTBALL);
+            changed();
+            goBack();
+        }
+
+        /** A team by name (any club the source knows: lower divisions, other countries). */
+        private void askTeam() {
+            if (Ui.tr("Buscando…", "Searching…").equals(teamsStatus)) return;
+            android.widget.EditText field = new android.widget.EditText(activity);
+            field.setSingleLine(true);
+            field.setHint(Ui.tr("Digite o nome do time", "Type the team's name", "Escribe el nombre del equipo"));
+            field.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
+            android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(activity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle(Ui.tr("Time", "Team", "Equipo"))
+                    .setView(field)
+                    .setPositiveButton(Ui.tr("Buscar", "Search"), (d, which) -> searchTeam(field.getText().toString()))
+                    .setNegativeButton(Ui.tr("Cancelar", "Cancel"), null)
+                    .create();
+            field.setOnEditorActionListener((v, action, event) -> {
+                dialog.dismiss();
+                searchTeam(field.getText().toString());
+                return true;
+            });
+            dialog.show();
+        }
+
+        private void searchTeam(String name) {
+            if (name.trim().isEmpty()) return;
+            teamsStatus = Ui.tr("Buscando…", "Searching…");
+            Page from = page;
+            invalidate();
+            new Thread(() -> {
+                List<Football.Team> found;
+                String error;
+                try {
+                    found = FootballSource.get().search(name);
+                    error = found.isEmpty() ? Ui.tr("Nenhum time com esse nome.", "No team with that name.", "Ningún equipo con ese nombre.") : "";
+                } catch (Exception e) {
+                    found = new ArrayList<>();
+                    error = Ui.tr("Não deu para buscar agora.", "Couldn't search now.");
+                    AppLog.w("team search: " + e.getMessage());
+                }
+                List<Football.Team> result = found;
+                String message = error;
+                handler.post(() -> {
+                    teamsStatus = message;
+                    if (!result.isEmpty() && screen == PAGE && page == from) {
+                        List<String> labels = new ArrayList<>();
+                        for (Football.Team t : result) labels.add(t.leagueName.isEmpty() ? t.name : t.name + "  ·  " + t.leagueName);
+                        openPicker(Ui.tr("Time", "Team", "Equipo"), labels, -1, at -> pickTeam(result.get(at)));
+                        spoken.focusMoved();
+                    }
+                    invalidate();
+                    if (!message.isEmpty()) handler.postDelayed(() -> { teamsStatus = ""; invalidate(); }, 4000);
                 });
             }).start();
         }

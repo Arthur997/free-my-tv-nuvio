@@ -280,8 +280,42 @@ final class Prefs {
     static boolean weather() { return sp().getBoolean("weather", true); }
     static void setWeather(boolean on) { put("weather", on); }
 
-    static boolean quotes() { return sp().getBoolean("quotes", Config.SHOW_CRYPTO); }
-    static void setQuotes(boolean on) { put("quotes", on); }
+    /** What sits beside the weather in the drawer: the prices, a football team, or nothing. */
+    static final String SIDE_QUOTES = "quotes", SIDE_FOOTBALL = "football", SIDE_NONE = "none";
+
+    static String sideWidget() {
+        String v = sp().getString("sideWidget", null);
+        if (v != null) return v;
+        return sp().getBoolean("quotes", Config.SHOW_CRYPTO) ? SIDE_QUOTES : SIDE_NONE;   // before the choice existed
+    }
+
+    static void setSideWidget(String v) { put("sideWidget", v); }
+
+    /** The prices widget is on (beside the weather): only then are prices fetched at all. */
+    static boolean quotes() { return SIDE_QUOTES.equals(sideWidget()); }
+
+    // MARK: - Football (FootballData, FootballActivity)
+
+    /** The football widget is on and has a team: only then is anything fetched for it. */
+    static boolean football() { return SIDE_FOOTBALL.equals(sideWidget()) && !footballTeam().isEmpty(); }
+
+    /** The team followed: ESPN's id, its name and its main league (ESPN's slug: "bra.1", "eng.1"…). */
+    static String footballTeam() { return sp().getString("footballTeam", ""); }
+    static String footballTeamName() { return sp().getString("footballTeamName", ""); }
+    static String footballLeague() { return sp().getString("footballLeague", ""); }
+
+    static void setFootballTeam(String id, String name, String league) {
+        sp().edit().putString("footballTeam", id).putString("footballTeamName", name).putString("footballLeague", league).apply();
+        version++;
+    }
+
+    /** Notices on the home screen: a goal in the team's match, and its match about to start. */
+    static boolean footballAlerts() { return sp().getBoolean("footballAlerts", true); }
+    static void setFootballAlerts(boolean on) { put("footballAlerts", on); }
+
+    /** The live score in the screensaver's corner, while the team plays. */
+    static boolean footballInDream() { return sp().getBoolean("footballInDream", true); }
+    static void setFootballInDream(boolean on) { put("footballInDream", on); }
 
     /** On by default: bitcoin, the dollar and the euro (HomeData.COINS); Ethereum and Solana are opt-in. */
     static boolean coin(int i) { return sp().getBoolean("coin" + i, i == 0 || i >= 3); }
