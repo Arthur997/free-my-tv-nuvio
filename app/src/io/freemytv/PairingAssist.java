@@ -37,9 +37,9 @@ public class PairingAssist extends AccessibilityService {
         } finally {
             root.recycle();
         }
-        if (found[0] == null || found[0].equals(tried)) return;
-        int port = found[1] != null ? Integer.parseInt(found[1]) : 0;
-        pair(found[0], port);
+        // Both on the same screen, as only the pairing dialog shows them: a lone 6-digit text elsewhere isn't a code.
+        if (found[0] == null || found[1] == null || found[0].equals(tried)) return;
+        pair(found[0], Integer.parseInt(found[1]));
     }
 
     /** Looks through the dialog's texts for the code and the "address:port" line. */
@@ -68,11 +68,7 @@ public class PairingAssist extends AccessibilityService {
         pairing = true;
         new Thread(() -> {
             try {
-                // The port shown is the one to use; mDNS only when the dialog didn't show it.
-                int port = shownPort > 0 ? shownPort : AdbPorts.find(this, AdbPorts.PAIRING, 5000);
-                if (port <= 0) throw new IOException(Ui.tr("a porta de pareamento não apareceu", "the pairing port didn't show up",
-                        "el puerto de emparejamiento no apareció"));
-                AdbTls.pair(this, port, code);
+                AdbTls.pair(this, shownPort, code);
                 main.post(this::paired);
             } catch (IOException | RuntimeException e) {
                 AppLog.w("pairing assistant: " + e.getMessage());
