@@ -2,4 +2,6 @@
 <resources>
     <string name="app_name">Free My TV</string>
     <string name="remote_key_service">Lets the buttons on the remote (Netflix, Prime Video, YouTube, Globoplay, TCL tv+, Disney+, ≡, 123, ⓘ) open what you picked in Free My TV, from any app. It only reads those buttons.</string>
+    <string name="pairing_assist">Reads the 6-digit code of the Wireless debugging pairing screen, so Free My TV pairs with this TV by itself. It reads only the TV Settings app, and turns itself off once paired.</string>
+    <string name="pairing_label">Free My TV pairing</string>
 </resources>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only the TV's Settings app, and only while it's needed: it reads the wireless debugging pairing code there. -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:packageNames="com.android.tv.settings,com.android.settings"
+    android:notificationTimeout="300"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/pairing_assist" />

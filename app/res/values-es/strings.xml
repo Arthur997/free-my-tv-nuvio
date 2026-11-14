@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pairing_assist">Lee el código de 6 números de la pantalla de emparejamiento de la Depuración inalámbrica, para que Free My TV se empareje con esta TV solo. Solo lee la app Configuración de la TV y se apaga después de emparejar.</string>
+    <string name="pairing_label">Free My TV: emparejamiento</string>
+</resources>

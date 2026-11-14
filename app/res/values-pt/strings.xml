@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pairing_assist">Lê o código de 6 números da tela de pareamento da Depuração por Wi-Fi, para o Free My TV se parear com esta TV sozinho. Só lê o app Configurações da TV e se desliga depois de parear.</string>
+    <string name="pairing_label">Free My TV: pareamento</string>
+</resources>
