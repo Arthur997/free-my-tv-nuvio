@@ -159,7 +159,7 @@ final class HomeMode {
     private static final Pattern FACTORY = Pattern.compile("(.*\\.)?(factory|factorymenu|facmenu|fac|hkcfac|testpq)(\\..*)?");
 
     /** Checked before every disable: never the protected list, Android's own pieces or a factory menu. */
-    private static boolean mayTurnOff(String pkg) {
+    static boolean mayTurnOff(String pkg) {
         return !PROTECTED.contains(pkg) && !CORE.matcher(pkg).matches() && !FACTORY.matcher(pkg).matches();
     }
 
@@ -169,7 +169,7 @@ final class HomeMode {
      * the receiver of the remote's Input key and Bluetooth pairing (fusion.android.tv.demo on several MediaTek boards).
      * null when the check didn't finish: then none of them goes off this time.
      */
-    private static Set<String> neededByTv(Adb adb, Set<String> pkgs) throws IOException {
+    static Set<String> neededByTv(Adb adb, Set<String> pkgs) throws IOException {
         Set<String> keep = new HashSet<>();
         if (pkgs.isEmpty()) return keep;
         // Only the package's own requested permissions: a shared user's would match by mistake. A line per package keeps
@@ -186,7 +186,7 @@ final class HomeMode {
     }
 
     /** One switch at a time (jobs can overlap: a boot check and a button press). */
-    private static final Object RUN = new Object();
+    static final Object RUN = new Object();
     private static final Object FILE_LOCK = new Object();
 
     // MARK: - Requests (from any process)
@@ -849,7 +849,7 @@ final class HomeMode {
      * Apps that saved a Wi-Fi network ("cname" in the Wi-Fi service's list of saved networks), or null when the Wi-Fi
      * service didn't answer (some firmware turns its dumps off): then nobody can tell.
      */
-    private static Set<String> wifiOwners(Adb adb) throws IOException {
+    static Set<String> wifiOwners(Adb adb) throws IOException {
         String out = adb.shell("dumpsys wifi | grep -o -E 'cname=[^ ]*|^Wi-Fi is [a-z]+'");
         if (!out.contains("cname=") && !out.contains("Wi-Fi is")) return null;
         Set<String> owners = new HashSet<>();
@@ -901,14 +901,14 @@ final class HomeMode {
         return d.contains("/") && !d.startsWith(PKG + "/") ? safeComponent(d) : "";
     }
 
-    private static String packageOf(String component) {
+    static String packageOf(String component) {
         if (component == null || component.isEmpty()) return null;
         int slash = component.indexOf('/');
         return slash > 0 ? component.substring(0, slash) : component;
     }
 
     /** Packages the shell sees (all; "-d" = only the disabled ones). The app alone can't see the ones it doesn't declare. */
-    private static Set<String> packages(Adb adb, String flags) throws IOException {
+    static Set<String> packages(Adb adb, String flags) throws IOException {
         Set<String> out = new HashSet<>();
         for (String line : adb.shell("pm list packages " + flags).split("\n")) {
             line = line.trim();
@@ -1493,7 +1493,7 @@ final class HomeMode {
      * Android's and the TV's own pieces, the keyboard, and an app that saved a Wi-Fi network (off, Android erases it;
      * `owners` null = nobody could tell, so none).
      */
-    private static String lockReason(String pkg, Set<String> homes, String keyboard, Set<String> owners) {
+    static String lockReason(String pkg, Set<String> homes, String keyboard, Set<String> owners) {
         if (pkg.equals(PKG)) return Ui.tr("é o Free My TV", "it's Free My TV", "es Free My TV");
         if (pkg.equals(GOOGLE_SETUP) || homes.contains(pkg)) return Ui.tr("é uma tela inicial, a troca de modo cuida dela", "a home screen, the switch handles it", "es una pantalla de inicio, el cambio de modo se encarga");
         if (!mayTurnOff(pkg)) return Ui.tr("faz parte da TV", "part of the TV", "es parte de la TV");
@@ -1504,7 +1504,7 @@ final class HomeMode {
     }
 
     /** Every home screen: the ones the TV has now, the original one (off in Free My TV mode) and Google TV's. */
-    private static Set<String> homePackages(Adb adb, JSONObject s) throws IOException {
+    static Set<String> homePackages(Adb adb, JSONObject s) throws IOException {
         Set<String> homes = new HashSet<>();
         Matcher m = Pattern.compile("^\\s*([\\w.]+)/", Pattern.MULTILINE).matcher(adb.shell(
                 "cmd package query-activities --brief -a android.intent.action.MAIN -c android.intent.category.HOME"));
@@ -1516,7 +1516,7 @@ final class HomeMode {
         return homes;
     }
 
-    private static String keyboardPackage(Adb adb) throws IOException {
+    static String keyboardPackage(Adb adb) throws IOException {
         String ime = adb.shell("settings get secure default_input_method").trim();
         String pkg = packageOf(ime);
         return pkg == null ? "" : pkg;
@@ -1676,13 +1676,13 @@ final class HomeMode {
     // Longer than the slowest step: the 2 minutes for the debugging prompt.
     private static final long BUSY_STALE_MS = 4 * 60_000;
 
-    private static void busy(Context c, String text) {
+    static void busy(Context c, String text) {
         JSONObject s = state(c);
         try { s.put("busy", text).put("busyAt", SystemClock.elapsedRealtime()).put("error", ""); } catch (JSONException ignored) {}
         save(c, s);
     }
 
-    private static void done(Context c, String error) {
+    static void done(Context c, String error) {
         JSONObject s = state(c);
         s.remove("busy");
         try { s.put("error", error == null ? "" : error); } catch (JSONException ignored) {}
@@ -1744,7 +1744,7 @@ final class HomeMode {
         }
     }
 
-    private static List<String> sorted(Set<String> set) {
+    static List<String> sorted(Set<String> set) {
         List<String> list = new ArrayList<>(set);
         Collections.sort(list);
         return list;
