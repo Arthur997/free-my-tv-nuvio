@@ -652,8 +652,8 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
         smallDim.setTextAlign(Paint.Align.LEFT);
     }
 
-    /** "AO VIVO 67'" in a red pill, "Encerrado" or the time in gray, right-aligned at `right`. */
-    private void stateBadge(Canvas c, Football.Match m, float right, float mid) {
+    /** "AO VIVO 67'" in a red pill, else "Encerrado" or "Próximo jogo" in gray (dark gray on the white focus). */
+    private void stateBadge(Canvas c, Football.Match m, float right, float mid, boolean onPill) {
         String state = FootballText.state(m);
         if (m.live()) {
             String s = state.toUpperCase(Ui.locale());
@@ -664,9 +664,12 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
             c.drawRoundRect(rect, 18 * k, 18 * k, fill);
             c.drawText(s, rect.centerX(), mid + Ui.halfCap(pillText), pillText);
         } else {
+            int keep = dim.getColor();
+            if (onPill) dim.setColor(DIM);
             dim.setTextAlign(Paint.Align.RIGHT);
             c.drawText(state, right, mid + Ui.halfCap(dim), dim);
             dim.setTextAlign(Paint.Align.LEFT);
+            dim.setColor(keep);
         }
     }
 
@@ -731,21 +734,19 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
                     : Ui.tr("Nenhum jogo marcado.", "No match scheduled.", "Ningún partido programado."), cx, 340 * k, dim);
             dim.setTextAlign(Paint.Align.LEFT);
         } else {
-            matchStrip(c, m, 212, focused);
-            dim.setTextAlign(Paint.Align.CENTER);
-            int keep = dim.getColor();
-            if (focused) dim.setColor(DIM);
-            c.drawText(FootballText.when(m.at) + (m.broadcast.isEmpty() ? "" : "  ·  " + m.broadcast), cx, 462 * k, dim);
-            dim.setColor(keep);
-            dim.setTextAlign(Paint.Align.LEFT);
+            matchStrip(c, m, 212, 330, focused);
+            footLine(c, m, "", 448, focused);
         }
         drawForm(c);
         drawPositions(c);
     }
 
-    /** Home and away with their logos, the score (or the time) between them, the competition and the state on top. */
-    private void matchStrip(Canvas c, Football.Match m, float top, boolean onPill) {
-        float cx = w / 2f, side = 420 * k, cy = (top + 108) * k;
+    /**
+     * The match in one row, centered on the score (or the time): the home team's name and logo to its left, the away
+     * team's logo and name to its right, like a scoreboard. The competition and the state above, at the corners.
+     */
+    private void matchStrip(Canvas c, Football.Match m, float top, float middle, boolean onPill) {
+        float cx = w / 2f, cy = middle * k, logoSize = 92 * k;
         int keepName = name.getColor(), keepBig = big.getColor(), keepTitle = panelTitle.getColor();
         if (onPill) {
             name.setColor(INK);
@@ -753,15 +754,31 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
             panelTitle.setColor(DIM);
         }
         c.drawText(m.leagueName, (M + 40) * k, top * k, panelTitle);
-        stateBadge(c, m, (R - 40) * k, (top - 8) * k);
-        logo(c, m.home, cx - side, cy - 16 * k, 104 * k);
-        logo(c, m.away, cx + side, cy - 16 * k, 104 * k);
-        c.drawText(m.home.label(), cx - side, cy + 78 * k, name);
-        c.drawText(m.away.label(), cx + side, cy + 78 * k, name);
-        c.drawText(m.homeScore >= 0 ? FootballText.score(m) : Ui.time(m.at), cx, cy - 16 * k + Ui.halfCap(big), big);
+        stateBadge(c, m, (R - 40) * k, (top - 8) * k, onPill);
+        String score = m.homeScore >= 0 ? FootballText.score(m) : Ui.time(m.at);
+        float half = big.measureText(score) / 2 + 56 * k;
+        logo(c, m.home, cx - half - logoSize / 2, cy, logoSize);
+        logo(c, m.away, cx + half + logoSize / 2, cy, logoSize);
+        name.setTextAlign(Paint.Align.RIGHT);
+        c.drawText(m.home.label(), cx - half - logoSize - 28 * k, cy + Ui.halfCap(name), name);
+        name.setTextAlign(Paint.Align.LEFT);
+        c.drawText(m.away.label(), cx + half + logoSize + 28 * k, cy + Ui.halfCap(name), name);
+        name.setTextAlign(Paint.Align.CENTER);
+        c.drawText(score, cx, cy + Ui.halfCap(big), big);
         name.setColor(keepName);
         big.setColor(keepBig);
         panelTitle.setColor(keepTitle);
+    }
+
+    /** Under the row: the day (the time is in the row before kickoff), where it's on, and `extra` (the stadium). */
+    private void footLine(Canvas c, Football.Match m, String extra, float baseline, boolean onPill) {
+        String day = Football.PRE.equals(m.state) ? FootballText.date(m.at) : FootballText.when(m.at);
+        dim.setTextAlign(Paint.Align.CENTER);
+        int keep = dim.getColor();
+        if (onPill) dim.setColor(DIM);
+        c.drawText(day + (m.broadcast.isEmpty() ? "" : "  ·  " + m.broadcast) + extra, w / 2f, baseline * k, dim);
+        dim.setColor(keep);
+        dim.setTextAlign(Paint.Align.LEFT);
     }
 
     private void drawForm(Canvas c) {
@@ -974,11 +991,8 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
         c.drawRect(0, 0, w, h, shade);
         Football.Match shown = details != null && details.match != null ? details.match : m;
         panel(c, M, 160, R, 400);
-        matchStrip(c, shown, 212, false);
-        String venue = details == null || details.venue.isEmpty() ? "" : "  ·  " + details.venue;
-        dim.setTextAlign(Paint.Align.CENTER);
-        c.drawText(FootballText.when(shown.at) + (shown.broadcast.isEmpty() ? "" : "  ·  " + shown.broadcast) + venue, w / 2f, 376 * k, dim);
-        dim.setTextAlign(Paint.Align.LEFT);
+        matchStrip(c, shown, 212, 288, false);
+        footLine(c, shown, details == null || details.venue.isEmpty() ? "" : "  ·  " + details.venue, 372, false);
         switch (matchTab) {
             case D_SUMMARY: drawSummary(c, shown); break;
             case D_NUMBERS: drawNumbers(c); break;
@@ -1047,9 +1061,13 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
         if (empty(c, details != null && details.stats.isEmpty(), Ui.tr("Sem números deste jogo.", "No numbers for this match.",
                 "Sin números de este partido."))) return;
         float left = 360 * k, right = 1560 * k, cx = w / 2f;
-        for (int i = 0; i < details.stats.size() && i < 10; i++) {
+        // Before kickoff the source gives each team's season so far: said so, not to read as this match's.
+        boolean season = open != null && Football.PRE.equals(open.state);
+        c.drawText(season ? Ui.tr("Números de cada time na temporada", "Each team's numbers this season", "Números de cada equipo en la temporada")
+                : Ui.tr("Números do jogo", "This match's numbers", "Números del partido"), (M + 40) * k, 478 * k, panelTitle);
+        for (int i = 0; i < details.stats.size() && i < 9; i++) {
             String[] s = details.stats.get(i);
-            float mid = (486 + i * 54) * k;
+            float mid = (540 + i * 54) * k;
             numbersBold.setTextAlign(Paint.Align.LEFT);
             c.drawText(s[1], (M + 60) * k, mid + Ui.halfCap(numbersBold), numbersBold);
             numbersBold.setTextAlign(Paint.Align.RIGHT);
@@ -1058,8 +1076,8 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
             c.drawText(s[0], cx, mid - 6 * k, smallDim);
             smallDim.setTextAlign(Paint.Align.LEFT);
             double a = number(s[1]), b = number(s[2]);
-            if (a + b <= 0) continue;
-            float split = left + (float) (a / (a + b)) * (right - left);
+            if (a < 0 || b < 0 || a + b <= 0) continue;   // a difference (−2) splits nothing
+            float split = Math.max(left + 6 * k, Math.min(right - 6 * k, left + (float) (a / (a + b)) * (right - left)));
             fill.setShader(null);
             fill.setColor(ink(0.75f));
             rect.set(left, mid + 6 * k, split - 3 * k, mid + 14 * k);

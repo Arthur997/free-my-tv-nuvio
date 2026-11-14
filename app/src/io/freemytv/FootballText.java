@@ -7,10 +7,14 @@ final class FootballText {
     /** "Hoje · 20:30", "Amanhã · 16:00", "qua. 18/11 · 21:30" (in the app's clock). */
     static String when(long at) {
         if (at == 0) return "";
+        return date(at) + "  ·  " + Ui.time(at);
+    }
+
+    /** "Hoje", "Amanhã", "Ontem" or "qua. 18/11": the day alone (where the time is already shown). */
+    static String date(long at) {
         long day = day(at), today = day(System.currentTimeMillis());
-        String date = day == today ? Ui.tr("Hoje", "Today", "Hoy") : day == today + 1 ? Ui.tr("Amanhã", "Tomorrow", "Mañana")
+        return day == today ? Ui.tr("Hoje", "Today", "Hoy") : day == today + 1 ? Ui.tr("Amanhã", "Tomorrow", "Mañana")
                 : day == today - 1 ? Ui.tr("Ontem", "Yesterday", "Ayer") : Ui.datePattern("format|EEE d/M").format(at);
-        return date + "  ·  " + Ui.time(at);
     }
 
     /** The day number in the app's clock (for today / tomorrow). */
