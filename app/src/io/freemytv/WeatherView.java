@@ -18,22 +18,25 @@ import android.text.TextUtils;
 import android.view.Choreographer;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewGroup;
 
 import java.text.SimpleDateFormat;
 import java.util.concurrent.ExecutorService;
 
 /**
- * The weather screen, in the look of Free My TV's settings (light by day, dark at night, rows on one faint panel, the
- * focused one in white). Two pages, one above the other:
+ * The weather screen, in the home screen's look: light by day, dark at night, every panel made of the shelf's glass
+ * (DockGlass), the focused day on a white pill. Two pages, one above the other:
  *  - Today: now in large type with a sentence about the day (WeatherSummary), the next 24 hours (temperature curve,
  *    symbols and the chance of rain), and eight tiles: rain, humidity, wind, UV, air quality, pressure, visibility,
  *    and the sun's arc between sunrise and sunset.
  *  - The next 7 days (↓ or OK): one row per day with its range on the week's scale; the focused day's details beside.
- * Text is made when the forecast, the minute or the focus changes, never while drawing. Measurements are in a
- * 1920×1080 space (k = width / 1920).
+ * Text is made when the forecast, the minute or the focus changes, never while drawing. The pages are layers (like the
+ * home screen's): scrolling moves them without redrawing their glass, and a focus move redraws only the days' rows.
+ * Measurements are in a 1920×1080 space (k = width / 1920).
  */
-final class WeatherView extends View implements Choreographer.FrameCallback {
-    private static final float M = 80, R = 1840, TITLE_BASE = 116, PANEL_RADIUS = 36;
+final class WeatherView extends ViewGroup implements Choreographer.FrameCallback {
+    private static final float M = 80, R = 1840, TITLE_BASE = 116, PANEL_RADIUS = 30;
+    private static final int TODAY = 0, DAYS_BACK = 1, DAYS_FRONT = 2;
     // Today
     private static final float HOURS_L = 740, HOURS_T = 160, HOURS_B = 584;
     private static final float TILES_T = 612, TILE_H = 196, TILE_GAP = 24;
@@ -45,14 +48,13 @@ final class WeatherView extends View implements Choreographer.FrameCallback {
     private static final int FACTS = 7;
     private static final int INK = 0xFF1D1D1F, DIM = 0xFF6E6E73;
 
-    private final Activity activity;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Ui.background("weather");
     private final Spring page = new Spring(0.34f, 0.92f, 0);   // 0 = today, 1 = the next days
     private final Spring[] rowFocus = new Spring[Forecast.DAYS];
     private Forecast forecast;
     private WeatherLocation.Place place;
-    private boolean fetching, failed, running, frameQueued, okDown, backDown;
+    private boolean fetching, fetchAgain, failed, running, frameQueued, okDown, backDown;
     private int day;   // the focused day on the second page
     private long lastNanos;
     private int w, h;
@@ -67,6 +69,10 @@ final class WeatherView extends View implements Choreographer.FrameCallback {
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG), stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint background = new Paint(), shade = new Paint(), shadow = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Shadows shadows = new Shadows();
+    private final Paint glassShadow = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Scene scene = new Scene();
+    private final DockGlass glass = new DockGlass(scene, shadows, glassShadow);
+    private final Layer today, daysBack, daysFront;
     private final RectF rect = new RectF(), pill = new RectF();
     private final Path curve = new Path();
 
@@ -93,15 +99,24 @@ final class WeatherView extends View implements Choreographer.FrameCallback {
             if (!running) return;
             prepare();
             if (forecast == null || System.currentTimeMillis() - forecast.fetchedAt > Forecast.FRESH_FOR) fetch();
-            invalidate();
+            redraw();
             handler.postDelayed(this, 60_000);
         }
     };
 
     WeatherView(Activity a) {
         super(a);
-        activity = a;
         setFocusable(true);
+        setWillNotDraw(false);   // the background is the group's own
+        today = new Layer(a, TODAY);
+        daysBack = new Layer(a, DAYS_BACK);
+        daysFront = new Layer(a, DAYS_FRONT);
+        // On the GPU (not on Android 8 to 11, as the home screen): the glass is drawn once, then only moved.
+        for (View v : new View[] {today, daysBack}) v.setLayerType(Ui.LEGACY ? LAYER_TYPE_NONE : LAYER_TYPE_HARDWARE, null);
+        for (View v : new View[] {today, daysBack, daysFront}) {
+            v.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+            addView(v);
+        }
         for (int i = 0; i < rowFocus.length; i++) rowFocus[i] = Spring.focus(i == 0 ? 1 : 0);
         stroke.setStyle(Paint.Style.STROKE);
         stroke.setStrokeCap(Paint.Cap.ROUND);
@@ -122,11 +137,11 @@ final class WeatherView extends View implements Choreographer.FrameCallback {
         if (w > 0) {
             boolean wasLight = light;
             light = !HomeData.get(getContext()).isNight(System.currentTimeMillis());
-            if (light != wasLight) makePaints();
+            if (light != wasLight) makeTheme();
         }
         prepare();
         handler.postDelayed(minute, 60_000);
-        invalidate();
+        redraw();
     }
 
     void pause() {
@@ -142,7 +157,7 @@ final class WeatherView extends View implements Choreographer.FrameCallback {
         if (p == null) {
             if (forecast == null || !forecast.hasNow()) messageText = Ui.tr("Escolha a cidade em Ajustes do Free My TV.",
                     "Pick your city in Free My TV Settings.", "Elige tu ciudad en Ajustes de Free My TV.");
-            invalidate();
+            redraw();
             return;
         }
         String key = Forecast.coordinates(p.latitude, p.longitude);
@@ -150,15 +165,19 @@ final class WeatherView extends View implements Choreographer.FrameCallback {
                 && System.currentTimeMillis() - forecast.fetchedAt < Forecast.FRESH_FOR;
         if (!fresh) fetch();
         prepare();
-        invalidate();
+        redraw();
     }
 
     private void fetch() {
         WeatherLocation.Place p = place;
-        if (p == null || fetching) return;
+        if (p == null) return;
+        if (fetching) {   // the place changed while fetching (the TV's spot arrived): once more after this one
+            fetchAgain = true;
+            return;
+        }
         fetching = true;
         prepare();   // "Updating…" in the header
-        invalidate();
+        redraw();
         wake();
         io.execute(() -> {
             try {
@@ -168,7 +187,11 @@ final class WeatherView extends View implements Choreographer.FrameCallback {
                     fetching = false;
                     failed = false;
                     prepare();
-                    invalidate();
+                    redraw();
+                    if (fetchAgain) {
+                        fetchAgain = false;
+                        fetch();
+                    }
                 });
             } catch (Exception e) {
                 AppLog.w("forecast: " + e.getMessage());
@@ -179,7 +202,11 @@ final class WeatherView extends View implements Choreographer.FrameCallback {
                     // The last forecast was for another city: better none than the wrong one (the TV's own spot is near the city).
                     if (!p.precise && forecast != null && forecast.fetchedAt != 0 && !here.equals(forecast.place)) forecast = null;
                     prepare();
-                    invalidate();
+                    redraw();
+                    if (fetchAgain) {
+                        fetchAgain = false;
+                        fetch();
+                    }
                 });
             }
         });
@@ -241,6 +268,7 @@ final class WeatherView extends View implements Choreographer.FrameCallback {
         day = next;
         aimRows();
         prepareDay();
+        daysFront.invalidate();
         wake();
     }
 
@@ -252,6 +280,7 @@ final class WeatherView extends View implements Choreographer.FrameCallback {
             aimRows();
             for (Spring s : rowFocus) s.snap(s.target);
             prepareDay();
+            daysFront.invalidate();
         }
         announceForAccessibility(on ? daysTitle : summary != null ? summary.getText().toString() : conditionText);
         wake();
@@ -275,10 +304,13 @@ final class WeatherView extends View implements Choreographer.FrameCallback {
         if (!running) return;
         float dt = lastNanos == 0 ? 1 / 60f : Math.min(0.05f, (frameTimeNanos - lastNanos) / 1e9f);
         lastNanos = frameTimeNanos;
-        boolean moving = page.step(dt);
-        for (Spring s : rowFocus) moving |= s.step(dt);
-        invalidate();
-        if (moving || (fetching && (forecast == null || !forecast.hasNow()))) {   // the spinner turns
+        boolean paging = page.step(dt), rows = false;
+        for (Spring s : rowFocus) rows |= s.step(dt);
+        if (paging) place();
+        if (rows) daysFront.invalidate();
+        boolean spinning = fetching && (forecast == null || !forecast.hasNow());
+        if (spinning) today.invalidate();
+        if (paging || rows || spinning) {
             frameQueued = true;
             Choreographer.getInstance().postFrameCallback(this);
         }
@@ -291,8 +323,62 @@ final class WeatherView extends View implements Choreographer.FrameCallback {
         h = height;
         k = w / 1920f;
         light = !HomeData.get(getContext()).isNight(System.currentTimeMillis());
-        makePaints();
+        scene.setSize(w, h);
+        makeTheme();
         prepare();
+        place();
+    }
+
+    @Override protected void onMeasure(int widthSpec, int heightSpec) {
+        int width = MeasureSpec.getSize(widthSpec), height = MeasureSpec.getSize(heightSpec);
+        for (View v : new View[] {today, daysBack, daysFront}) {
+            v.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
+        }
+        setMeasuredDimension(width, height);
+    }
+
+    @Override protected void onLayout(boolean changed, int l, int t, int r, int b) {
+        for (View v : new View[] {today, daysBack, daysFront}) v.layout(0, 0, r - l, b - t);
+    }
+
+    /** The pages where the scroll has them (only moved, not redrawn). */
+    private void place() {
+        float scroll = page.value * h;
+        today.setTranslationY(-scroll);
+        daysBack.setTranslationY(h - scroll);
+        daysFront.setTranslationY(h - scroll);
+    }
+
+    private void redraw() {
+        today.invalidate();
+        daysBack.invalidate();
+        daysFront.invalidate();
+    }
+
+    /**
+     * The paints, and what the glass refracts: this screen's own background (no photo here), as the home screen does
+     * without one.
+     */
+    private void makeTheme() {
+        makePaints();
+        glass.refract(light ? 0xFFF5F5F7 : 0xFF1C1C1E, light ? 0xFFE2E2E7 : 0xFF0B0B0D);
+    }
+
+    /** One page, drawn in its own place (scrolling moves it). */
+    private final class Layer extends View {
+        private final int kind;
+
+        Layer(android.content.Context c, int kind) {
+            super(c);
+            this.kind = kind;
+        }
+
+        @Override protected void onDraw(Canvas c) {
+            if (w == 0) return;
+            if (kind == TODAY) drawToday(c);
+            else if (kind == DAYS_BACK) drawDaysBack(c);
+            else drawDaysFront(c);
+        }
     }
 
     private int ink(float alpha) {
@@ -343,6 +429,7 @@ final class WeatherView extends View implements Choreographer.FrameCallback {
         message = Ui.text(Ui.medium, 30 * k, dim());
         message.setTextAlign(Paint.Align.CENTER);
         shadow.setMaskFilter(new BlurMaskFilter(22 * k, BlurMaskFilter.Blur.NORMAL));
+        glassShadow.setMaskFilter(new BlurMaskFilter(DockGlass.SHADOW_BLUR * k, BlurMaskFilter.Blur.NORMAL));
         summary = null;   // laid out again with the new paint
     }
 
@@ -505,13 +592,6 @@ final class WeatherView extends View implements Choreographer.FrameCallback {
         if (w == 0) return;
         c.drawRect(0, 0, w, h, background);
         c.drawRect(0, 0, w, h, shade);
-        float scroll = page.value * h;
-        c.save();
-        c.translate(0, -scroll);
-        drawToday(c);
-        c.translate(0, h);
-        drawDays(c);
-        c.restore();
     }
 
     private void drawHeader(Canvas c, String text) {
@@ -519,16 +599,10 @@ final class WeatherView extends View implements Choreographer.FrameCallback {
         c.drawText(headerText, R * k, TITLE_BASE * k, headerRight);
     }
 
-    /** A panel as in the settings: a faint tint and a hairline, the same radius. */
+    /** A panel of the shelf's glass (DockGlass; flat in performance mode). */
     private void panel(Canvas c, float left, float top, float right, float bottom) {
         rect.set(left * k, top * k, right * k, bottom * k);
-        float r = PANEL_RADIUS * k;
-        fill.setShader(null);
-        fill.setColor(light ? 0x0F000000 : 0x12FFFFFF);
-        c.drawRoundRect(rect, r, r, fill);
-        stroke.setStrokeWidth(Math.max(1, k));
-        stroke.setColor(light ? 0x14000000 : 0x1FFFFFFF);
-        c.drawRoundRect(rect, r, r, stroke);
+        glass.draw(c, rect, PANEL_RADIUS * k, light ? 0 : 1, k, 1);
     }
 
     private void drawToday(Canvas c) {
@@ -645,7 +719,7 @@ final class WeatherView extends View implements Choreographer.FrameCallback {
         c.drawCircle(left + (right - left) * at, mid, 8 * k, fill);
     }
 
-    /** The day's arc from sunrise (left) to sunset (right), the sun on it now (under the line at night). */
+    /** The day's arc from sunrise (left) to sunset (right), with the sun on it while it's up. */
     private void drawSun(Canvas c, float left, float top, float right) {
         float base = top + 146 * k, height = 62 * k, mid = (left + right) / 2, half = (right - left) / 2;
         stroke.setStrokeWidth(Math.max(1.5f, 2 * k));
@@ -655,12 +729,11 @@ final class WeatherView extends View implements Choreographer.FrameCallback {
         stroke.setColor(ink(0.4f));
         rect.set(left, base - height, right, base + height);
         c.drawArc(rect, 180, 180, false, stroke);
-        if (sunAt >= 0) {
-            float t = Math.max(-0.08f, Math.min(1.08f, sunAt));
-            double angle = Math.PI * (1 - t);
+        if (sunAt >= 0 && sunAt <= 1) {   // the sun on its arc; at night, none
+            double angle = Math.PI * (1 - sunAt);
             float sx = mid + (float) Math.cos(angle) * half, sy = base - (float) Math.sin(angle) * height;
             fill.setShader(null);
-            fill.setColor(sunAt > 0 && sunAt < 1 ? (light ? 0xFFFF9F0A : 0xFFFFD60A) : ink(0.35f));
+            fill.setColor(light ? 0xFFFF9F0A : 0xFFFFD60A);
             c.drawCircle(sx, sy, 10 * k, fill);
         }
         c.drawText(sunriseText, left, top + 182 * k, tileSub);
@@ -669,11 +742,19 @@ final class WeatherView extends View implements Choreographer.FrameCallback {
         tileSub.setTextAlign(Paint.Align.LEFT);
     }
 
-    private void drawDays(Canvas c) {
+    /** The days page's still part: the title and the two glass panels. */
+    private void drawDaysBack(Canvas c) {
         drawHeader(c, daysTitle);
         Forecast f = forecast;
         if (f == null || f.dayCount == 0) return;
         panel(c, DAYS_L, DAYS_T, DAYS_R, DAYS_B);
+        panel(c, DETAIL_L, DAYS_T, R, DAYS_B);
+    }
+
+    /** What the focus changes: the rows (and the pill) and the focused day's details. */
+    private void drawDaysFront(Canvas c) {
+        Forecast f = forecast;
+        if (f == null || f.dayCount == 0) return;
         for (int i = 0; i < f.dayCount; i++) drawDay(c, f, i);
         drawDetail(c, f);
     }
@@ -697,6 +778,7 @@ final class WeatherView extends View implements Choreographer.FrameCallback {
         dayName.setColor(on);
         dayTemp.setColor(on);
         dayDim.setColor(onDim);
+        dayChance.setColor(blend(blue(), 0xFF0071E3, light ? 0 : fc));   // the day blue on the white pill
         float half = Ui.halfCap(dayName);
         c.drawText(dayNames[i], (DAYS_L + 44) * k, mid + half, dayName);
         Symbols.draw(getContext(), c, Symbols.weather(f.dayCode[i], true), (DAYS_L + 340) * k, mid, 34 * k, on);
@@ -719,7 +801,6 @@ final class WeatherView extends View implements Choreographer.FrameCallback {
 
     private void drawDetail(Canvas c, Forecast f) {
         if (day >= f.dayCount) return;
-        panel(c, DETAIL_L, DAYS_T, R, DAYS_B);
         float x = (DETAIL_L + 40) * k, right = (R - 40) * k;
         c.drawText(detailDateText, x, 226 * k, detailDate);
         String symbol = Symbols.weather(f.dayCode[day], true);

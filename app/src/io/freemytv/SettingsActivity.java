@@ -213,6 +213,10 @@ public class SettingsActivity extends Activity {
         // The background: the home screen's (light by day, dark at night, or as the theme says), with a soft shade.
         private boolean lightTheme = true;
         private final Paint backdrop = new Paint(), shade = new Paint();
+        // The list's panel: the home screen's shelf glass (DockGlass; flat in performance mode).
+        private final Scene scene = new Scene();
+        private final Paint glassShadow = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final DockGlass glass = new DockGlass(scene, new Shadows(), glassShadow);
         private final Handler handler = new Handler(Looper.getMainLooper());
         private final List<Spring> pop = new ArrayList<>();   // each row's focus, by its index in the page
         private final Spring scroll = new Spring(0.24f, 1f, 0);   // the first row shown (fractional while it moves)
@@ -1233,6 +1237,9 @@ public class SettingsActivity extends Activity {
                     lightTheme ? 0xFFE2E2E7 : 0xFF0B0B0D, android.graphics.Shader.TileMode.CLAMP));
             shade.setShader(new android.graphics.RadialGradient(w * 0.5f, h * 0.42f, Math.max(w, h) * 0.75f, 0x00000000,
                     lightTheme ? 0x0F000000 : 0x33000000, android.graphics.Shader.TileMode.CLAMP));
+            scene.setSize(w, h);
+            glass.refract(lightTheme ? 0xFFF5F5F7 : 0xFF1C1C1E, lightTheme ? 0xFFE2E2E7 : 0xFF0B0B0D);
+            glassShadow.setMaskFilter(new BlurMaskFilter(DockGlass.SHADOW_BLUR * k, BlurMaskFilter.Blur.NORMAL));
             title = Ui.text(Ui.displaySemibold, 50 * k, fg(0xFFFFFFFF));
             title.setTextAlign(Paint.Align.CENTER);
             subtitle = Ui.text(Ui.regular, 26 * k, fg(0x99FFFFFF));
@@ -1385,23 +1392,15 @@ public class SettingsActivity extends Activity {
         }
 
         /**
-         * The rows sit on one panel, like the home screen's Control Center (radius 30): a faint tint with a hairline
-         * edge, so the white focus pill stands out on it in either theme. `top`/`bottom` in 1080p units.
+         * The rows sit on one panel of the home screen's shelf glass (radius 30, as the Control Center's tiles), the
+         * white focus pill on it. `top`/`bottom` in 1080p units.
          */
         private void drawListPanel(Canvas c, float top, float bottom) {
             panelRect.set((LIST_X - 22) * k, (top - 16) * k, (LIST_R + 22) * k, (bottom + 10) * k);
-            float r = PANEL_RADIUS * k;
-            panelPaint.setStyle(Paint.Style.FILL);
-            panelPaint.setColor(lightTheme ? 0x0F000000 : 0x12FFFFFF);
-            c.drawRoundRect(panelRect, r, r, panelPaint);
-            panelPaint.setStyle(Paint.Style.STROKE);
-            panelPaint.setStrokeWidth(Math.max(1, k));
-            panelPaint.setColor(lightTheme ? 0x14000000 : 0x1FFFFFFF);
-            c.drawRoundRect(panelRect, r, r, panelPaint);
+            glass.draw(c, panelRect, PANEL_RADIUS * k, lightTheme ? 0 : 1, k, 1);
         }
 
         private static final float PANEL_RADIUS = 30;   // ControlCenter.TILE_RADIUS
-        private final Paint panelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final RectF panelRect = new RectF();
 
         /** The hints, wrapped (2 lines at most) to the list's width: longer translations no longer run off the screen. */

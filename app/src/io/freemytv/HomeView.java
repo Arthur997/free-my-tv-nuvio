@@ -258,6 +258,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final Paint halo = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Shadows shadows = new Shadows();
     private final FocusRing focusRing = new FocusRing(shadows);
+    private final DockGlass dockGlass = new DockGlass(scene, shadows, shadow);
     private final Map<Bitmap, BitmapShader> imageShaders = new WeakHashMap<>();
     private final Matrix imageMatrix = new Matrix();
     private final Paint imageFill = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
@@ -1197,14 +1198,17 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** Shelf layer: the glass bar and its shadow (it only changes with the background). */
     private void drawPlatter(Canvas c) {
         if (shelf.isEmpty()) return;
-        float radius = (TILE_RADIUS + SHELF_PAD) * k;
-        tmp.set(platterRect);
-        tmp.offset(0, 10 * k);
-        shadow.setColor(tone(0x12000000, 0x52000000));
-        shadows.draw(c, tmp, radius, SHADOW_BLUR * k, shadow);
-        // White glass by day; smoked glass at night.
-        scene.liquid(c, platterRect, radius, tone(0xFFFFFFFF, SMOKE), tone(0.42f, 0.12f), tone(0.03f, 0.08f),
-                tone(30, 34) * k, tone(22, 28) * k, tone(0.65f, 0.95f), 1);
+        dockGlass(c, platterRect, (TILE_RADIUS + SHELF_PAD) * k, 1);
+    }
+
+    /** The shelf's glass (DockGlass), for every glass on the home screen. */
+    private void dockGlass(Canvas c, RectF r, float radius, float alpha) {
+        dockGlass.draw(c, r, radius, dark(), k, alpha);
+    }
+
+    /** The same glass without its shadow (for things that draw their own, like a focus that lifts them). */
+    private void dockLiquid(Canvas c, RectF r, float radius, float alpha) {
+        dockGlass.body(c, r, radius, dark(), k, alpha);
     }
 
     /** The quotes row's text and sizes, for one set of coins, prices and text size. */
@@ -1540,21 +1544,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         return Ui.alpha(tone(L_INK, 0xFFFFFFFF), alpha);
     }
 
-    /** Glass for a drawer card or button: white by day, smoked at night (both during the transition). */
-    private void drawerGlass(Canvas c, RectF r, float radius, float lightTint, int shadowColor, float drop) {
-        float dk = dark();
-        if (dk < 0.999f) {
-            tmp.set(r);
-            tmp.offset(0, drop);
-            shadow.setColor(Ui.alpha(shadowColor, 1 - dk));
-            shadows.draw(c, tmp, radius, SHADOW_BLUR * k, shadow);
-            scene.glass(c, r, radius, 0xFFFFFFFF, lightTint, 0, 0, 0.02f, 1, 1 - dk);
-        }
-        if (dk > 0.001f) scene.glass(c, r, radius, SMOKE, 0.4f, 0, 0, 0.02f, 1, dk);
-    }
-
     private void drawerCard(Canvas c, RectF r) {
-        drawerGlass(c, r, 30 * k, 0.72f, 0x0D000000, 6 * k);
+        dockGlass(c, r, 30 * k, 1);
     }
 
     private void drawDrawer(Canvas c) {
@@ -1593,7 +1584,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             shadow.setColor(Ui.alpha(0xFF000000, 0.45f * f));
             shadows.draw(c, tmp, r, SHADOW_BLUR * k, shadow);
         }
-        if (f < 0.99f) drawerGlass(c, cell, r, 0.7f, 0x0A000000, 4 * k);
+        if (f < 0.99f) dockGlass(c, cell, r, 1);
         if (f > 0.01f) {
             fill.setShader(null);
             fill.setColor(Ui.alpha(WHITE, f));
@@ -1909,7 +1900,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void drawDock(Canvas c) {
         dockRect.set((MARGIN - 20) * k, DOCK_TOP * k, (CONTENT_R + 20) * k, DOCK_BOTTOM * k);
         float radius = (GRID_RADIUS + DOCK_PAD) * k;
-        drawerGlass(c, dockRect, radius, 0.72f, 0x0D000000, 6 * k);
+        dockGlass(c, dockRect, radius, 1);
         sheetTitle.setColor(tone(L_INK, WHITE));
         c.drawText(Ui.tr("Todos os Apps", "All Apps"), MARGIN * k, DOCK_TITLE * k, sheetTitle);
     }
@@ -1928,7 +1919,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float left = (1920 - gridWidth) / 2 * k;
         float gridTop = GRID_TOP * k;
         c.save();
-        c.clipRect(0, (DOCK_TOP + 6) * k, w, (DOCK_BOTTOM - 6) * k);
+        // From just above the first row's grown focus: the labels of a row scrolled away don't peek out cut.
+        c.clipRect(0, (GRID_TOP - 26) * k, w, (DOCK_BOTTOM - 6) * k);
         int labelRest = tone(L_DIM, 0x99FFFFFF), labelOn = tone(L_INK, 0xFFFFFFFF);
         for (int i = 0; i < n; i++) {
             int r = i / COLUMNS, col = i % COLUMNS;
@@ -2319,11 +2311,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         tmp.offset(0, 12 * k);
         shadow.setColor(Ui.alpha(0xFF000000, tone(0.14f, 0.36f)));
         shadows.draw(c, tmp, radius, SHADOW_BLUR * k, shadow);
+        dockLiquid(c, menuRect, radius, 1);
         fill.setShader(null);
-        fill.setColor(tone(0xFAFFFFFF, 0xFA2C2C2E));
-        c.drawRoundRect(menuRect, radius, radius, fill);
-        border.setColor(tone(0x14000000, 0x1FFFFFFF));
-        c.drawRoundRect(menuRect, radius, radius, border);
         float x = menuRect.left + pad + MENU_TEXT_X * k;
         menuHeader.setColor(tone(L_DIM, 0xFF98989D));
         c.drawText(menuTitle, x, menuRect.top + pad + MENU_HEADER * k / 2 + menuHeaderHalfCap, menuHeader);
@@ -2350,7 +2339,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final Spring control = new Spring(0.22f, 0.86f, 0);
     private final ControlCenter controlCenter;
     private boolean controlOpen, controlDirty;
-    private final Paint controlFill = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private ControlCenter makeControlCenter(Activity a) {
         return new ControlCenter(a, new ControlCenter.Host() {
@@ -2366,11 +2354,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 else closeControl();
             }
             @Override public float dark() { return HomeView.this.dark(); }
-            /** The shelf's glass (drawPlatter): white by day, smoked at night. */
-            /** Solid, as over other apps (ControlActivity): the home screen's picture showing through was hard to read. */
+            /** The shelf's glass, as everything on the home screen (over other apps, ControlActivity, it stays solid). */
             @Override public void glass(Canvas c, RectF r, float radius) {
-                controlFill.setColor(tone(WHITE, INK));
-                c.drawRoundRect(r, radius, radius, controlFill);
+                dockLiquid(c, r, radius, 1);
             }
         });
     }
@@ -2609,8 +2595,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float toastTop = 64 * k - (1 - a) * 16 * k;
         tmp.set((w - tw) / 2f - padX, toastTop, (w + tw) / 2f + padX, toastTop + th + 2 * padY);
         int save = c.saveLayerAlpha(tmp.left - 4, tmp.top - 4, tmp.right + 4, tmp.bottom + 4, Math.round(255 * a));
-        scene.glass(c, tmp, Math.min(tmp.height() / 2, 32 * k), SMOKE, 0.55f, 0, 0, 0.02f, 1);
-        Symbols.draw(getContext(), c, "bell", tmp.left + padX + iconW / 2, tmp.centerY(), icon, 0xEBFFFFFF);
+        dockGlass(c, tmp, Math.min(tmp.height() / 2, 32 * k), 1);
+        Symbols.draw(getContext(), c, "bell", tmp.left + padX + iconW / 2, tmp.centerY(), icon, tone(0xEB1D1D1F, 0xEBFFFFFF));
+        toastPaint.setColor(tone(0xF21D1D1F, 0xF2FFFFFF));   // on the day glass the text is dark
         c.translate(tmp.left + padX + iconW + 16 * k, tmp.top + padY);
         toast.draw(c);
         c.restoreToCount(save);
@@ -3320,8 +3307,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float inset = 6 * k;
         tabBar.set(topRects[0].left - inset, topRects[0].top - inset, topRects[2].right + inset, topRects[0].bottom + inset);
         float rr = tabBar.height() / 2;
-        scene.liquid(c, tabBar, rr, tone(0xFFFFFFFF, SMOKE), tone(0.5f, 0.5f), tone(0.02f, 0.01f), 12 * k, 8 * k,
-                tone(0.6f, 0.45f), 1);
+        dockGlass(c, tabBar, rr, 1);
         float rest = 1 - Ui.clamp(topFocus[tab].value);
         if (rest > 0.01f) {
             RectF r = topRects[tab];
@@ -3693,8 +3679,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             tmp.offset(0, (4 + 10 * f) * k);
             shadow.setColor(Ui.alpha(0xFF000000, tone(0.06f, 0.3f) + tone(0.18f, 0.2f) * f));
             shadows.draw(c, tmp, rad, SHADOW_BLUR * k, shadow);
-            scene.liquid(c, cell, rad, tone(0xFFFFFFFF, SMOKE), tone(0.55f, 0.5f), tone(0.02f, 0.01f), 12 * k, 8 * k,
-                    tone(0.6f, 0.45f), 1 - f);
+            dockLiquid(c, cell, rad, 1 - f);
             if (f > 0.01f) {
                 fill.setShader(null);
                 fill.setColor(Ui.alpha(0xFFFFFFFF, f));
