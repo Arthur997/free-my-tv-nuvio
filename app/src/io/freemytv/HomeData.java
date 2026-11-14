@@ -130,13 +130,16 @@ final class HomeData {
         throw failed;
     }
 
+    /** How many of the next hours the drawer's weather card can show (it shows fewer when it has less room). */
+    static final int HOURS = 12;
+
     static final class Weather {
         double temp = Double.NaN, max = Double.NaN, min = Double.NaN;
         double tomorrowMax = Double.NaN, tomorrowMin = Double.NaN;   // shown in the evening, after sunset
         int code = -1;
         boolean isDay = true;
         long sunrise, sunset;   // today's, in epoch ms
-        // Next hours (starting at the next full hour): time, temperature, code and day/night.
+        // Next hours (starting at the next full hour, up to HOURS): time, temperature, code and day/night.
         final List<Long> hours = new ArrayList<>();
         final List<Double> hourTemp = new ArrayList<>();
         final List<Integer> hourCode = new ArrayList<>();
@@ -301,7 +304,7 @@ final class HomeData {
             JSONArray codes = hourly.getJSONArray("weather_code");
             JSONArray days = hourly.optJSONArray("is_day");
             long now = System.currentTimeMillis();
-            for (int i = 0; i < times.length() && w.hours.size() < 6; i++) {
+            for (int i = 0; i < times.length() && w.hours.size() < HOURS; i++) {
                 long at = localTime(times.getString(i), zone);
                 if (at <= now) continue;
                 w.hours.add(at);
@@ -456,7 +459,7 @@ final class HomeData {
         return Math.round(fahrenheit() ? v * 9 / 5 + 32 : v) + "°";
     }
 
-    private static boolean fahrenheit() {
+    static boolean fahrenheit() {
         String unit = Prefs.temperature();
         if (unit.equals("F")) return true;
         if (unit.equals("C")) return false;

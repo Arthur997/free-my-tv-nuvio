@@ -23,6 +23,11 @@ MAP = {
     "clean": ("cleaning_services", 1), "wifi": ("wifi", 0), "wifi_off": ("wifi_off", 0), "ethernet": ("lan", 1),
     "bluetooth": ("bluetooth", 0), "speed": ("speed", 1), "control": ("tune", 0), "recents": ("history", 0),
     "close": ("close", 0),
+    # The weather screen (WeatherView).
+    "water_drop": ("water_drop", 1), "humidity": ("humidity_percentage", 1), "air": ("air", 0),
+    "uv": ("light_mode", 1), "air_quality": ("aq", 0), "pressure": ("compress", 0), "visibility": ("visibility", 1),
+    "thermostat": ("thermostat", 1), "location": ("location_on", 1), "navigation": ("navigation", 1),
+    "umbrella": ("umbrella", 1), "calendar": ("calendar_month", 1),
 }
 
 
