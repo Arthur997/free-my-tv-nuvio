@@ -48,6 +48,7 @@ public class SettingsActivity extends Activity {
         super.onCreate(savedInstanceState);
         Watchdog.install(this);
         Ui.init(this);
+        Ui.themeWindow(this);
         view = new SettingsView(this);
         setContentView(view);
     }

@@ -32,6 +32,7 @@ public class WeatherActivity extends Activity {
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Ui.init(this);
+        Ui.themeWindow(this);
         location = new WeatherLocation(this);
         view = new WeatherView(this);
         setContentView(view);

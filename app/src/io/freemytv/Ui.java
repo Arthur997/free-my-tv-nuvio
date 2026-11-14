@@ -486,6 +486,15 @@ final class Ui {
         }, "free-my-tv-" + name));
     }
 
+    /**
+     * The window's color as the theme is now (dark at night, light by day): what shows for a moment before the screen
+     * draws its first frame. The theme's own is fixed, and was a white flash at night.
+     */
+    static void themeWindow(android.app.Activity a) {
+        boolean night = HomeData.get(a).isNight(System.currentTimeMillis());
+        a.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(night ? 0xFF1C1C1E : 0xFFEBEBF0));
+    }
+
     /** Spinning arc (work in progress). */
     static void spinner(Canvas c, float cx, float cy, float r, float seconds, Paint stroke) {
         OVAL.set(cx - r, cy - r, cx + r, cy + r);

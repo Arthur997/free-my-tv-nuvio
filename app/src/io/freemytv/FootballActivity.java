@@ -27,6 +27,7 @@ public class FootballActivity extends Activity {
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Ui.init(this);
+        Ui.themeWindow(this);
         view = new FootballView(this);
         setContentView(view);
     }

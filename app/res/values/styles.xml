@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The light background already in the window: opening the home screen never flashes another color. -->
+    <!-- The window's color until a screen paints its own (Ui.themeWindow: dark at night). -->
     <color name="home_background">#EBEBF0</color>
 
     <style name="FreeMyTV.Home" parent="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
         <item name="android:windowBackground">@color/home_background</item>
+        <!-- No starting window: the system drew it in this fixed light color while a screen started (the home screen
+             starting again after Android freed it, the weather and football screens), a white flash at night. The
+             screen before stays until the first frame instead. -->
+        <item name="android:windowDisablePreview">true</item>
         <item name="android:windowContentOverlay">@null</item>
         <item name="android:windowShowWallpaper">false</item>
         <item name="android:colorBackgroundCacheHint">@null</item>
