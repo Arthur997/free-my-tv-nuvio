@@ -86,13 +86,39 @@ final class Football {
         String minute = "", player = "", teamId = "";
     }
 
-    /** A match in detail: its goals and cards, the line-ups and a few numbers. */
+    /** A match in detail: its goals and cards, the line-ups, the numbers, and the two teams' record. */
     static final class Details {
         Match match;
+        /** "Estádio do Maracanã, Rio de Janeiro". */
+        String venue = "";
+        /** The last meetings between the two teams (newest first) and their tally ("FLA lidera 2-1-2"). */
+        final List<Match> meetings = new ArrayList<>();
+        String meetingsSummary = "";
+        /** Each team's last five matches, newest first. */
+        final List<Match> homeForm = new ArrayList<>(), awayForm = new ArrayList<>();
         final List<Event> events = new ArrayList<>();
         String homeFormation = "", awayFormation = "";
         final List<String> homeLineup = new ArrayList<>(), awayLineup = new ArrayList<>();
         /** {label, home, away}, as the source names them. */
         final List<String[]> stats = new ArrayList<>();
+    }
+
+    /**
+     * Betting odds for a match, as decimal odds averaged over the bookmakers the source lists (NaN: none), and the
+     * chance each implies with the bookmakers' margin taken out.
+     */
+    static final class Odds {
+        final List<String> bookmakers = new ArrayList<>();
+        double home = Double.NaN, draw = Double.NaN, away = Double.NaN;
+
+        boolean any() {
+            return !Double.isNaN(home) && !Double.isNaN(away);
+        }
+
+        /** The implied chance of `odd` (one of home, draw, away), in %, the three adding up to 100. */
+        int chance(double odd) {
+            double sum = 1 / home + 1 / away + (Double.isNaN(draw) ? 0 : 1 / draw);
+            return (int) Math.round(100 / odd / sum);
+        }
     }
 }

@@ -16,7 +16,11 @@ interface FootballSource {
 
     Football.Table table(String league) throws Exception;
 
+    /** The match in detail, with the two teams' meetings and recent form (one request). */
     Football.Details details(String league, String matchId) throws Exception;
+
+    /** The bookmakers' odds for the match (small; none for many matches). */
+    Football.Odds odds(String league, String matchId) throws Exception;
 
     /** The teams of a league, by name (the team picker's lists). */
     List<Football.Team> teams(String league) throws Exception;
