@@ -1347,8 +1347,16 @@ final class HomeMode {
             "i=0",
             "while [ \"$3\" != now ] && [ $i -lt 120 ] && front; do sleep 30; i=$((i + 1)); done",
             "log -t FreeMyTV \"update: installing $2\"",
+            // The app on screen now (its task's number): the install stops this app, home screen included.
+            "t=$(dumpsys activity activities | grep -m 1 -E '^ +\\* Task(Record)?\\{' | sed -n 's/^[^#]*#\\([0-9][0-9]*\\).*/\\1/p')",
             "cp \"$1\" $F.apk; rm -f \"$1\"",   // the installer (system_server) can't read the shared storage, only here
             "out=$(pm install -r $F.apk 2>&1)",
+            // With the home screen gone from under the other apps, Back from one led to live TV (TCL, Android 9): it
+            // starts again, and the app that was on screen comes back on top of it (lock and unlock: to the front).
+            "if [ \"$3\" != now ] && [ -n \"$t\" ] && echo \"$out\" | grep -q Success; then",
+            "  am start -W -a android.intent.action.MAIN -c android.intent.category.HOME >/dev/null 2>&1",
+            "  am task lock $t >/dev/null 2>&1; am task lock stop >/dev/null 2>&1",
+            "fi",
             "echo \"$2 $out\" > $F.result",   // Updater.refusedBy reads it: a refused version isn't fetched again
             "rm -f $F.apk $F.pid",
             "log -t FreeMyTV \"update to $2: $out\"",
