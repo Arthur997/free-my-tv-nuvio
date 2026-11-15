@@ -212,15 +212,17 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private int drawerInputs;          // how many leading items are inputs (the rest are shortcuts)
     private Spring[] drawerFocus = new Spring[0];
     private RectF[] drawerRects = new RectF[0];
-    private final RectF weatherCard = new RectF(), quotesCard = new RectF();   // quotesCard: the prices or the football
     private final Spring drawer = new Spring(0.34f, 0.92f, 0);
     private boolean drawerOpen;
     private int drawerIndex;
-    // The cards under the drawer's row take the focus too: the weather (OK opens WeatherActivity) and the football
-    // beside it (FootballActivity). The prices card opens nothing.
-    private static final int CARD_NONE = -1, CARD_WEATHER = 0, CARD_SIDE = 1;
-    private int cardFocused = CARD_NONE;
-    private final Spring weatherFocus = Spring.focus(0), sideFocus = Spring.focus(0);
+    // The widgets under the drawer's row, any of them on, sharing the row's width, and taking the focus too: the
+    // weather (OK opens WeatherActivity), the prices (OK held refreshes them) and the football (FootballActivity).
+    private static final int CARD_NONE = -1, W_WEATHER = 0, W_PRICES = 1, W_FOOTBALL = 2, WIDGETS = 3;
+    /** How much of the row each one takes, against the others on: the weather's hours want the most room. */
+    private static final float[] WIDGET_WEIGHT = {1.4f, 1.1f, 1};
+    private final RectF[] widgetRects = {new RectF(), new RectF(), new RectF()};
+    private final Spring[] widgetFocus = {Spring.focus(0), Spring.focus(0), Spring.focus(0)};
+    private int cardFocused = CARD_NONE;   // the focused widget (W_*), or CARD_NONE
     private final FootballData football;
 
     // "All Apps" sheet
@@ -409,8 +411,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         showClock = Prefs.topClock();
         showWeatherOn = Prefs.weather();
         showQuotes = Prefs.quotes();
-        showFootball = Prefs.SIDE_FOOTBALL.equals(Prefs.sideWidget());
-        if (w > 0) layoutDrawer();   // a card turned off in the settings gives its room to the other one
+        showFootball = Prefs.footballWidget();
+        if (w > 0) layoutDrawer();   // a widget turned off in the settings gives its room to the others
         checkNight(false);
         resumedAt = SystemClock.uptimeMillis();
         lastNanos = 0;
@@ -696,7 +698,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (topMoving) status.invalidate();
         boolean extras = tickExtras(up);
         heroMoving |= topMoving | cardsMoving | extras;
-        boolean drawerItemsMoving = step(drawerFocus, dt) | weatherFocus.step(dt) | sideFocus.step(dt);
+        boolean drawerItemsMoving = step(drawerFocus, dt) | step(widgetFocus, dt);
         boolean gridMoving = step(gridFocus, dt) | scroll.step(dt);
         boolean drawerMoving = drawer.step(dt);
         boolean sheetMoving = sheet.step(dt);
@@ -1515,11 +1517,24 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             drawerRects[i].set(x, top, x + tw, top + ROW_H * k);
             x += tw + gap;
         }
-        float cardsTop = CARDS_TOP * k, split = left + (right - left) * 0.585f;
-        boolean wx = showWeatherOn, qt = showFootball || (showQuotes && HomeData.active().length > 0);
-        // A card that is off gives its room to the other one.
-        weatherCard.set(left, cardsTop, qt ? split - 16 * k : right, cardsTop + CARDS_H * k);
-        quotesCard.set(wx ? split + 16 * k : left, cardsTop, right, cardsTop + CARDS_H * k);
+        // The widgets that are on share the row by their weights; one alone takes all of it.
+        float cardsTop = CARDS_TOP * k, cardGap = 32 * k, weights = 0;
+        int on = 0;
+        for (int i = 0; i < WIDGETS; i++) {
+            if (!widgetShown(i)) continue;
+            weights += WIDGET_WEIGHT[i];
+            on++;
+        }
+        float room = right - left - Math.max(0, on - 1) * cardGap, x0 = left;
+        for (int i = 0; i < WIDGETS; i++) {
+            if (!widgetShown(i)) {
+                widgetRects[i].setEmpty();
+                continue;
+            }
+            float width = room * WIDGET_WEIGHT[i] / weights;
+            widgetRects[i].set(x0, cardsTop, x0 + width, cardsTop + CARDS_H * k);
+            x0 += width + cardGap;
+        }
         drawerDirty = true;
     }
 
@@ -1539,8 +1554,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         drawer.target = 0;
         zone = Z_SHELF;
         cardFocused = CARD_NONE;
-        weatherFocus.snap(0);
-        sideFocus.snap(0);
+        for (Spring f : widgetFocus) f.snap(0);
         for (Spring f : drawerFocus) f.snap(0);   // the drawer goes away: its focus doesn't need to animate
         if (!shelf.isEmpty() && drawerIndex < drawerRects.length) shelfIndex = nearest(tileRects, drawerRects[drawerIndex].centerX());
     }
@@ -1572,9 +1586,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         for (int i = 0; i < drawerItems.size(); i++) if (drawerFocus[i].value > 0.02f && (top < 0 || drawerFocus[i].value > drawerFocus[top].value)) top = i;
         for (int i = 0; i < drawerItems.size(); i++) if (i != top) drawDrawerTile(c, i);
         if (top >= 0) drawDrawerTile(c, top);
-        if (showWeatherOn) drawWeatherCard(c, weatherCard);
-        if (showFootball) drawFootballCard(c, quotesCard);
-        else if (showQuotes && HomeData.active().length > 0) drawQuotesCard(c, quotesCard);
+        if (widgetShown(W_WEATHER)) drawWeatherCard(c, widgetRects[W_WEATHER]);
+        if (widgetShown(W_PRICES)) drawQuotesCard(c, widgetRects[W_PRICES]);
+        if (widgetShown(W_FOOTBALL)) drawFootballCard(c, widgetRects[W_FOOTBALL]);
     }
 
     /** Square drawer button: symbol and name; an input with no device is dimmed. Focused: white, with dark text. */
@@ -1616,7 +1630,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      * the drawer's row), it glows with the focus ring: OK opens the weather screen.
      */
     private void drawWeatherCard(Canvas c, RectF r) {
-        float f = Ui.clamp(weatherFocus.value), radius = 30 * k;
+        float f = Ui.clamp(widgetFocus[W_WEATHER].value), radius = 30 * k;
         focusRing.glow(c, r, radius, f, k, ringGlow());
         drawerCard(c, r);
         if (Ui.LITE) weatherSnapshot.draw(c, r, drawerCardsKey(), cc -> drawWeather(cc, r));
@@ -1632,12 +1646,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private int logosReady;
     // The card's text, made when the data, the minute, the language or the settings change (not on every frame).
     private long ftFor = -1, ftMinute = -1;
-    private int ftLanguage = -1, ftPrefs = -1;
+    private int ftLanguage = -1, ftPrefs = -1, ftWidth = -1;
     private String ftTitle = "", ftState = "", ftScore = "", ftHome = "", ftAway = "", ftFoot = "";
     private boolean ftLive;
 
     private void drawFootballCard(Canvas c, RectF r) {
-        float f = Ui.clamp(sideFocus.value), radius = 30 * k;
+        float f = Ui.clamp(widgetFocus[W_FOOTBALL].value), radius = 30 * k;
         focusRing.glow(c, r, radius, f, k, ringGlow());
         drawerCard(c, r);
         if (Ui.LITE) footballSnapshot.draw(c, r, drawerCardsKey(), cc -> drawFootball(cc, r));
@@ -1648,7 +1662,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void drawFootball(Canvas c, RectF r) {
         float x = r.left + 34 * k, right = r.right - 30 * k;
         Football.Match m = football.current();
-        prepareFootballTexts(m);
+        prepareFootballTexts(m, r);
         c.drawText(ftTitle, x, r.top + 54 * k, cardTitle);
         float chevron = Symbols.width(getContext(), "chevron_right", 24 * k);
         Symbols.draw(getContext(), c, "chevron_right", right - chevron / 2, r.top + 54 * k - Ui.halfCap(cardDimRight), 24 * k, tone(L_DIM, 0xB3FFFFFF));
@@ -1657,6 +1671,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                     "Elige un equipo: OK abre los ajustes.") : Ui.tr("Sem jogos do time agora.", "No matches for the team right now.",
                     "Sin partidos del equipo ahora.");
             c.drawText(hint, x, r.top + 150 * k, cardDim);
+            if (!ftFoot.isEmpty()) c.drawText(ftFoot, x, r.top + 196 * k, cardText);   // where the team stands
             return;
         }
         // The state at the top right: a red pill while live.
@@ -1710,25 +1725,50 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         c.drawText(initials, cx, cy + Ui.halfCap(drawerLabel), drawerLabel);
     }
 
-    private void prepareFootballTexts(Football.Match m) {
+    private void prepareFootballTexts(Football.Match m, RectF r) {
         long minute = System.currentTimeMillis() / 60_000;
-        if (football.at == ftFor && minute == ftMinute && Ui.generation == ftLanguage && Prefs.version == ftPrefs) return;
+        int width = Math.round(r.width());
+        if (football.at == ftFor && minute == ftMinute && Ui.generation == ftLanguage && Prefs.version == ftPrefs && width == ftWidth) return;
         ftFor = football.at;
         ftMinute = minute;
         ftLanguage = Ui.generation;
         ftPrefs = Prefs.version;
+        ftWidth = width;
         Football.Overview o = football.overview;
-        ftTitle = Prefs.footballTeamName().isEmpty() ? Ui.tr("Futebol", "Football", "Fútbol") : Prefs.footballTeamName();
-        if (m == null) return;
-        if (!m.leagueName.isEmpty()) ftTitle += "  ·  " + m.leagueName;
+        String standing = o == null ? "" : o.standing;
+        String title = Prefs.footballTeamName().isEmpty() ? Ui.tr("Futebol", "Football", "Fútbol") : Prefs.footballTeamName();
+        float room = r.width() - 64 * k - Symbols.width(getContext(), "chevron_right", 24 * k) - 14 * k;
+        if (m == null) {
+            ftTitle = fit(title, cardTitle, room);
+            ftFoot = fit(standing, cardText, r.width() - 68 * k);
+            return;
+        }
+        if (!m.leagueName.isEmpty()) title += "  ·  " + m.leagueName;
         ftLive = m.live();
-        ftState = ftLive ? FootballText.state(m).toUpperCase(Ui.locale()) : FootballText.state(m);
+        // A match over for a while (nothing soon after it): "Last match · Sun 9/11".
+        boolean past = m.over() && System.currentTimeMillis() - m.at > 12 * 3600_000L;
+        ftState = ftLive ? FootballText.state(m).toUpperCase(Ui.locale())
+                : past ? Ui.tr("Último jogo", "Last match", "Último partido") + "  ·  " + FootballText.date(m.at) : FootballText.state(m);
         ftScore = m.homeScore >= 0 ? FootballText.score(m) : Ui.time(m.at);
         ftHome = m.home.label();
         ftAway = m.away.label();
-        // The foot: when (before kickoff) and where it's on, else where the team stands.
-        String standing = o == null ? "" : o.standing;
-        ftFoot = Football.PRE.equals(m.state) ? FootballText.when(m.at) + (m.broadcast.isEmpty() ? "" : "  ·  " + m.broadcast) : standing;
+        // The foot: when (before kickoff) and where it's on, else where the team stands (and, after the last match,
+        // when the next one is, if it's known).
+        Football.Match next = o == null ? null : o.match;
+        String foot = Football.PRE.equals(m.state) ? FootballText.when(m.at) + (m.broadcast.isEmpty() ? "" : "  ·  " + m.broadcast) : standing;
+        if (past && next != null && next != m && Football.PRE.equals(next.state)) {
+            String when = Ui.tr("Próximo: ", "Next: ", "Próximo: ") + FootballText.date(next.at);
+            foot = foot.isEmpty() ? when : foot + "  ·  " + when;
+        }
+        ftFoot = fit(foot, cardDim, r.width() - 68 * k);
+        // The title gives way to the state at its right.
+        Paint statePaint = ftLive ? changePaint : cardDimRight;
+        ftTitle = fit(title, cardTitle, room - statePaint.measureText(ftState) - (ftLive ? 28 * k : 0) - 24 * k);
+    }
+
+    /** `text` cut with "…" to `width`. Made with the card's texts, not on every frame. */
+    private static String fit(String text, Paint paint, float width) {
+        return TextUtils.ellipsize(text, new TextPaint(paint), Math.max(0, width), TextUtils.TruncateAt.END).toString();
     }
 
     /** What TalkBack reads on the football card. */
@@ -1853,7 +1893,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /** Dollar, euro and bitcoin in reais with the 24 h change (green/red, like Apple's Stocks app). */
     private void drawQuotesCard(Canvas c, RectF r) {
-        float f = Ui.clamp(sideFocus.value), radius = 30 * k;
+        float f = Ui.clamp(widgetFocus[W_PRICES].value), radius = 30 * k;
         focusRing.glow(c, r, radius, f, k, ringGlow());
         drawerCard(c, r);
         if (Ui.LITE) quotesSnapshot.draw(c, r, drawerCardsKey(), cc -> drawPrices(cc, r));
@@ -1957,13 +1997,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         boolean statusChanged = aim(statusFocus, !sheetOpen && zone == Z_STATUS ? statusIndex : -1, snap);
         boolean inCards = !sheetOpen && zone == Z_DRAWER && cardFocused != CARD_NONE;
         boolean drawerChanged = aim(drawerFocus, !sheetOpen && zone == Z_DRAWER && !inCards ? drawerIndex : -1, snap);
-        float weatherTarget = inCards && cardFocused == CARD_WEATHER ? 1 : 0, sideTarget = inCards && cardFocused == CARD_SIDE ? 1 : 0;
-        drawerChanged |= weatherFocus.target != weatherTarget || sideFocus.target != sideTarget;
-        weatherFocus.target = weatherTarget;
-        sideFocus.target = sideTarget;
-        if (snap) {
-            weatherFocus.snap(weatherTarget);
-            sideFocus.snap(sideTarget);
+        for (int i = 0; i < WIDGETS; i++) {
+            float target = inCards && cardFocused == i ? 1 : 0;
+            drawerChanged |= widgetFocus[i].target != target;
+            widgetFocus[i].target = target;
+            if (snap) widgetFocus[i].snap(target);
         }
         boolean heroChanged = heroFocus.target != (!sheetOpen && zone == Z_HERO ? 1 : 0);
         heroFocus.target = !sheetOpen && zone == Z_HERO ? 1 : 0;
@@ -2885,18 +2923,39 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
     }
 
-    /** The card beside the weather is on: the football, or prices to show. */
-    private boolean sideShown() {
-        return showFootball || showQuotes && HomeData.active().length > 0;
+    /** The widget is on the row: turned on (and the prices with a coin to show). */
+    private boolean widgetShown(int widget) {
+        switch (widget) {
+            case W_WEATHER: return showWeatherOn;
+            case W_PRICES: return showQuotes && HomeData.active().length > 0;
+            case W_FOOTBALL: return showFootball;
+            default: return false;
+        }
+    }
+
+    /** The next widget on the row from `from` toward `dir` (-1, 1), or CARD_NONE at the end. */
+    private int nextWidget(int from, int dir) {
+        for (int i = from + dir; i >= 0 && i < WIDGETS; i += dir) if (widgetShown(i)) return i;
+        return CARD_NONE;
+    }
+
+    /** The widget under `x` (the closest one on), or CARD_NONE with all off. */
+    private int widgetNear(float x) {
+        int best = CARD_NONE;
+        for (int i = 0; i < WIDGETS; i++) {
+            if (widgetShown(i) && (best == CARD_NONE
+                    || Math.abs(widgetRects[i].centerX() - x) < Math.abs(widgetRects[best].centerX() - x))) best = i;
+        }
+        return best;
     }
 
     /** OK held on a drawer card: its data fetched again now. False when the focus isn't on one. */
     private boolean refreshCard() {
         if (sheetOpen || controlOpen || zone != Z_DRAWER || cardFocused == CARD_NONE) return false;
-        if (cardFocused == CARD_WEATHER) {
+        if (cardFocused == W_WEATHER) {
             HomeData.get(activity).refreshWeatherNow();
             showToast(Ui.tr("Atualizando o clima…", "Refreshing the weather…", "Actualizando el clima…"));
-        } else if (showFootball) {
+        } else if (cardFocused == W_FOOTBALL) {
             football.refreshNow();
             showToast(Ui.tr("Atualizando o futebol…", "Refreshing football…", "Actualizando el fútbol…"));
         } else {
@@ -3002,9 +3061,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             default:
                 if (cardFocused != CARD_NONE) {
                     if (dx != 0) {
-                        // Between the weather and the card beside it (football, or the prices: held OK refreshes them).
-                        int next = cardFocused + dx;
-                        if (next == CARD_WEATHER && !showWeatherOn || next == CARD_SIDE && !sideShown() || next < 0 || next > CARD_SIDE) return;
+                        // Along the widgets that are on.
+                        int next = nextWidget(cardFocused, dx);
+                        if (next == CARD_NONE) return;
                         cardFocused = next;
                     } else if (dy < 0) {
                         cardFocused = CARD_NONE;
@@ -3017,8 +3076,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                     drawerIndex = next;
                 } else if (dy < 0) {
                     closeDrawer();
-                } else if (showWeatherOn || sideShown()) {
-                    cardFocused = showWeatherOn ? CARD_WEATHER : CARD_SIDE;
+                } else if (widgetNear(0) != CARD_NONE) {
+                    // Down to the widget under the focused button.
+                    cardFocused = widgetNear(drawerItems.isEmpty() ? 0 : drawerRects[drawerIndex].centerX());
                 } else {
                     openSheet();
                 }
@@ -3083,14 +3143,14 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             if (statusItems.isEmpty()) return;
             it = statusItems.get(statusIndex);
             r = statusRects[statusIndex];
-        } else if (zone == Z_DRAWER && cardFocused == CARD_WEATHER) {
+        } else if (zone == Z_DRAWER && cardFocused == W_WEATHER) {
             click.open();
             if (!WeatherActivity.open(activity)) showToast(Ui.tr("Não deu para abrir a previsão.", "Couldn't open the forecast."));
             return;
-        } else if (zone == Z_DRAWER && cardFocused == CARD_SIDE && !showFootball) {
+        } else if (zone == Z_DRAWER && cardFocused == W_PRICES) {
             showToast(Ui.tr("Segure OK para atualizar as cotações.", "Hold OK to refresh the prices.", "Mantén OK para actualizar las cotizaciones."));
             return;
-        } else if (zone == Z_DRAWER && cardFocused == CARD_SIDE) {
+        } else if (zone == Z_DRAWER && cardFocused == W_FOOTBALL) {
             click.open();
             // No team yet: where it's chosen.
             boolean opened = Prefs.footballTeam().isEmpty() ? openSettings() : FootballActivity.open(activity);
@@ -3160,8 +3220,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         for (int i = 0; i < Math.min(SLOTS, cards.size()); i++) out.add(a11yId(Z_CARDS, i));
         for (int i = 0; i < shelf.size(); i++) out.add(a11yId(Z_SHELF, i));
         for (int i = 0; i < drawerItems.size(); i++) out.add(a11yId(Z_DRAWER, i));
-        if (showWeatherOn) out.add(a11yId(Z_DRAWER, drawerItems.size()));   // the weather card
-        if (showFootball) out.add(a11yId(Z_DRAWER, drawerItems.size() + 1));   // the football card
+        for (int i = 0; i < WIDGETS; i++) if (widgetShown(i)) out.add(a11yId(Z_DRAWER, drawerItems.size() + i));   // the widgets
     }
 
     private String a11yText(int id) {
@@ -3181,8 +3240,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             }
             case Z_SHELF: return label(shelf, i);
             case Z_DRAWER:
-                if (i == drawerItems.size() + 1) return footballCardText();
-                return i == drawerItems.size() ? weatherCardText() : label(drawerItems, i);
+                if (i < drawerItems.size()) return label(drawerItems, i);
+                int widget = i - drawerItems.size();
+                return widget == W_WEATHER ? weatherCardText() : widget == W_FOOTBALL ? footballCardText()
+                        : Ui.tr("Cotações", "Rates");
             default: return "";
         }
     }
@@ -3220,8 +3281,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 dy = tiles.getTranslationY();
                 break;
             case Z_DRAWER:
-                if (i > drawerRects.length + 1 || (i == drawerRects.length && !showWeatherOn) || (i > drawerRects.length && !showFootball)) return false;
-                a11yRect.set(i == drawerRects.length ? weatherCard : i > drawerRects.length ? quotesCard : drawerRects[i]);
+                if (i >= drawerRects.length && !widgetShown(i - drawerRects.length)) return false;
+                a11yRect.set(i < drawerRects.length ? drawerRects[i] : widgetRects[i - drawerRects.length]);
                 dy = drawerOpen ? 0 : h;
                 break;
             default:
@@ -3263,7 +3324,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (sheetOpen) return;
         switch (group) {
             case Z_DRAWER:
-                if (i > drawerItems.size() + 1 || (i == drawerItems.size() && !showWeatherOn) || (i > drawerItems.size() && !showFootball)) return;
+                if (i >= drawerItems.size() && !widgetShown(i - drawerItems.size())) return;
                 if (!drawerOpen) openDrawer();
                 cardFocused = i < drawerItems.size() ? CARD_NONE : i - drawerItems.size();
                 if (cardFocused == CARD_NONE) drawerIndex = i;

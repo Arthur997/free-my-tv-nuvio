@@ -1275,18 +1275,17 @@ public class SettingsActivity extends Activity {
             return p;
         }
 
-        /** The drawer's two cards: the weather (on/off, the city) and beside it the prices or a football team. */
+        /** The drawer's widgets, each on or off (the row shares its width among the ones on), and their options. */
         private Page weatherPage() {
             Page p = new Page(Ui.tr("Clima, cotações e futebol", "Weather, prices and football", "Clima, cotizaciones y fútbol"));
             p.rows.add(onOff(() -> Ui.tr("Widget do clima", "Weather widget"), Prefs::weather, Prefs::setWeather, null));
             p.rows.add(new Row(() -> Ui.tr("Cidade do clima", "Weather city"), () -> cityStatus.isEmpty() ? Prefs.city() : cityStatus,
                     this::askCity, null, null));
-            String[] sides = {Prefs.SIDE_QUOTES, Prefs.SIDE_FOOTBALL, Prefs.SIDE_NONE};
-            p.rows.add(choice(() -> Ui.tr("Ao lado do clima", "Beside the weather", "Junto al clima"),
-                    () -> list(Ui.tr("Cotações", "Prices", "Cotizaciones"), Ui.tr("Futebol", "Football", "Fútbol"), Ui.tr("Nada", "Nothing", "Nada")),
-                    () -> java.util.Arrays.asList(sides).indexOf(Prefs.sideWidget()), at -> Prefs.setSideWidget(sides[at])));
+            p.rows.add(onOff(() -> Ui.tr("Widget de cotações", "Prices widget", "Widget de cotizaciones"), Prefs::quotes, Prefs::setQuotes, null));
+            p.rows.add(onOff(() -> Ui.tr("Widget de futebol", "Football widget", "Widget de fútbol"),
+                    Prefs::footballWidget, Prefs::setFootballWidget, null));
             // Football: the team (a list, or a search by name) and the extras.
-            java.util.function.BooleanSupplier noFootball = () -> !Prefs.SIDE_FOOTBALL.equals(Prefs.sideWidget());
+            java.util.function.BooleanSupplier noFootball = () -> !Prefs.footballWidget();
             Row team = new Row(() -> Ui.tr("Time", "Team", "Equipo"),
                     () -> Prefs.footballTeamName().isEmpty() ? Ui.tr("Escolher", "Choose", "Elegir") : Prefs.footballTeamName(),
                     this::openTeams, null, null);
@@ -1295,8 +1294,9 @@ public class SettingsActivity extends Activity {
                     Prefs::footballAlerts, Prefs::setFootballAlerts, noFootball));
             p.rows.add(onOff(() -> Ui.tr("Placar na tela de descanso", "Score on the screensaver", "Marcador en el salvapantallas"),
                     Prefs::footballInDream, Prefs::setFootballInDream, noFootball));
-            p.rows.add(choice(() -> Ui.tr("Atualizar cotações", "Refresh prices"), () -> list(Ui.tr("Tempo real", "Live"), "1 min", "5 min"),
-                    Prefs::pricesEveryIndex, Prefs::setPricesEveryIndex));
+            Row every = choice(() -> Ui.tr("Atualizar cotações", "Refresh prices"), () -> list(Ui.tr("Tempo real", "Live"), "1 min", "5 min"),
+                    Prefs::pricesEveryIndex, Prefs::setPricesEveryIndex);
+            p.rows.add(dimmed(every, () -> !Prefs.quotes()));
             String[] coins = dollar() ? new String[] {"Bitcoin", "Ethereum", "Solana", Ui.tr("Dólar", "Dollar"), "Euro"}
                     : new String[] {"Bitcoin", "Ethereum", "Solana"};
             for (int i = 0; i < coins.length; i++) {
@@ -1309,9 +1309,10 @@ public class SettingsActivity extends Activity {
             }
             p.symbol = "partly_cloudy_day";
             describe(p,
-                    new String[] {"O cartão do clima na gaveta do Início.", "The weather card in the home screen's drawer.", "La tarjeta del clima en el cajón del inicio."},
+                    new String[] {"O cartão do clima na gaveta do Início. Os widgets ligados dividem a linha entre si.", "The weather card in the home screen's drawer. The widgets that are on share the row.", "La tarjeta del clima en el cajón del inicio. Los widgets activos comparten la fila."},
                     new String[] {"A cidade da previsão (e do fuso do relógio automático).", "The forecast's city (and the automatic clock's time zone).", "La ciudad del pronóstico (y de la zona del reloj automático)."},
-                    new String[] {"O segundo cartão: cotações, o seu time de futebol ou nada.", "The second card: prices, your football team or nothing.", "La segunda tarjeta: cotizaciones, tu equipo de fútbol o nada."},
+                    new String[] {"O cartão das cotações: as moedas escolhidas abaixo, com a variação em 24 horas.", "The prices card: the coins picked below, with the 24-hour change.", "La tarjeta de cotizaciones: las monedas elegidas abajo, con la variación en 24 horas."},
+                    new String[] {"O cartão do seu time: o jogo ao vivo ou o próximo; sem jogo perto, o último resultado e a posição.", "Your team's card: the live or next match; with none soon, the last result and the standing.", "La tarjeta de tu equipo: el partido en vivo o el próximo; sin uno cerca, el último resultado y la posición."},
                     new String[] {"O time do cartão de futebol: da lista ou buscando pelo nome.", "The football card's team: from the list or searched by name.", "El equipo de la tarjeta de fútbol: de la lista o buscando por nombre."},
                     new String[] {"Um aviso na tela quando o jogo do seu time começa e a cada gol.", "A notice on screen when your team's game starts and at every goal.", "Un aviso en pantalla cuando empieza el partido de tu equipo y en cada gol."},
                     new String[] {"O placar ao vivo também na tela de descanso.", "The live score on the screensaver too.", "El marcador en vivo también en el protector."},
@@ -2587,7 +2588,7 @@ public class SettingsActivity extends Activity {
         private void pickTeam(Football.Team t) {
             Prefs.setFootballTeam(t.id, t.name, t.league);
             // Choosing a team means wanting it on the home screen.
-            if (!Prefs.SIDE_FOOTBALL.equals(Prefs.sideWidget())) Prefs.setSideWidget(Prefs.SIDE_FOOTBALL);
+            if (!Prefs.footballWidget()) Prefs.setFootballWidget(true);
             changed();
             goBack();
         }

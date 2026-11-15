@@ -66,6 +66,14 @@ final class EspnFootball implements FootballSource {
                 AppLog.w("football today: " + e.getMessage());
             }
         }
+        // No match soon (off-season, a break): the last one played, for the card.
+        if (o.match == null || !o.match.underway(now) && o.match.at - now > Football.FAR) {
+            try {
+                for (Football.Match m : events(teamId, "")) if (m.over() && (o.last == null || m.at > o.last.at)) o.last = m;
+            } catch (Exception e) {
+                AppLog.w("football results: " + e.getMessage());
+            }
+        }
         return o;
     }
 

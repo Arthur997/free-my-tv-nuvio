@@ -65,10 +65,15 @@ final class Football {
     }
 
     /** The team followed, as the home screen's card needs it: one light request. */
+    /** A next match further than this (or none) leaves the card to the last result and the standing. */
+    static final long FAR = 3 * 86_400_000L;
+
     static final class Overview {
         final Team team = new Team();
         /** The match being played now, or else the next one (null: none scheduled). */
         Match match;
+        /** The team's last match played, fetched only when there's no match soon (FAR): what the card shows then. */
+        Match last;
         /** "1º no Campeonato Brasileiro", in the source's words. */
         String standing = "";
     }

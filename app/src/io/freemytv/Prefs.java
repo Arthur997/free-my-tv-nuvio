@@ -304,24 +304,28 @@ final class Prefs {
     static boolean weather() { return sp().getBoolean("weather", true); }
     static void setWeather(boolean on) { put("weather", on); }
 
-    /** What sits beside the weather in the drawer: the prices, a football team, or nothing. */
-    static final String SIDE_QUOTES = "quotes", SIDE_FOOTBALL = "football", SIDE_NONE = "none";
-
-    static String sideWidget() {
+    /**
+     * What was beside the weather before each widget had its own switch ("quotes", "football" or "none"; before that
+     * the prices' on/off): where the two switches start from.
+     */
+    private static String sideWidget() {
         String v = sp().getString("sideWidget", null);
         if (v != null) return v;
-        return sp().getBoolean("quotes", Config.SHOW_CRYPTO) ? SIDE_QUOTES : SIDE_NONE;   // before the choice existed
+        return sp().getBoolean("quotes", Config.SHOW_CRYPTO) ? "quotes" : "none";
     }
 
-    static void setSideWidget(String v) { put("sideWidget", v); }
+    /** The prices widget is on: only then are prices fetched at all. */
+    static boolean quotes() { return sp().getBoolean("pricesWidget", "quotes".equals(sideWidget())); }
+    static void setQuotes(boolean on) { put("pricesWidget", on); }
 
-    /** The prices widget is on (beside the weather): only then are prices fetched at all. */
-    static boolean quotes() { return SIDE_QUOTES.equals(sideWidget()); }
+    /** The football widget is on (with or without a team chosen). */
+    static boolean footballWidget() { return sp().getBoolean("footballWidget", "football".equals(sideWidget())); }
+    static void setFootballWidget(boolean on) { put("footballWidget", on); }
 
     // MARK: - Football (FootballData, FootballActivity)
 
     /** The football widget is on and has a team: only then is anything fetched for it. */
-    static boolean football() { return SIDE_FOOTBALL.equals(sideWidget()) && !footballTeam().isEmpty(); }
+    static boolean football() { return footballWidget() && !footballTeam().isEmpty(); }
 
     /** The team followed: ESPN's id, its name and its main league (ESPN's slug: "bra.1", "eng.1"…). */
     static String footballTeam() { return sp().getString("footballTeam", ""); }

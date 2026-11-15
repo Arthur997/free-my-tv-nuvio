@@ -74,6 +74,8 @@ final class FootballData {
         if (next != null && next.live()) return next;
         long now = System.currentTimeMillis();
         if (last != null && last.has(o.team.id) && now - last.at < FINAL_FOR + 2 * 3600_000L) return last;
+        // Nothing soon: the last result (the card adds the standing and when the next one is).
+        if ((next == null || next.at - now > Football.FAR) && o.last != null) return o.last;
         return next;
     }
 
@@ -206,6 +208,7 @@ final class FootballData {
     private static JSONObject toJson(Football.Overview o) throws Exception {
         JSONObject j = toJson(o.team).put("standing", o.standing);
         if (o.match != null) j.put("match", toJson(o.match));
+        if (o.last != null) j.put("last", toJson(o.last));
         return j;
     }
 
@@ -215,6 +218,8 @@ final class FootballData {
         o.standing = j.optString("standing");
         JSONObject m = j.optJSONObject("match");
         if (m != null) o.match = matchFrom(m);
+        JSONObject last = j.optJSONObject("last");
+        if (last != null) o.last = matchFrom(last);
         return o;
     }
 
