@@ -51,6 +51,8 @@ final class WatchNext {
         TvContract.WatchNextPrograms.COLUMN_BROWSABLE,
     };
 
+    private static String lastDump = "";
+
     static boolean allowed(Context c) {
         return c.checkSelfPermission(PERMISSION) == PackageManager.PERMISSION_GRANTED;
     }
@@ -64,14 +66,25 @@ final class WatchNext {
         if (!allowed(c)) return new ArrayList<>();
         ContentResolver cr = c.getContentResolver();
         // No selection and no sort: the provider refuses both to apps without full access.
+        StringBuilder dump = new StringBuilder();   // every row, logged when they change (what each app wrote)
         try (Cursor q = cr.query(TvContract.WatchNextPrograms.CONTENT_URI, COLUMNS, null, null, null)) {
             while (q != null && q.moveToNext()) {
                 Row r = new Row(q);
+                dump.append("\n  ").append(r.pkg).append(" #").append(r.id).append(" \"").append(r.title).append("\" S")
+                        .append(r.season).append("E").append(r.number).append(" engaged ")
+                        .append((System.currentTimeMillis() - r.engaged) / 60_000).append(" min ago, at ")
+                        .append(r.position / 1000).append("/").append(r.duration / 1000).append(" s")
+                        .append(r.browsable ? "" : " (hidden)");
                 if (r.browsable) rows.add(r);
             }
         } catch (RuntimeException e) {
             AppLog.w("watch next: " + e.getMessage());
             return new ArrayList<>();
+        }
+        String rowsNow = dump.toString().replaceAll("engaged \\d+ min ago", "");
+        if (!rowsNow.equals(lastDump)) {
+            lastDump = rowsNow;
+            AppLog.w("watch next rows:" + dump);
         }
         Collections.sort(rows, (a, b) -> Long.compare(b.engaged, a.engaged));
         PackageManager pm = c.getPackageManager();
@@ -86,7 +99,49 @@ final class WatchNext {
             out.add(r.pick(app));
         }
         AppLog.w("watch next: " + rows.size() + " rows, " + out.size() + " shown");
+        Set<String> sources = new HashSet<>();
+        for (Recs.Pick p : out) sources.add(p.pkg);
+        letRun(c, sources);
         return out;
+    }
+
+    // MARK: - Keeping the apps' lists up to date
+
+    private static final String RUNNING_FILE = "watch-apps-running.txt";
+    private static long askedAt;
+
+    /**
+     * On TCL, the apps that fill the tab must run in the background to keep their rows current (HomeMode
+     * .letWatchAppsRunNow): asked once for each new app, at most once an hour while it doesn't go through.
+     */
+    private static void letRun(Context c, Set<String> pkgs) {
+        if (pkgs.isEmpty() || !HomeMode.tcl() || running(c).containsAll(pkgs)) return;
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (askedAt != 0 && now - askedAt < 3600_000L) return;
+        askedAt = now;
+        ModeJob.schedule(c, ModeJob.WATCH_APPS, String.join(",", pkgs), 0);
+    }
+
+    /** The apps already let run (the file is written by the main process, read by the home screen's). */
+    private static Set<String> running(Context c) {
+        Set<String> out = new HashSet<>();
+        try {
+            byte[] bytes = java.nio.file.Files.readAllBytes(new java.io.File(c.getFilesDir(), RUNNING_FILE).toPath());
+            for (String pkg : new String(bytes, java.nio.charset.StandardCharsets.UTF_8).split("\n")) if (!pkg.isEmpty()) out.add(pkg);
+        } catch (java.io.IOException | RuntimeException ignored) {
+        }
+        return out;
+    }
+
+    static synchronized void saveRunning(Context c, Set<String> pkgs) {
+        Set<String> all = running(c);
+        all.addAll(pkgs);
+        try {
+            java.nio.file.Files.write(new java.io.File(c.getFilesDir(), RUNNING_FILE).toPath(),
+                    String.join("\n", all).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        } catch (java.io.IOException e) {
+            AppLog.w("continue watching apps: " + e.getMessage());
+        }
     }
 
     /** The app's name, or null when it isn't on the TV or is turned off. */

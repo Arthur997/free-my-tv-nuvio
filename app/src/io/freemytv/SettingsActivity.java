@@ -318,7 +318,9 @@ public class SettingsActivity extends Activity {
 
         private String screenSignature() {
             StringBuilder b = new StringBuilder(512).append(screen).append('|').append(state).append('|').append(recs)
-                    .append('|').append(hasKey).append(keysServiceOn).append('|').append(page.hint.get()).append(page.hint2.get());
+                    .append('|').append(hasKey).append(keysServiceOn);
+            if (page == null) return b.toString();   // Status and the home screen choice: no page, no rows
+            b.append('|').append(page.hint.get()).append(page.hint2.get());
             int first = firstShown(), last = Math.min(rowCount(), first + visibleRows() + 1);
             for (int i = first; i < last; i++) b.append('|').append(rowText(i));
             return b.toString();
@@ -701,10 +703,8 @@ public class SettingsActivity extends Activity {
                     invalidate();
                 }))) {
                     adb.shell("echo ok");
-                    if (Ui.brand().toLowerCase(Locale.ROOT).contains("tcl")) {
-                        // TCL blocks background jobs by default: the switch (ModeJob) would never run.
-                        adb.shell("appops set " + HomeMode.PKG + " AUTO_START allow || appops set " + HomeMode.PKG + " APP_AUTO_START allow");
-                    }
+                    // TCL blocks background jobs by default: the switch (ModeJob) would never run.
+                    if (HomeMode.tcl()) HomeMode.allowAutoStart(adb, HomeMode.PKG);
                     JSONObject s = HomeMode.state(app);
                     s.put("adbAuthorized", true);
                     HomeMode.save(app, s);

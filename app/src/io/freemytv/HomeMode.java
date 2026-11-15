@@ -254,6 +254,38 @@ final class HomeMode {
         }
     }
 
+    /** TCL's TclAppBoot, which blocks every app's background jobs until AUTO_START is allowed (APP_AUTO_START on some). */
+    static boolean tcl() {
+        return Ui.brand().toLowerCase(java.util.Locale.ROOT).contains("tcl");
+    }
+
+    static void allowAutoStart(Adb adb, String pkg) throws IOException {
+        adb.shell("appops set " + pkg + " AUTO_START allow || appops set " + pkg + " APP_AUTO_START allow");
+    }
+
+    /**
+     * The apps that fill Continue Watching (`pkgs`, comma-separated) may run in the background on TCL: Nuvio brings its
+     * Watch Next rows up to date from a job (every 15 min, after syncing with its cloud), which TclAppBoot blocked, so
+     * the tab kept the episodes of days before. Written to WatchNext's file once done, so it isn't asked again.
+     */
+    static void letWatchAppsRunNow(Context app, String pkgs) {
+        if (!tcl() || !FREE.equals(state(app).optString("mode"))) return;
+        Set<String> done = new HashSet<>();
+        try (Adb adb = Adb.connect(app, 10_000, null)) {
+            for (String pkg : pkgs.split(",")) {
+                if (!pkg.matches("[\\w.]+")) continue;
+                allowAutoStart(adb, pkg);
+                done.add(pkg);
+            }
+        } catch (IOException e) {
+            AppLog.w("continue watching apps: " + e.getMessage());
+        }
+        if (!done.isEmpty()) {
+            WatchNext.saveRunning(app, done);
+            AppLog.w("continue watching apps may run in the background: " + done);
+        }
+    }
+
     private static final String REMOTE_SERVICE = PKG + "/" + PKG + ".RemoteKeyService";
     /** The same service as Android writes it back after another service turns itself off (PairingAssist). */
     private static final String REMOTE_SERVICE_SHORT = PKG + "/.RemoteKeyService";
