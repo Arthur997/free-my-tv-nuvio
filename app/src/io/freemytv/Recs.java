@@ -76,8 +76,6 @@ final class Recs {
     }
     /** TMDB's Animation genre (movies and shows: cartoons and anime), left out with hide_animation=true. */
     private static final int ANIMATION = 16;
-    /** The lists are the day's top: fetched once a day (a new day, or 24 h after the last fetch). */
-    private static final long LIST_EVERY = 24 * 3600_000L;
     /** Bump when what is saved for each title changes (the saved list is discarded and fetched again). */
     private static final int CACHE_VERSION = 7;   // 7: synopsis, rating and year for the preview
     private static final int MANHA = 0, TARDE = 1, NOITE = 2;
@@ -452,7 +450,8 @@ final class Recs {
         long sinceFail = now - failedAt;    // negative = the clock went back: don't wait
         if (!newKey && failedAt != 0 && sinceFail >= 0 && sinceFail < 10 * 60_000L) return;
         int p = period(now);
-        boolean stale = newKey || !sameDay(now, listAt) || now - listAt > LIST_EVERY || now < listAt || picks.isEmpty()
+        // Fetched again on a new day, or sooner as picked in the settings (Prefs.recsEveryIndex()).
+        boolean stale = newKey || !sameDay(now, listAt) || now - listAt >= Prefs.RECS_EVERY[Prefs.recsEveryIndex()] || now < listAt || picks.isEmpty()
                 || !listLanguage.equals(Ui.language);
         // Photos come on demand (backdrop(): the cards on screen and the next three); so do the top's details.
         boolean lazy = lazyDetails();
@@ -584,10 +583,88 @@ final class Recs {
         main.post(() -> { for (Listener l : new ArrayList<>(listeners)) l.onRecs(); });
     }
 
+    // MARK: - Continue watching's logos
+
+    /** Apps whose Watch Next rows are videos, not movies or shows: no logo to look for. */
+    private static final Set<String> NO_LOGO_APPS = new HashSet<>(Arrays.asList(
+            "com.google.android.youtube.tv", "com.google.android.youtube.tvkids", "com.google.android.youtube.tvmusic"));
+    /** A title (as sameName() makes it) → its TMDB logo, "" when it has none: looked up once, kept in the cache. */
+    private final Map<String, String> watchLogos = new HashMap<>();
+    private final Set<String> lookingUp = new HashSet<>();
+    private boolean watchLogosRead;
+
+    /**
+     * Continue watching's titles get the logo the picks have: from what was found before, or looked up on TMDB in
+     * the background (the next reading of the list has it).
+     */
+    void findLogos(List<Pick> watching) {
+        if (!hasKey(context)) return;
+        synchronized (watchLogos) {
+            if (!watchLogosRead) readWatchLogos();
+            for (Pick p : watching) {
+                String name = sameName(p.title);
+                if (name.isEmpty() || NO_LOGO_APPS.contains(p.pkg)) continue;
+                String logo = watchLogos.get(name);
+                if (logo != null) p.logo = logo.isEmpty() ? null : logo;
+                else if (lookingUp.add(name)) io.execute(() -> lookUpLogo(name, p.title));
+            }
+        }
+    }
+
+    /** The movie or show named exactly `title` (a lookalike name isn't taken: a wrong logo is worse than none). */
+    private void lookUpLogo(String name, String title) {
+        String logo = null;
+        try {
+            JSONArray found = get("/search/multi?include_adult=false&language=" + lang() + "&query="
+                    + URLEncoder.encode(title, "UTF-8")).getJSONArray("results");
+            logo = "";
+            for (int i = 0; i < found.length(); i++) {
+                JSONObject o = found.getJSONObject(i);
+                String kind = o.optString("media_type");
+                if (!kind.equals("movie") && !kind.equals("tv")) continue;
+                String key = kind.equals("movie") ? "title" : "name", original = kind.equals("movie") ? "original_title" : "original_name";
+                if (!name.equals(sameName(o.optString(key))) && !name.equals(sameName(o.optString(original)))) continue;
+                String best = bestLogo(get("/" + kind + "/" + o.getInt("id") + "/images?include_image_language="
+                        + Ui.language.replaceAll("-.*", "") + ",en,null"));
+                logo = best == null ? "" : best;
+                break;
+            }
+        } catch (Exception e) {
+            AppLog.w("continue watching logo: " + e.getMessage());   // looked up again on the next reading
+        }
+        synchronized (watchLogos) {
+            lookingUp.remove(name);
+            if (logo == null) return;
+            if (watchLogos.size() > 200) watchLogos.clear();
+            watchLogos.put(name, logo);
+            cache.edit().putString("watchLogos", new JSONObject(watchLogos).toString()).apply();
+        }
+        if (!logo.isEmpty()) notifyListeners();
+    }
+
+    private void readWatchLogos() {
+        watchLogosRead = true;
+        try {
+            JSONObject saved = new JSONObject(cache.getString("watchLogos", "{}"));
+            for (java.util.Iterator<String> it = saved.keys(); it.hasNext(); ) {
+                String name = it.next();
+                watchLogos.put(name, saved.optString(name));
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** "Stranger Things", "stranger things " and "Strânger Things" are the same name. */
+    private static String sameName(String title) {
+        if (title == null) return "";
+        String plain = java.text.Normalizer.normalize(title, java.text.Normalizer.Form.NFD).replaceAll("\\p{M}", "");
+        return plain.trim().toLowerCase(Locale.ROOT);
+    }
+
     // MARK: - TMDB
 
     private void fetchList(int p) throws Exception {
-        String common = "&language=" + lang() + "&include_adult=false&sort_by=popularity.desc"
+        String common = "&language=" + lang() + "&include_adult=false"
                 + (Config.HIDE_ANIMATION ? "&without_genres=" + ANIMATION : "");
         // Nuvio plays any title; otherwise only what streams on the services the TV has, by their TMDB ids.
         if (linkTarget() == null) {
@@ -605,9 +682,10 @@ final class Recs {
                     + URLEncoder.encode(ids.toString(), "UTF-8");
         }
         if (Prefs.topRecs()) {
-            fetchTop(p);
+            fetchTop(p, common);
             return;
         }
+        common += "&sort_by=popularity.desc";
         // 1. Trending this week (TMDB goes by what people are watching and searching for right now), only what is
         //    on one of the TV's services: the details say where (and are then ready).
         List<Pick> hotMovies = new ArrayList<>(), hotShows = new ArrayList<>();
@@ -646,17 +724,18 @@ final class Recs {
     }
 
     /**
-     * Top of the day: TMDB's most watched and searched today (trending/day), movies and shows, in rank order, up to
-     * Prefs.topCount() of each that Nuvio (or one of the TV's services) can open. Two pages: some don't make it.
+     * A ranked list (Prefs.recsList()), movies and shows, in rank order, up to Prefs.topCount() of each that Nuvio (or
+     * one of the TV's services) can open. Two pages: some don't make it. `common`: language and, without Nuvio, the
+     * TV's services (the discover lists take them; trending doesn't, so the details decide there).
      */
-    private void fetchTop(int p) throws Exception {
+    private void fetchTop(int p, String common) throws Exception {
         int want = Prefs.topCount();
         boolean lazy = lazyDetails();
         List<Pick> movies = new ArrayList<>(), shows = new ArrayList<>();
         for (String kind : new String[] {"movie", "tv"}) {
             List<Pick> out = kind.equals("movie") ? movies : shows;
             for (int page = 1; page <= 2 && out.size() < want; page++) {
-                JSONArray hot = get("/trending/" + kind + "/day?language=" + lang() + "&page=" + page).getJSONArray("results");
+                JSONArray hot = get(rankedList(kind, common) + "&page=" + page).getJSONArray("results");
                 List<Pick> candidates = new ArrayList<>();
                 for (int i = 0; i < hot.length(); i++) add(candidates, hot.getJSONObject(i), kind);
                 for (Pick pick : candidates) {
@@ -681,6 +760,24 @@ final class Recs {
         period = p;
         listAt = System.currentTimeMillis();
         listLanguage = Ui.language;
+    }
+
+    /** The address of a ranked list's page for movies ("movie") or shows ("tv"). */
+    private static String rankedList(String kind, String common) {
+        boolean movie = kind.equals("movie");
+        String date = movie ? "primary_release_date" : "first_air_date";
+        switch (Prefs.recsList()) {
+            case Prefs.LIST_WEEK:   // the most watched and searched this week
+                return "/trending/" + kind + "/week?language=" + lang();
+            case Prefs.LIST_NEW:    // released in the past 2 months, the most popular first
+                return "/discover/" + kind + "?" + date + ".gte=" + day(-60) + "&" + date + ".lte=" + day(0)
+                        + "&vote_count.gte=" + (movie ? 10 : 5) + "&sort_by=popularity.desc" + common;
+            case Prefs.LIST_ACCLAIMED:   // the best rated of the past 3 years, with enough votes to mean it
+                return "/discover/" + kind + "?" + date + ".gte=" + day(-3 * 365) + "&" + date + ".lte=" + day(0)
+                        + "&vote_count.gte=" + (movie ? 500 : 200) + "&sort_by=vote_average.desc" + common;
+            default:                // the most watched and searched today
+                return "/trending/" + kind + "/day?language=" + lang();
+        }
     }
 
     /**
@@ -977,7 +1074,7 @@ final class Recs {
         for (String[] service : SERVICES) stamp = stamp * 31L + (installed(service[2]) ? service[2].hashCode() : 0);
         String[] target = linkTarget();
         stamp = stamp * 31L + (target == null ? 0 : (target[0] + target[1]).hashCode());
-        return stamp * 31L + (Prefs.topRecs() ? Prefs.topCount() : 0);   // the top, and its size, is another list
+        return (stamp * 31L + Prefs.recsList()) * 31L + (Prefs.topRecs() ? Prefs.topCount() : 0);   // each list, and the top's size, is another
     }
 
     // MARK: - Watchmode (the title's own page in its app; the free plan's web addresses are what the apps open)

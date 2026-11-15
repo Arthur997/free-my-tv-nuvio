@@ -1231,19 +1231,30 @@ public class SettingsActivity extends Activity {
             }, "free-my-tv-background-apps").start();
         }
 
+        /** The picks' lists, in Prefs.LIST_* order. */
+        private static List<String> recsListNames() {
+            return list(Ui.tr("Original (5 por hora)", "Original (5 an hour)"), Ui.tr("Top do dia", "Today's top"),
+                    Ui.tr("Top da semana", "This week's top", "Top de la semana"), Ui.tr("Lançamentos", "New releases", "Estrenos"),
+                    Ui.tr("Aclamados", "Acclaimed", "Aclamados"));
+        }
+
         /** The picks: which list, how big the top is, where they open, the TMDB key, and Continue Watching's apps. */
         private Page picksPage() {
             Page p = new Page(Ui.tr("Recomendações", "Picks"));
             p.rows.add(choice(() -> Ui.tr("Lista", "List", "Lista"),
-                    () -> list(Ui.tr("Original (5 por hora)", "Original (5 an hour)"), Ui.tr("Top do dia", "Today's top")),
-                    () -> Prefs.topRecs() ? 1 : 0, at -> Prefs.setTopRecs(at == 1)));
-            Row top = choice(() -> Ui.tr("Títulos no Top", "Titles in the top"), () -> {
+                    SettingsView::recsListNames, Prefs::recsList, Prefs::setRecsList));
+            Row top = choice(() -> Ui.tr("Títulos na lista", "Titles in the list", "Títulos en la lista"), () -> {
                 List<String> l = new ArrayList<>();
                 for (int n = Prefs.TOP_MIN; n <= Prefs.TOP_MAX; n++) l.add(String.valueOf(n));
                 return l;
             }, () -> Prefs.topCount() - Prefs.TOP_MIN, at -> Prefs.setTopCount(Prefs.TOP_MIN + at));
             p.rows.add(new Row(top.label, top.value, () -> { if (Prefs.topRecs()) top.ok.run(); },   // only the top has a size
                     dir -> { if (Prefs.topRecs()) top.adjust.accept(dir); }, () -> !Prefs.topRecs()));
+            p.rows.add(choice(() -> Ui.tr("Buscar a lista de novo", "Fetch the list again", "Buscar la lista de nuevo"),
+                    () -> list(Ui.tr("A cada hora", "Every hour", "Cada hora"), Ui.tr("A cada 3 horas", "Every 3 hours", "Cada 3 horas"),
+                            Ui.tr("A cada 6 horas", "Every 6 hours", "Cada 6 horas"), Ui.tr("A cada 12 horas", "Every 12 hours", "Cada 12 horas"),
+                            Ui.tr("Uma vez por dia", "Once a day", "Una vez al día")),
+                    Prefs::recsEveryIndex, Prefs::setRecsEveryIndex));
             p.rows.add(choice(() -> Ui.tr("Abrir recomendações em", "Open picks in"), SettingsView::targetNames,
                     SettingsView::targetIndex, at -> Prefs.setRecsTarget(targetKeys()[at])));
             p.rows.add(new Row(() -> Ui.tr("Chave do TMDB", "TMDB key"), this::tmdbKeyState, activity::askTmdbKey, null, null));
@@ -1255,8 +1266,9 @@ public class SettingsActivity extends Activity {
                     "This product uses the TMDB API but is not endorsed or certified by TMDB.");
             p.symbol = "play";
             describe(p,
-                    new String[] {"Original: cinco títulos novos por hora. Top do dia: os mais vistos hoje.", "Original: five new titles an hour. Today's top: the most watched today.", "Original: cinco títulos nuevos por hora. Top del día: los más vistos hoy."},
-                    new String[] {"Quantos títulos o Top do dia mostra.", "How many titles Today's top shows.", "Cuántos títulos muestra el Top del día."},
+                    new String[] {"Original: cinco títulos novos por hora. Top do dia e da semana: os mais vistos. Lançamentos: o que saiu nos últimos 2 meses. Aclamados: os mais bem avaliados dos últimos 3 anos.", "Original: five new titles an hour. Today's and this week's top: the most watched. New releases: out in the past 2 months. Acclaimed: the best rated of the past 3 years.", "Original: cinco títulos nuevos por hora. Top del día y de la semana: los más vistos. Estrenos: lo que salió en los últimos 2 meses. Aclamados: los mejor valorados de los últimos 3 años."},
+                    new String[] {"Quantos títulos a lista mostra (menos no Original, que mostra cinco).", "How many titles the list shows (not Original, which shows five).", "Cuántos títulos muestra la lista (no en Original, que muestra cinco)."},
+                    new String[] {"De quanto em quanto tempo a lista é buscada de novo no TMDB. Mais vezes trazem títulos novos mais cedo.", "How often the list is fetched again from TMDB. More often brings new titles sooner.", "Cada cuánto se busca la lista de nuevo en TMDB. Más seguido trae títulos nuevos antes."},
                     new String[] {"Onde um título abre quando você aperta OK nele.", "Where a title opens when you press OK on it.", "Dónde abre un título al pulsar OK."},
                     new String[] {"A sua chave grátis do TMDB: sem ela não há recomendações nem fotos na tela de descanso.", "Your free TMDB key: without it there are no picks or screensaver photos.", "Tu clave gratis de TMDB: sin ella no hay recomendaciones ni fotos en el protector."},
                     new String[] {"Os apps cujos episódios e filmes começados aparecem no Início.", "The apps whose started episodes and movies show on the home screen.", "Las apps cuyos episodios y películas empezados aparecen en el inicio."});
@@ -2102,8 +2114,8 @@ public class SettingsActivity extends Activity {
             int count = recs.optInt("count");
             if (!hasKey) line = Ui.tr("Sem chave do TMDB: adicione em Recomendações → Chave do TMDB.", "No TMDB key: add one in Picks → TMDB key.");
             else if (!error.isEmpty()) line = Ui.tr("Erro: ", "Error: ") + error + ".";
-            else if (count > 0 && Prefs.topRecs()) line = Ui.tr("Ligadas · Top do dia, " + count + " títulos.",
-                    "On · Today's top, " + count + " titles.");
+            else if (count > 0 && Prefs.topRecs()) line = Ui.trf(Ui.tr("Ligadas · {list}, {n} títulos.", "On · {list}, {n} titles.",
+                    "Activadas · {list}, {n} títulos."), "list", recsListNames().get(Prefs.recsList()), "n", count);
             else if (count > 0) line = Ui.tr("Ligadas · " + count + " títulos nos apps da TV, 5 novos a cada hora.",
                     "On · " + count + " titles from the TV's apps, 5 new ones every hour.");
             else line = Ui.tr("Buscando os títulos…", "Fetching titles…");

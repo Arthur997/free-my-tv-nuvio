@@ -163,9 +163,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private int shiftFrom, shiftTo;
     private final RectF slotFrom = new RectF(), slotTo = new RectF();
     private final List<HomeApps.Item> lightButtons = new ArrayList<>();
-    private Paint lTitle, lTab, lTabOn, lCardMeta, lQuote, lTip, onPhotoTitle, onPhotoMeta, badgePaint, lTopRight;
-    private String badgeText = "";
-    private float badgeWidth;
+    private Paint lTitle, lTab, lTabOn, lCardMeta, lQuote, lTip, onPhotoTitle, onPhotoMeta, lTopRight;
     private String heading = "";
     private float headingBearing;
     private Shader lightGradient;
@@ -631,10 +629,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         onPhotoTitle.setShadowLayer(10 * k, 0, 1 * k, 0x66000000);
         onPhotoMeta = Ui.text(Ui.medium, 25 * k, 0xD9FFFFFF);
         onPhotoMeta.setShadowLayer(8 * k, 0, 1 * k, 0x66000000);
-        badgePaint = Ui.text(Ui.semibold, 19 * k, 0xF2FFFFFF);
-        badgePaint.setLetterSpacing(0.02f);
-        badgeText = Ui.tr("Sugestão", "Suggested", "Sugerencia");
-        badgeWidth = badgePaint.measureText(badgeText);
         cardTexts.clear();
         lCardMeta = Ui.text(Ui.medium, 25 * k, L_DIM);
         lQuote = Ui.numbers(Ui.regular, 21 * k, L_DIM);
@@ -3183,7 +3177,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             case Z_CARDS: {
                 if (i >= cards.size()) return "";
                 Recs.Pick p = cards.get(i);
-                return (suggestion(p) ? badgeText + ": " : "") + pickText(p);
+                return (suggestion(p) ? Ui.tr("Sugestão", "Suggested", "Sugerencia") + ": " : "") + pickText(p);
             }
             case Z_SHELF: return label(shelf, i);
             case Z_DRAWER:
@@ -3653,10 +3647,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         // A title with no picture at all (some apps' Watch Next rows) still shows its name on the placeholder.
         boolean named = img != null || p.backdrop == null;
-        // The apps' own pictures for what to continue usually have the name written on them: only the details (app,
-        // time left) go on top, and only on the big card.
-        boolean ownName = p.intentUri != null && img != null;
-        if (ownName && big < 0.01f) named = false;
         if (named) drawUnitShader(c, cell, r, veil, CARD_SCRIM, 1);
         if (f > 0.01f) {
             drawUnitShader(c, cell, r, sheen, CARD_SHEEN, f);
@@ -3669,11 +3659,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (named && preview < 0.99f) {
             // The name gives way to the synopsis (a layer only while the two cross).
             int under = preview > 0.01f ? c.saveLayerAlpha(cell, Math.round(255 * (1 - preview))) : -1;
-            drawCardName(c, p, cell, big, lift, !ownName);
+            drawCardName(c, p, cell, big, lift);
             if (under >= 0) c.restoreToCount(under);
         }
         if (preview > 0.01f) drawPreview(c, p, cell, r, big, preview);
-        if (suggestion(p)) drawBadge(c, cell, s);
         focusRing.ring(c, cell, r, f, k, ringInk());
         if (save >= 0) c.restoreToCount(save);
     }
@@ -3682,7 +3671,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static final float CARD_GROWTH = 0.08f;
 
     /** The logo (or the name) at the bottom left of the photo; on the big card, the genre and the app below it. */
-    private void drawCardName(Canvas c, Recs.Pick p, RectF card, float big, float lift, boolean withName) {
+    private void drawCardName(Canvas c, Recs.Pick p, RectF card, float big, float lift) {
         String[] text = cardTexts(p);
         float cw = card.width(), ch = card.height();
         float x = card.left + cw * 0.05f;
@@ -3692,7 +3681,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             onPhotoMeta.setAlpha(Math.round(217 * metaAlpha));
             c.drawText(text[2], x, card.bottom - lift - ch * 0.08f, onPhotoMeta);
         }
-        if (!withName) return;
         Bitmap logo = recs.logo(p);
         if (logo != null) {
             float maxW = cw * (0.5f - 0.08f * big), maxH = ch * (0.3f - 0.04f * big);
@@ -3719,16 +3707,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         fill.setColor(0xF2FFFFFF);
         c.drawRoundRect(tmp, height / 2, height / 2, fill);
         return 14 * k * s + height;
-    }
-
-    /** "Suggested", small at the top left of the photo: this card isn't something you were watching. */
-    private void drawBadge(Canvas c, RectF card, float s) {
-        float padX = 12 * k, h = 32 * k, inset = 14 * k * s;
-        tmp.set(card.left + inset, card.top + inset, card.left + inset + badgeWidth + 2 * padX, card.top + inset + h);
-        fill.setShader(null);
-        fill.setColor(0x8C000000);
-        c.drawRoundRect(tmp, h / 2, h / 2, fill);
-        c.drawText(badgeText, tmp.left + padX, tmp.centerY() + Ui.halfCap(badgePaint), badgePaint);
     }
 
     /** Continue watching with nothing in it: why, in the cards' place. */
@@ -3797,8 +3775,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         LOADER.execute(() -> {
             final boolean allowed = WatchNext.allowed(c);
             final List<Recs.Pick> list = WatchNext.load(c);
+            recs.findLogos(list);   // the title's logo, as the other tabs' cards have
             StringBuilder key = new StringBuilder();
-            for (Recs.Pick p : list) key.append(Recs.key(p)).append(p.meta).append(Math.round(p.progress * 100)).append('|');
+            for (Recs.Pick p : list) key.append(Recs.key(p)).append(p.meta).append(p.logo).append(Math.round(p.progress * 100)).append('|');
             final String newKey = key.toString();
             handler.post(() -> {
                 if (newKey.equals(watchingKey) && allowed == watchAllowed) return;

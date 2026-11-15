@@ -221,9 +221,29 @@ final class Prefs {
     static String recsTarget() { return sp().getString("recsTarget", "apps"); }
     static void setRecsTarget(String key) { put("recsTarget", key); }
 
-    /** Picks: off = the original (3 per tab, new ones every hour); on = today's top titles, browsable with → and ←. */
-    static boolean topRecs() { return sp().getBoolean("topRecs", false); }
-    static void setTopRecs(boolean on) { put("topRecs", on); }
+    /** The picks' list: the original (5 per tab, new ones every hour) or one of the ranked ones, browsable with → and ←. */
+    static final int LIST_ORIGINAL = 0, LIST_TODAY = 1, LIST_WEEK = 2, LIST_NEW = 3, LIST_ACCLAIMED = 4;
+
+    static int recsList() {
+        int fallback = sp().getBoolean("topRecs", false) ? LIST_TODAY : LIST_ORIGINAL;   // the old on/off choice
+        int list = sp().getInt("recsList", fallback);
+        return list >= LIST_ORIGINAL && list <= LIST_ACCLAIMED ? list : LIST_ORIGINAL;
+    }
+
+    static void setRecsList(int list) { put("recsList", list); }
+
+    /** A ranked list (any but the original): in rank order, as many as topCount(). */
+    static boolean topRecs() { return recsList() != LIST_ORIGINAL; }
+
+    /** How often the picks' list is fetched again: every hour, 3, 6 or 12 hours, or once a day (the default). */
+    static final long[] RECS_EVERY = {3600_000L, 3 * 3600_000L, 6 * 3600_000L, 12 * 3600_000L, 24 * 3600_000L};
+
+    static int recsEveryIndex() {
+        int i = sp().getInt("recsEvery", RECS_EVERY.length - 1);
+        return i >= 0 && i < RECS_EVERY.length ? i : RECS_EVERY.length - 1;
+    }
+
+    static void setRecsEveryIndex(int i) { put("recsEvery", i); }
 
     static final int TOP_MIN = 5, TOP_MAX = 20;
 
