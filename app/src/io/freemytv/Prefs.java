@@ -377,6 +377,10 @@ final class Prefs {
 
     static void setShelfSize(int n) { put("shelfSize", n); }
 
+    /** Shelf order: off (the default), the order picked in Settings > Shelf; on, the app opened last goes first. */
+    static boolean shelfRecentFirst() { return sp().getBoolean("shelfRecentFirst", false); }
+    static void setShelfRecentFirst(boolean on) { put("shelfRecentFirst", on); }
+
     static void setShelf(List<String> packages) {
         StringBuilder sb = new StringBuilder();
         for (String p : packages) sb.append(sb.length() == 0 ? "" : ",").append(p);

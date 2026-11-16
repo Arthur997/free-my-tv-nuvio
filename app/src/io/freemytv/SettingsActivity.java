@@ -403,6 +403,10 @@ public class SettingsActivity extends Activity {
                     }, () -> Math.max(0, indexOf(HomeApps.SHELF_SIZES, Prefs.shelfSize())), at -> setShelfSize(HomeApps.SHELF_SIZES[at])),
                     () -> Ui.trf("Quantos apps cabem na prateleira. Mais de {n}: ela rola para os lados, com setas nas pontas.",
                             "n", HomeApps.SHELF_VISIBLE)));
+            p.rows.add(helped(choice(() -> Ui.tr("Ordem da prateleira"),
+                    () -> list(Ui.tr("Como eu escolher"), Ui.tr("Último aberto primeiro")),
+                    () -> Prefs.shelfRecentFirst() ? 1 : 0, at -> Prefs.setShelfRecentFirst(at == 1)),
+                    () -> Ui.tr("Como eu escolher: a ordem da página Prateleira. Último aberto primeiro: cada app aberto pelo Início vai para o começo da fila.")));
             p.rows.add(helped(opens(() -> Ui.tr("Recomendações"), () -> open(picksPage())),
                     () -> Ui.tr("Filmes e séries sugeridos no topo do Início, a chave do TMDB e o Continuar assistindo.")));
             p.rows.add(helped(opens(() -> Ui.tr("Clima, cotações e futebol"),

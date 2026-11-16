@@ -424,7 +424,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         handler.postDelayed(tick, 15_000);
         checkNotices();
         trimBackground();
-        reload();
+        if (shelfReordered) {   // the app opened last is first now: the focus goes there
+            shelfReordered = false;
+            if (zone == Z_SHELF) shelfIndex = 0;
+            reload(true);
+        } else {
+            reload();
+        }
         askWatchPermission();
         loadWatching();
         click.start();
@@ -3257,6 +3263,24 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         boolean opened = HomeApps.open(activity, it, this, Math.round(r.left), Math.round(r.top),
                 Math.round(r.width()), Math.round(r.height()));
         if (!opened) showToast(Ui.trf("Não deu para abrir {app}.", "app", it.label));
+        else if (Prefs.shelfRecentFirst()) toFrontOfShelf(it);
+    }
+
+    /** The shelf rearranged while an app was open: read again on the way back, focus on its first app. */
+    private boolean shelfReordered;
+
+    /**
+     * Shelf order "Last opened first": what was just opened, if it's on the shelf, goes to its front. The tiles move only
+     * when the home screen comes back, not under the app's opening animation.
+     */
+    private void toFrontOfShelf(HomeApps.Item it) {
+        String key = HomeApps.shelfKey(it);
+        List<String> order = new ArrayList<>(HomeApps.shelfPackages(getContext()));
+        if (key == null || order.indexOf(key) <= 0) return;
+        order.remove(key);
+        order.add(0, key);
+        saveShelf(order);
+        shelfReordered = true;
     }
 
     // MARK: - TalkBack: every reachable item as a virtual node (Spoken). Id = group * 1000 + index + 1.
