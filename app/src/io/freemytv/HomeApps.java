@@ -26,6 +26,8 @@ import android.media.tv.TvInputInfo;
 import android.media.tv.TvInputManager;
 import android.net.Uri;
 import android.provider.Settings;
+import android.text.TextPaint;
+import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.view.View;
 
@@ -103,6 +105,9 @@ final class HomeApps {
     };
     /** On the shelf in place of a package: the TV's live channels (the TV's own live TV app, see liveTv). */
     static final String LIVE_TV_KEY = "freemytv:live-tv";
+    /** Also on the shelf (put there from the drawer): an HDMI input (its TV input id follows), and both settings. */
+    static final String INPUT_KEY = "freemytv:input:", HOME_SETTINGS_KEY = "freemytv:settings",
+            TV_SETTINGS_KEY = "freemytv:tv-settings";
     /** The shelf until it's edited on the TV (Free My TV → Shelf). */
     private static final List<String> DEFAULT_SHELF = java.util.Arrays.asList(LIVE_TV_KEY,
             "com.google.android.youtube.tv", "space.nuvio.nativelegacy", "com.brt.ttv", "com.android.tv.settings");
@@ -138,10 +143,17 @@ final class HomeApps {
     static List<Item> shelf(Context c, boolean extract) {
         List<Item> items = new ArrayList<>();
         PackageManager pm = c.getPackageManager();
+        List<Item> inputs = null;   // read only when the shelf holds an input
         for (String pkg : shelfPackages(c)) {
             if (items.size() >= MAX_SHELF) break;
             if (pkg.equals(LIVE_TV_KEY)) {
                 if (liveTv(c) != null) items.add(special(c, LIVE_TV, "live", Ui.tr("TV ao vivo", "Live TV"), "live_tv"));
+                continue;
+            }
+            if (pkg.startsWith(INPUT_KEY) && inputs == null) inputs = inputs(c, true);
+            if (pkg.startsWith("freemytv:")) {
+                Item shortcut = shelfShortcut(c, pkg, inputs);
+                if (shortcut != null) items.add(shortcut);
                 continue;
             }
             Intent launch = launchIntent(pm, pkg);
@@ -171,6 +183,40 @@ final class HomeApps {
         return items;
     }
 
+    /** An input or a settings shortcut on the shelf; null when it's gone (an input no longer on the TV). */
+    private static Item shelfShortcut(Context c, String key, List<Item> inputs) {
+        Item it = null;
+        if (key.equals(HOME_SETTINGS_KEY)) {
+            it = shortcut(SETTINGS, key, Ui.tr("Home Settings"), "settings");
+        } else if (key.equals(TV_SETTINGS_KEY)) {
+            it = shortcut(ANDROID_SETTINGS, key, Ui.tr("TV Settings"), "tv_settings");
+        } else if (inputs != null) {
+            for (Item in : inputs) {
+                if (!key.equals(INPUT_KEY + in.inputId)) continue;
+                it = in;
+                it.key = key;
+                break;
+            }
+        }
+        if (it != null) it.tile = labeledTile(c, it.symbol, it.label);
+        return it;
+    }
+
+    /**
+     * What the shelf order (Prefs) calls an item: its package, or the key of live TV, an input or a settings shortcut.
+     * null for what can't go on the shelf (a title inside an app, All Apps).
+     */
+    static String shelfKey(Item it) {
+        switch (it.kind) {
+            case APP: return it.uri == null ? it.pkg : null;
+            case LIVE_TV: return LIVE_TV_KEY;
+            case INPUT: return it.inputId != null ? INPUT_KEY + it.inputId : null;
+            case SETTINGS: return HOME_SETTINGS_KEY;
+            case ANDROID_SETTINGS: return TV_SETTINGS_KEY;
+            default: return null;
+        }
+    }
+
     private static String[] known(String pkg) {
         for (String[] d : SHELF) if (d[2].equals(pkg)) return d;
         return null;
@@ -195,6 +241,11 @@ final class HomeApps {
         List<String[]> out = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         if (liveTv(c) != null && seen.add(LIVE_TV_KEY)) out.add(new String[] {LIVE_TV_KEY, Ui.tr("TV ao vivo", "Live TV")});
+        for (Item in : inputs(c, true)) {
+            if (seen.add(INPUT_KEY + in.inputId)) out.add(new String[] {INPUT_KEY + in.inputId, in.label});
+        }
+        out.add(new String[] {HOME_SETTINGS_KEY, Ui.tr("Home Settings")});
+        out.add(new String[] {TV_SETTINGS_KEY, Ui.tr("TV Settings")});
         for (String[] d : SHELF) if (launchIntent(pm, d[2]) != null && seen.add(d[2])) out.add(new String[] {d[2], d[1]});
         List<String[]> more = new ArrayList<>();
         for (String[] app : launchable(c)) {
@@ -236,10 +287,9 @@ final class HomeApps {
         return shortcut(SETTINGS, "settings", Ui.tr("Settings"), "settings");
     }
 
-    /** Shortcuts in the bottom drawer. */
+    /** Shortcuts in the bottom drawer (All Apps is the page below it). */
     static List<Item> drawerShortcuts() {
         List<Item> items = new ArrayList<>();
-        items.add(shortcut(ALL_APPS, "all", Ui.tr("All Apps"), "apps"));
         items.add(shortcut(SETTINGS, "settings", Ui.tr("Home Settings"), "settings"));
         items.add(shortcut(ANDROID_SETTINGS, "tv-settings", Ui.tr("TV Settings"), "tv_settings"));
         return items;
@@ -1035,6 +1085,24 @@ final class HomeApps {
         if (TILES.containsKey(key)) return TILES.get(key);
         Bitmap b = darkTile();
         Symbols.draw(c, new Canvas(b), symbol, TILE_W / 2f, TILE_H / 2f, TILE_H * 0.36f, 0xF2FFFFFF);
+        b.setHasMipMap(true);
+        TILES.put(key, b);
+        return b;
+    }
+
+    /** A shortcut's shelf card: its icon over its name (an input's icon alone doesn't say which one it is). */
+    private static synchronized Bitmap labeledTile(Context c, String symbol, String label) {
+        String key = "shortcut:" + symbol + "|" + label;
+        if (TILES.containsKey(key)) return TILES.get(key);
+        Bitmap b = darkTile();
+        Canvas canvas = new Canvas(b);
+        Symbols.draw(c, canvas, symbol, TILE_W / 2f, TILE_H * 0.42f, TILE_H * 0.3f, 0xF2FFFFFF);
+        TextPaint text = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+        text.setColor(0xD9FFFFFF);
+        text.setTextSize(TILE_H * 0.12f);
+        text.setTextAlign(Paint.Align.CENTER);
+        String name = TextUtils.ellipsize(label, text, TILE_W * 0.86f, TextUtils.TruncateAt.END).toString();
+        canvas.drawText(name, TILE_W / 2f, TILE_H * 0.82f, text);
         b.setHasMipMap(true);
         TILES.put(key, b);
         return b;

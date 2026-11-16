@@ -2219,6 +2219,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             RectF t = tileRects[shelfIndex];
             float gx = t.width() * FOCUS_GROW / 2, gy = t.height() * FOCUS_GROW / 2;
             menuAnchor.set(t.left - gx, t.top - gy, t.right + gx, t.bottom + gy);
+            return HomeApps.shelfKey(it) != null ? it : null;   // inputs and shortcuts too: to move or take off
+        } else if (zone == Z_DRAWER && cardFocused == CARD_NONE && !drawerItems.isEmpty()) {
+            // An input or shortcut in the drawer: only to open it or put it on the shelf.
+            it = drawerItems.get(drawerIndex);
+            menuAnchor.set(drawerRects[drawerIndex]);
+            menuAnchor.offset(drawerLayer.getX(), drawerLayer.getY());   // the drawer's rects are in its own layer
+            return HomeApps.shelfKey(it) != null ? it : null;
         } else {
             return null;
         }
@@ -2242,8 +2249,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             menuActions.add(MENU_OPEN);
             if (menuFromShelf && shelfIndex > 0) menuActions.add(MENU_LEFT);
             if (menuFromShelf && shelfIndex < shelf.size() - 1) menuActions.add(MENU_RIGHT);
-            if (order.contains(menuApp.pkg)) menuActions.add(MENU_SHELF_REMOVE);
+            if (order.contains(HomeApps.shelfKey(menuApp))) menuActions.add(MENU_SHELF_REMOVE);
             else if (order.size() < HomeApps.MAX_SHELF) menuActions.add(MENU_SHELF_ADD);
+        }
+        if (menuTargets == null && menuPick == null && menuApp.kind == HomeApps.APP) {
+            // An app's own options (inputs and shortcuts have none).
             menuActions.add(MENU_INFO);
             if (!menuApp.pkg.equals(HomeMode.PKG)) menuActions.add(MENU_FORCE_STOP);
             if (cacheClearable(menuApp.pkg)) menuActions.add(MENU_CLEAR_CACHE);
@@ -2429,7 +2439,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         int from = shelfIndex, to = from + dir;
         if (to < 0 || to >= shelf.size()) return;
         List<String> order = new ArrayList<>(HomeApps.shelfPackages(getContext()));
-        int a = order.indexOf(shelfKey(shelf.get(from))), b = order.indexOf(shelfKey(shelf.get(to)));
+        int a = order.indexOf(HomeApps.shelfKey(shelf.get(from))), b = order.indexOf(HomeApps.shelfKey(shelf.get(to)));
         if (a < 0 || b < 0) return;
         java.util.Collections.swap(order, a, b);
         saveShelf(order);
@@ -2448,12 +2458,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         menuDirty = true;
     }
 
-    /** Puts the app at the end of the shelf, or takes it off. */
+    /** Puts the app, input or shortcut at the end of the shelf, or takes it off. */
     private void putOnShelf(HomeApps.Item it, boolean on) {
+        String key = HomeApps.shelfKey(it);
         List<String> order = new ArrayList<>(HomeApps.shelfPackages(getContext()));
-        if (on && (order.size() >= HomeApps.MAX_SHELF || order.contains(it.pkg))) return;
-        if (on) order.add(it.pkg);
-        else order.remove(it.pkg);
+        if (key == null || on && (order.size() >= HomeApps.MAX_SHELF || order.contains(key))) return;
+        if (on) order.add(key);
+        else order.remove(key);
         saveShelf(order);
         if (!on && menuFromShelf && shelfIndex < shelf.size()) {
             List<HomeApps.Item> list = new ArrayList<>(shelf);
@@ -2463,11 +2474,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         reload(true);
         showToast(on ? Ui.tr(it.label + " está na prateleira.", it.label + " is on the shelf.", it.label + " está en el estante.")
                 : Ui.tr(it.label + " saiu da prateleira.", it.label + " is off the shelf.", it.label + " salió del estante."));
-    }
-
-    /** What the shelf order (Prefs) calls an item: its package, or the live TV key. */
-    private static String shelfKey(HomeApps.Item it) {
-        return it.kind == HomeApps.LIVE_TV ? HomeApps.LIVE_TV_KEY : it.pkg;
     }
 
     /** Saves the shelf without the home screen starting over on the way back (as a change in Settings makes it). */
