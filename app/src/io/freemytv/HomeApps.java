@@ -79,7 +79,7 @@ final class HomeApps {
     }
 
     /**
-     * Apps on the home shelf, in this order, when installed (up to MAX_SHELF): key, name, package, brand color (for
+     * Apps on the home shelf, in this order, when installed (up to maxShelf()): key, name, package, brand color (for
      * its logo on glass) and how to lift the logo from the app's TV art: "tint" = a white logo takes the art's
      * background color (Prime Video, Globoplay); "play" = the white triangle inside the red button stays white
      * (YouTube); empty = the art's colors as they are. Last, a visual size tweak for the logo. Edit freely.
@@ -111,7 +111,15 @@ final class HomeApps {
     /** The shelf until it's edited on the TV (Free My TV → Shelf). */
     private static final List<String> DEFAULT_SHELF = java.util.Arrays.asList(LIVE_TV_KEY,
             "com.google.android.youtube.tv", "space.nuvio.nativelegacy", "com.brt.ttv", "com.android.tv.settings");
-    static final int MAX_SHELF = 8;
+    /** Apps the shelf shows at once; past that it scrolls. */
+    static final int SHELF_VISIBLE = 8;
+    /** The sizes the shelf can have (Settings > Shelf size): the first, the default, never scrolls. */
+    static final int[] SHELF_SIZES = {SHELF_VISIBLE, 12, 16};
+
+    /** How many apps the shelf holds. */
+    static int maxShelf() {
+        return Prefs.shelfSize();
+    }
     /** Live TV apps of some brands (the antenna's channels open through the standard Android request first). */
     static final String[] LIVE_TV_APPS = {"com.tcl.tv", "com.google.android.tv", "com.mediatek.wwtv.tvcenter", "com.sony.dtv.tvx",
             "com.smartdevice.livetv", "com.mediatek.tv.oneworld.tvcenter"};
@@ -145,7 +153,7 @@ final class HomeApps {
         PackageManager pm = c.getPackageManager();
         List<Item> inputs = null;   // read only when the shelf holds an input
         for (String pkg : shelfPackages(c)) {
-            if (items.size() >= MAX_SHELF) break;
+            if (items.size() >= maxShelf()) break;
             if (pkg.equals(LIVE_TV_KEY)) {
                 if (liveTv(c) != null) items.add(special(c, LIVE_TV, "live", Ui.tr("TV ao vivo"), "live_tv"));
                 continue;
@@ -230,7 +238,7 @@ final class HomeApps {
         PackageManager pm = c.getPackageManager();
         for (String pkg : DEFAULT_SHELF) {
             boolean there = pkg.equals(LIVE_TV_KEY) ? liveTv(c) != null : launchIntent(pm, pkg) != null;
-            if (out.size() < MAX_SHELF && there) out.add(pkg);
+            if (out.size() < maxShelf() && there) out.add(pkg);
         }
         return out;
     }

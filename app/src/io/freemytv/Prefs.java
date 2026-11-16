@@ -368,6 +368,15 @@ final class Prefs {
         return out;
     }
 
+    /** How many apps the shelf holds (one of HomeApps.SHELF_SIZES; past HomeApps.SHELF_VISIBLE it scrolls). */
+    static int shelfSize() {
+        int n = sp().getInt("shelfSize", HomeApps.SHELF_VISIBLE);
+        for (int size : HomeApps.SHELF_SIZES) if (size == n) return n;
+        return HomeApps.SHELF_VISIBLE;
+    }
+
+    static void setShelfSize(int n) { put("shelfSize", n); }
+
     static void setShelf(List<String> packages) {
         StringBuilder sb = new StringBuilder();
         for (String p : packages) sb.append(sb.length() == 0 ? "" : ",").append(p);

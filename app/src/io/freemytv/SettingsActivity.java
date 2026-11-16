@@ -396,6 +396,13 @@ public class SettingsActivity extends Activity {
             p.symbol = "home";
             p.rows.add(helped(opens(() -> Ui.tr("Prateleira"), this::openShelfEditor),
                     () -> Ui.tr("Os apps da fileira do Início: quais aparecem e em que ordem.")));
+            p.rows.add(helped(choice(() -> Ui.tr("Tamanho da prateleira"), () -> {
+                        List<String> l = new ArrayList<>();
+                        for (int n : HomeApps.SHELF_SIZES) l.add(Ui.trf("Até {n} apps", "n", n));
+                        return l;
+                    }, () -> Math.max(0, indexOf(HomeApps.SHELF_SIZES, Prefs.shelfSize())), at -> setShelfSize(HomeApps.SHELF_SIZES[at])),
+                    () -> Ui.trf("Quantos apps cabem na prateleira. Mais de {n}: ela rola para os lados, com setas nas pontas.",
+                            "n", HomeApps.SHELF_VISIBLE)));
             p.rows.add(helped(opens(() -> Ui.tr("Recomendações"), () -> open(picksPage())),
                     () -> Ui.tr("Filmes e séries sugeridos no topo do Início, a chave do TMDB e o Continuar assistindo.")));
             p.rows.add(helped(opens(() -> Ui.tr("Clima, cotações e futebol"),
@@ -2730,7 +2737,7 @@ public class SettingsActivity extends Activity {
                 for (int i = 0; focused != null && i < shelfRows.size(); i++) if (shelfRows.get(i)[0].equals(focused)) focus = i;
                 keepVisible(false);
             };
-            p.hint = () -> Ui.trf("OK põe ou tira da prateleira (até {n}). ← → mudam a ordem.", "n", HomeApps.MAX_SHELF);
+            p.hint = () -> Ui.trf("OK põe ou tira da prateleira (até {n}). ← → mudam a ordem.", "n", HomeApps.maxShelf());
             shelfRows.clear();
             open(p);
             p.rebuild.run();
@@ -2738,10 +2745,22 @@ public class SettingsActivity extends Activity {
             keepVisible(true);
         }
 
+        /** A smaller shelf keeps its first apps: the rest come off (they'd be on the list without showing). */
+        private static void setShelfSize(int n) {
+            Prefs.setShelfSize(n);
+            List<String> order = HomeApps.shelfPackages(Prefs.context());
+            if (Prefs.shelf() != null && order.size() > n) Prefs.setShelf(new ArrayList<>(order.subList(0, n)));
+        }
+
+        private static int indexOf(int[] values, int value) {
+            for (int i = 0; i < values.length; i++) if (values[i] == value) return i;
+            return -1;
+        }
+
         /** OK: puts the app on the shelf (at the end) or takes it off. */
         private void toggleShelfApp(String pkg) {
             if (shelfOrder.contains(pkg)) shelfOrder.remove(pkg);
-            else if (shelfOrder.size() < HomeApps.MAX_SHELF) shelfOrder.add(pkg);
+            else if (shelfOrder.size() < HomeApps.maxShelf()) shelfOrder.add(pkg);
             else return;
             Prefs.setShelf(shelfOrder);
         }

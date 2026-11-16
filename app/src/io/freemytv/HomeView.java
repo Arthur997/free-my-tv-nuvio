@@ -689,7 +689,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lastNanos = frameTimeNanos;
         long up = SystemClock.uptimeMillis();
 
-        boolean tilesMoving = step(tileFocus, dt);
+        boolean shelfSliding = shelfScroll.step(dt);
+        if (shelfSliding) positionTiles();
+        boolean tilesMoving = step(tileFocus, dt) | shelfSliding;
         boolean statusMoving = step(statusFocus, dt);
         boolean heroMoving = heroFocus.step(dt);
         boolean topMoving = step(topFocus, dt), cardsMoving = step(cardFocus, dt) | cardShift.step(dt);
@@ -1183,21 +1185,54 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         platter.invalidate();
     }
 
+    // Past HomeApps.SHELF_VISIBLE apps (Settings > Shelf size), the shelf scrolls: shelfFirst is the first app shown, and
+    // the tiles slide by shelfScroll (pixels) toward it.
+    private int shelfFirst;
+    private final Spring shelfScroll = new Spring(0.32f, 1f, 0);
+    private float shelfLeft, shelfStep, shelfTileW, shelfTileY;
+
     private void layoutShelf() {
-        int n = shelf.size();
+        int n = Math.min(shelf.size(), HomeApps.SHELF_VISIBLE);
         float pad = SHELF_PAD * k, gap = TILE_GAP * k, th = L_TILE_H * k;
         float full = (CONTENT_R - MARGIN) * k;
         float tw = Math.min(th * TILE_ASPECT, (full - Math.max(0, n - 1) * gap) / Math.max(1, n));
         float width = n * tw + Math.max(0, n - 1) * gap, left = (w - width) / 2f;
         float top = L_PLATTER_TOP * k;
         platterRect.set(left - pad, top, left + width + pad, top + th + 2 * pad);
-        float x = left, y = top + pad;
-        for (int i = 0; i < n; i++) {
-            tileRects[i].set(x, y, x + tw, y + th);
-            x += tw + gap;
-        }
+        shelfLeft = left;
+        shelfStep = tw + gap;
+        shelfTileW = tw;
+        shelfTileY = top + pad;
+        shelfFirst = Math.max(0, Math.min(shelfFirst, shelf.size() - n));
+        shelfScroll.snap(shelfFirst * shelfStep);
+        positionTiles();
         crispLogos.clear();
         crispByItem.clear();
+    }
+
+    /** The tiles where the scroll has them now (the glass doesn't move). */
+    private void positionTiles() {
+        float th = L_TILE_H * k, x = shelfLeft - shelfScroll.value;
+        for (int i = 0; i < tileRects.length; i++) {
+            tileRects[i].set(x, shelfTileY, x + shelfTileW, shelfTileY + th);
+            x += shelfStep;
+        }
+    }
+
+    private boolean shelfScrolls() {
+        return shelf.size() > HomeApps.SHELF_VISIBLE;
+    }
+
+    /** Scrolls one app at a time so the focused one shows (`snap`: at once). */
+    private void revealShelf(boolean snap) {
+        int n = Math.min(shelf.size(), HomeApps.SHELF_VISIBLE);
+        int first = Math.max(0, Math.min(Math.max(shelfFirst, shelfIndex - n + 1), Math.min(shelfIndex, shelf.size() - n)));
+        if (first == shelfFirst && !snap) return;
+        shelfFirst = first;
+        shelfScroll.target = first * shelfStep;
+        if (snap) shelfScroll.snap(shelfScroll.target);
+        positionTiles();
+        tilesDirty = true;
     }
 
     /** Shelf layer: the glass bar and its shadow (it only changes with the background). */
@@ -1299,11 +1334,33 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 top = i;
             }
         }
+        // Scrolling, the tiles slide in and out through the glass's sides. Only then: on a shelf that fits, the clip
+        // would cut the end tiles' shadows in a straight line.
+        boolean scrolls = shelfScrolls();
+        if (scrolls) {
+            c.save();
+            c.clipRect(platterRect.left, 0, platterRect.right, h);
+        }
         for (int pass = 0; pass < 2; pass++) {
             for (int i = 0; i < shelf.size(); i++) {
                 if ((pass == 0) == (i == top)) continue;
+                if (scrolls && (tileRects[i].right < platterRect.left || tileRects[i].left > platterRect.right)) continue;
                 drawShelfTile(c, i);
             }
+        }
+        if (!scrolls) return;
+        c.restore();
+        // More apps than fit: a small arrow inside the glass's edge on each side that has more.
+        float cy = platterRect.centerY(), size = 28 * k, inset = 14 * k;
+        int ink = tone(0x99000000, 0xCCFFFFFF);
+        if (shelfFirst + HomeApps.SHELF_VISIBLE < shelf.size()) {
+            Symbols.draw(getContext(), c, "chevron_right", platterRect.right - inset, cy, size, ink);
+        }
+        if (shelfFirst > 0) {
+            c.save();
+            c.scale(-1, 1, platterRect.left + inset, cy);
+            Symbols.draw(getContext(), c, "chevron_right", platterRect.left + inset, cy, size, ink);
+            c.restore();
         }
     }
 
@@ -1990,6 +2047,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void retarget(boolean snap) {
         // Only the group whose focus changed is redrawn (moving along the shelf doesn't redraw the hero or capsule).
         boolean tilesChanged = aim(tileFocus, !sheetOpen && zone == Z_SHELF ? shelfIndex : -1, snap);
+        if (zone == Z_SHELF && !shelf.isEmpty()) revealShelf(snap);
         boolean statusChanged = aim(statusFocus, !sheetOpen && zone == Z_STATUS ? statusIndex : -1, snap);
         boolean inCards = !sheetOpen && zone == Z_DRAWER && cardFocused != CARD_NONE;
         boolean drawerChanged = aim(drawerFocus, !sheetOpen && zone == Z_DRAWER && !inCards ? drawerIndex : -1, snap);
@@ -2246,7 +2304,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             if (menuFromShelf && shelfIndex > 0) menuActions.add(MENU_LEFT);
             if (menuFromShelf && shelfIndex < shelf.size() - 1) menuActions.add(MENU_RIGHT);
             if (order.contains(HomeApps.shelfKey(menuApp))) menuActions.add(MENU_SHELF_REMOVE);
-            else if (order.size() < HomeApps.MAX_SHELF) menuActions.add(MENU_SHELF_ADD);
+            else if (order.size() < HomeApps.maxShelf()) menuActions.add(MENU_SHELF_ADD);
         }
         if (menuTargets == null && menuPick == null && menuApp.kind == HomeApps.APP) {
             // An app's own options (inputs and shortcuts have none).
@@ -2458,7 +2516,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void putOnShelf(HomeApps.Item it, boolean on) {
         String key = HomeApps.shelfKey(it);
         List<String> order = new ArrayList<>(HomeApps.shelfPackages(getContext()));
-        if (key == null || on && (order.size() >= HomeApps.MAX_SHELF || order.contains(key))) return;
+        if (key == null || on && (order.size() >= HomeApps.maxShelf() || order.contains(key))) return;
         if (on) order.add(key);
         else order.remove(key);
         saveShelf(order);
