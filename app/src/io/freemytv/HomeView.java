@@ -3571,8 +3571,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
     }
 
-    /** 24 h, in Clock's zone (set again every minute: the zone may change). */
-    private final java.text.SimpleDateFormat topClockFormat = new java.text.SimpleDateFormat("HH:mm", java.util.Locale.US);
     private long topMinute = -1, topWeatherAt = -1;
     private int topZone = -1;
     private String topTime = "", topTemp = "", topSymbol = "";
@@ -3592,9 +3590,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         long now = System.currentTimeMillis();
         if (now / 60_000 != topMinute || Clock.generation != topZone) {
             topMinute = now / 60_000;
-            topClockFormat.setTimeZone(Clock.zone());
             topZone = Clock.generation;
-            topTime = topClockFormat.format(new java.util.Date(now));
+            topTime = Ui.shortClock(now, Clock.zone());   // once a minute, in Clock's zone (it may change)
             topTimeW = text.measureText(topTime);
         }
         HomeData.Weather wx = data.weather;

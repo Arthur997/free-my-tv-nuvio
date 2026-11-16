@@ -317,7 +317,7 @@ final class Ui {
     static synchronized DatePattern datePattern(String key) {
         DatePattern pattern = DATE_PATTERNS.get(key);
         if (pattern == null) {
-            String text = tr(key);
+            String text = hoursPattern(key, tr(key));
             Locale loc = locale();
             try {
                 new SimpleDateFormat(text, loc);
@@ -330,6 +330,51 @@ final class Ui {
             DATE_PATTERNS.put(key, pattern);
         }
         return pattern;
+    }
+
+    // MARK: - 12 or 24 hours (Settings > Appearance > Clock)
+
+    static final String HOURS_AUTO = "auto", HOURS_TV = "tv", HOURS_12 = "12", HOURS_24 = "24";
+
+    /** 12 or 24 when the clock setting forces one (the TV's own setting counts), else 0: each language's own. */
+    static int forcedHours() {
+        String v = Prefs.clockHours();
+        if (v.equals(HOURS_12)) return 12;
+        if (v.equals(HOURS_24)) return 24;
+        Context c = Prefs.context();
+        if (v.equals(HOURS_TV) && c != null) return android.text.format.DateFormat.is24HourFormat(c) ? 24 : 12;
+        return 0;
+    }
+
+    /** The patterns that show hours, in the forced form; any other pattern (or none forced) as the language has it. */
+    private static String hoursPattern(String key, String text) {
+        int hours = forcedHours();
+        if (hours == 0) return text;
+        boolean twelve = hours == 12;
+        switch (key) {
+            case "format|HH:mm": return twelve ? "h:mm" : "HH:mm";   // the big clocks: no AM/PM, like the iPhone's
+            case "format|H:mm": return twelve ? "h:mm a" : "HH:mm";
+            case "format|HH'h'": return twelve ? "h a" : text.contains("H") ? text : "HH:mm";
+            default: return text;
+        }
+    }
+
+    /** The setting changed: the cached patterns and times are made again. */
+    static void hoursChanged() {
+        synchronized (Ui.class) {
+            DATE_PATTERNS.clear();
+        }
+        synchronized (FORMATTED) {
+            FORMATTED.clear();
+        }
+        generation++;
+    }
+
+    /** The tab bar's small clock: 24 h, unless the clock is set to 12 h. */
+    static String shortClock(long now, java.util.TimeZone zone) {
+        SimpleDateFormat f = new SimpleDateFormat(forcedHours() == 12 ? "h:mm" : "HH:mm", Locale.US);
+        f.setTimeZone(zone);
+        return f.format(new Date(now));
     }
 
     static final class DatePattern {

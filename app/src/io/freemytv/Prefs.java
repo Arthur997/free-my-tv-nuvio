@@ -120,6 +120,10 @@ final class Prefs {
 
     // MARK: - Clock (Clock)
 
+    /** 12 or 24 hours: Ui.HOURS_AUTO (each language's own, the default), HOURS_TV, HOURS_12 or HOURS_24. */
+    static String clockHours() { return app == null ? Ui.HOURS_AUTO : sp().getString("clockHours", Ui.HOURS_AUTO); }
+    static void setClockHours(String v) { put("clockHours", v); Ui.hoursChanged(); }
+
     /** Off (the default): the zone and the time come from the internet. On: clockZone and clockAdjust. */
     static boolean manualClock() { return sp().getBoolean("manualClock", false); }
     static void setManualClock(boolean on) { put("manualClock", on); }

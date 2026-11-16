@@ -476,7 +476,7 @@ public class SettingsActivity extends Activity {
                     () -> Ui.tr("O que fica no alto do Início: o relógio com o clima, ou as cotações."),
                     () -> Ui.tr("Na prateleira, a imagem que o próprio app traz ou só o logo dele."),
                     () -> Ui.tr("O volume do clique ao mover o foco e abrir itens."),
-                    () -> Ui.tr("A hora do relógio: automática pela internet, ou fuso e ajuste à mão."));
+                    () -> Ui.tr("A hora do relógio: automática pela internet ou à mão, em 12 ou 24 horas."));
             p.hint = () -> Ui.tr("OK abre as opções; ← e → mudam direto.");
             return p;
         }
@@ -1252,12 +1252,17 @@ public class SettingsActivity extends Activity {
             p.rows.add(dimmed(choice(() -> Ui.tr("Ajuste da hora"), SettingsView::adjustNames,
                     () -> automatic.getAsBoolean() ? nearest(Clock.ADJUSTS, 0) : nearest(Clock.ADJUSTS, Prefs.clockAdjust()),
                     at -> Prefs.setClockAdjust(Clock.ADJUSTS[at])), automatic));
+            p.rows.add(choice(() -> Ui.tr("Formato da hora"),
+                    () -> list(Ui.tr("Automático"), Ui.tr("Igual ao da TV"), Ui.tr("12 horas"), Ui.tr("24 horas")),
+                    () -> Math.max(0, java.util.Arrays.asList(HOURS).indexOf(Prefs.clockHours())),
+                    at -> Prefs.setClockHours(HOURS[at])));
             p.rows.add(new Row(() -> Ui.tr("Agora"), () -> Ui.clock(System.currentTimeMillis()), () -> {}, null, null));
             p.symbol = "recents";
             describe(p,
                     () -> Ui.tr("Automática: a hora certa da internet no fuso da cidade do clima. Manual: você escolhe."),
                     () -> Ui.tr("O fuso do relógio, na hora manual."),
                     () -> Ui.tr("Minutos a mais ou a menos, se a hora ainda estiver errada."),
+                    () -> Ui.tr("12 ou 24 horas. Automático usa o costume do idioma; Igual ao da TV segue o ajuste da própria TV."),
                     () -> Ui.tr("A hora que o Free My TV mostra agora."));
             p.hint = () -> Prefs.manualClock()
                     ? Ui.tr("Escolha o fuso e, se a hora ainda estiver errada, ajuste com ← e →.")
@@ -2220,7 +2225,8 @@ public class SettingsActivity extends Activity {
 
         // MARK: - Choices behind the rows
 
-        private static final String[] UNITS = {"auto", "C", "F"}, THEMES = {"auto", "light", "dark"};
+        private static final String[] UNITS = {"auto", "C", "F"}, THEMES = {"auto", "light", "dark"},
+                HOURS = {Ui.HOURS_AUTO, Ui.HOURS_TV, Ui.HOURS_12, Ui.HOURS_24};
 
         /** "auto", then the app's languages (Ui.LANGUAGES). */
         private static String[] languageChoices() {
