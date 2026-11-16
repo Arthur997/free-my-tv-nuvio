@@ -55,7 +55,7 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Ui.background("weather");
     private final Spring page = new Spring(0.34f, 0.92f, 0);   // the tab shown: 0 = today, 1 = the next days
-    private final TabBar tabs = new TabBar(Ui.tr("Hoje", "Today", "Hoy"), Ui.tr("7 dias", "7 Days", "7 días"));
+    private final TabBar tabs = new TabBar(Ui.tr("Hoje"), Ui.tr("7 dias"));
     private int tab;
     /** The focus is on the tabs (else down in the page: the days). */
     private boolean onTabs = true;
@@ -166,8 +166,7 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
     void setPlace(WeatherLocation.Place p) {
         place = p;
         if (p == null) {
-            if (forecast == null || !forecast.hasNow()) messageText = Ui.tr("Escolha a cidade em Ajustes do Free My TV.",
-                    "Pick your city in Free My TV Settings.", "Elige tu ciudad en Ajustes de Free My TV.");
+            if (forecast == null || !forecast.hasNow()) messageText = Ui.tr("Escolha a cidade em Ajustes do Free My TV.");
             redraw();
             return;
         }
@@ -315,11 +314,9 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
 
     /** What the keys do where the focus is, in the line at the bottom. */
     private String hint() {
-        if (!onTabs) return Ui.tr("↑ ↓ escolhe o dia  ·  Voltar volta às abas", "↑ ↓ pick a day  ·  Back returns to the tabs",
-                "↑ ↓ elige el día  ·  Volver regresa a las pestañas");
-        if (tab == TAB_DAYS) return Ui.tr("↓ escolhe um dia  ·  ← → troca de aba", "↓ pick a day  ·  ← → change tabs",
-                "↓ elige un día  ·  ← → cambia de pestaña");
-        return Ui.tr("→ próximos 7 dias  ·  Voltar sai", "→ next 7 days  ·  Back exits", "→ próximos 7 días  ·  Volver sale");
+        if (!onTabs) return Ui.tr("↑ ↓ escolhe o dia  ·  Voltar volta às abas");
+        if (tab == TAB_DAYS) return Ui.tr("↓ escolhe um dia  ·  ← → troca de aba");
+        return Ui.tr("→ próximos 7 dias  ·  Voltar sai");
     }
 
     private void aimRows() {
@@ -486,16 +483,16 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
         if (w == 0) return;
         Forecast f = forecast;
         long now = System.currentTimeMillis();
-        titleText = Prefs.city().isEmpty() ? Ui.tr("Previsão do tempo", "Forecast", "Pronóstico") : Prefs.city();
+        titleText = Prefs.city().isEmpty() ? Ui.tr("Previsão do tempo") : Prefs.city();
         tabs.layout(M * k + title.measureText(titleText) + 40 * k, 98 * k, k, tabOn);
         hintText = hint();
-        hoursTitle = Ui.tr("Próximas 24 horas", "Next 24 Hours", "Próximas 24 horas");
-        daysTitle = Ui.tr("Próximos 7 dias", "Next 7 Days", "Próximos 7 días");
+        hoursTitle = Ui.tr("Próximas 24 horas");
+        daysTitle = Ui.tr("Próximos 7 dias");
         headerText = header(f);
         if (f == null || !f.hasNow()) {
             if (messageText.isEmpty() || failed || fetching) messageText = failed
-                    ? Ui.tr("Sem conexão com a previsão agora.", "Can't reach the forecast right now.", "No se puede cargar el pronóstico ahora.")
-                    : Ui.tr("Buscando a previsão…", "Getting the forecast…", "Buscando el pronóstico…");
+                    ? Ui.tr("Sem conexão com a previsão agora.")
+                    : Ui.tr("Buscando a previsão…");
             setContentDescription(titleText + ". " + messageText);
             return;
         }
@@ -516,20 +513,20 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
 
     /** "TV location · Updated 14:20", or that it's updating. */
     private String header(Forecast f) {
-        String where = place == null ? "" : place.precise ? Ui.tr("Localização da TV", "TV's location", "Ubicación de la TV")
-                : Ui.tr("Centro da cidade", "City center", "Centro de la ciudad");
-        String when = fetching ? Ui.tr("Atualizando…", "Updating…", "Actualizando…")
-                : f != null && f.fetchedAt != 0 ? Ui.trf(Ui.tr("Atualizado às {time}", "Updated {time}", "Actualizado a las {time}"),
+        String where = place == null ? "" : place.precise ? Ui.tr("Localização da TV")
+                : Ui.tr("Centro da cidade");
+        String when = fetching ? Ui.tr("Atualizando…")
+                : f != null && f.fetchedAt != 0 ? Ui.trf("Atualizado às {time}",
                         "time", Ui.time(f.fetchedAt)) : "";
         return where.isEmpty() ? when : when.isEmpty() ? where : where + "  ·  " + when;
     }
 
     private static String heroLine(Forecast f) {
         StringBuilder b = new StringBuilder();
-        if (!Double.isNaN(f.feels)) b.append(Ui.trf(Ui.tr("Sensação {t}", "Feels like {t}", "Sensación {t}"), "t", HomeData.degrees(f.feels)));
+        if (!Double.isNaN(f.feels)) b.append(Ui.trf("Sensação {t}", "t", HomeData.degrees(f.feels)));
         if (f.dayCount > 0 && !Double.isNaN(f.dayMax[0])) {
             if (b.length() > 0) b.append("  ·  ");
-            b.append(Ui.trf(Ui.tr("Máx. {max}  Mín. {min}", "H:{max}  L:{min}", "Máx. {max}  Mín. {min}"),
+            b.append(Ui.trf("Máx. {max}  Mín. {min}",
                     "max", HomeData.degrees(f.dayMax[0]), "min", HomeData.degrees(f.dayMin[0])));
         }
         return b.toString();
@@ -563,17 +560,17 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
                 lowAt = i;
             }
             if (chance >= 0 && (rainAt < 0 || chance > columnChance[rainAt])) rainAt = c;
-            hourLabels[c] = i == 0 ? Ui.tr("Agora", "Now", "Ahora") : HomeData.hour(f.hourAt[i]);
+            hourLabels[c] = i == 0 ? Ui.tr("Agora") : HomeData.hour(f.hourAt[i]);
             hourTemps[c] = HomeData.degrees(f.hourTemp[i]);
             hourChances[c] = chance < 0 ? "—" : chance + "%";
         }
         String rain = rainAt < 0 || columnChance[rainAt] < 20
-                ? Ui.tr("Sem chuva prevista", "No rain expected", "Sin lluvia prevista")
-                : Ui.trf(Ui.tr("Chuva mais provável às {time} ({p})", "Rain likeliest at {time} ({p})", "Lluvia más probable a las {time} ({p})"),
+                ? Ui.tr("Sem chuva prevista")
+                : Ui.trf("Chuva mais provável às {time} ({p})",
                         "time", HomeData.hour(f.hourAt[columnHour[rainAt]]), "p", columnChance[rainAt] + "%");
-        hoursLine = Ui.trf(Ui.tr("Máx. {max} às {at}", "High {max} at {at}", "Máx. {max} a las {at}"), "max", HomeData.degrees(high),
+        hoursLine = Ui.trf("Máx. {max} às {at}", "max", HomeData.degrees(high),
                 "at", HomeData.hour(f.hourAt[highAt])) + "  ·  "
-                + Ui.trf(Ui.tr("Mín. {min} às {at}", "Low {min} at {at}", "Mín. {min} a las {at}"), "min", HomeData.degrees(low),
+                + Ui.trf("Mín. {min} às {at}", "min", HomeData.degrees(low),
                 "at", HomeData.hour(f.hourAt[lowAt])) + "  ·  " + rain;
         float left = (HOURS_L + 34 + HOURS_NAMES) * k, col = (R - 34 - HOURS_L - 34 - HOURS_NAMES) * k / COLUMNS;
         float top = 404 * k, bottom = 446 * k;
@@ -594,26 +591,26 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
     private void prepareTiles(Forecast f, long now) {
         double rainToday = f.dayCount > 0 ? f.dayRain[0] : Double.NaN;
         int chance = f.hourCount > 0 ? f.hourChance[0] : -1;
-        set(TILE_RAIN, Ui.tr("Chuva", "Rain", "Lluvia"), Forecast.percent(chance),
-                Double.isNaN(rainToday) ? "" : Ui.trf(Ui.tr("{v} hoje", "{v} today", "{v} hoy"), "v", Forecast.rain(rainToday)));
-        set(TILE_HUMIDITY, Ui.tr("Umidade", "Humidity", "Humedad"), Forecast.percent(f.humidity), Forecast.humidityLevel(f.humidity));
+        set(TILE_RAIN, Ui.tr("Chuva"), Forecast.percent(chance),
+                Double.isNaN(rainToday) ? "" : Ui.trf("{v} hoje", "v", Forecast.rain(rainToday)));
+        set(TILE_HUMIDITY, Ui.tr("Umidade"), Forecast.percent(f.humidity), Forecast.humidityLevel(f.humidity));
         String from = Forecast.compass(f.windFrom);
-        String gusts = Double.isNaN(f.gusts) ? "" : Ui.trf(Ui.tr("Rajadas {v}", "Gusts {v}", "Rachas {v}"), "v", Forecast.speed(f.gusts));
-        set(TILE_WIND, Ui.tr("Vento", "Wind", "Viento"), Forecast.speed(f.wind),
+        String gusts = Double.isNaN(f.gusts) ? "" : Ui.trf("Rajadas {v}", "v", Forecast.speed(f.gusts));
+        set(TILE_WIND, Ui.tr("Vento"), Forecast.speed(f.wind),
                 from.isEmpty() ? gusts : gusts.isEmpty() ? from : gusts + "  ·  " + from);
         windTo = Double.isNaN(f.windFrom) ? Float.NaN : (float) (f.windFrom + 180);   // the arrow points where it blows
-        set(TILE_UV, Ui.tr("Índice UV", "UV Index", "Índice UV"), Double.isNaN(f.uv) ? "—" : String.valueOf(Math.round(f.uv)),
+        set(TILE_UV, Ui.tr("Índice UV"), Double.isNaN(f.uv) ? "—" : String.valueOf(Math.round(f.uv)),
                 Forecast.uvLevel(f.uv));
         uvAt = Double.isNaN(f.uv) ? -1 : Ui.clamp((float) (f.uv / 11));
-        set(TILE_AIR, Ui.tr("Qualidade do ar", "Air Quality", "Calidad del aire"), f.airIndex < 0 ? "—" : String.valueOf(f.airIndex),
+        set(TILE_AIR, Ui.tr("Qualidade do ar"), f.airIndex < 0 ? "—" : String.valueOf(f.airIndex),
                 f.airIndex < 0 ? "" : Forecast.airLevel(f.airIndex));
         airAt = f.airIndex < 0 ? -1 : Ui.clamp(f.airIndex / 300f);
-        set(TILE_PRESSURE, Ui.tr("Pressão", "Pressure", "Presión"), Forecast.pressure(f.pressure),
-                Ui.tr("Ao nível do mar", "At sea level", "Al nivel del mar"));
-        set(TILE_VISIBILITY, Ui.tr("Visibilidade", "Visibility", "Visibilidad"), Forecast.distance(f.visibility),
+        set(TILE_PRESSURE, Ui.tr("Pressão"), Forecast.pressure(f.pressure),
+                Ui.tr("Ao nível do mar"));
+        set(TILE_VISIBILITY, Ui.tr("Visibilidade"), Forecast.distance(f.visibility),
                 Forecast.visibilityLevel(f.visibility));
         long rise = f.dayCount > 0 ? f.sunrise[0] : 0, set = f.dayCount > 0 ? f.sunset[0] : 0;
-        set(TILE_SUN, Ui.tr("Nascer e pôr do sol", "Sunrise and Sunset", "Amanecer y atardecer"), "", "");
+        set(TILE_SUN, Ui.tr("Nascer e pôr do sol"), "", "");
         sunriseText = rise == 0 ? "" : Ui.time(rise);
         sunsetText = set == 0 ? "" : Ui.time(set);
         sunAt = rise == 0 || set <= rise ? -1 : (now - rise) / (float) (set - rise);
@@ -633,7 +630,7 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
         for (int i = 0; i < f.dayCount; i++) {
             weekLow = Math.min(weekLow, f.dayMin[i]);
             weekHigh = Math.max(weekHigh, f.dayMax[i]);
-            String name = i == 0 ? Ui.tr("Hoje", "Today", "Hoy") : i == 1 ? Ui.tr("Amanhã", "Tomorrow", "Mañana")
+            String name = i == 0 ? Ui.tr("Hoje") : i == 1 ? Ui.tr("Amanhã")
                     : weekday.format(f.dayAt[i] + 12 * 3600_000L);
             dayNames[i] = name.isEmpty() ? name : name.substring(0, 1).toUpperCase(Ui.locale()) + name.substring(1);
             dayMaxes[i] = HomeData.degrees(f.dayMax[i]);
@@ -650,14 +647,14 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
         detailDateText = Ui.date(f.dayAt[d] + 12 * 3600_000L);
         detailTempText = HomeData.degrees(f.dayMax[d]) + " / " + HomeData.degrees(f.dayMin[d]);
         detailCondition = HomeData.condition(f.dayCode[d], true);
-        fact(0, Ui.tr("Chance de chuva", "Chance of Rain", "Probabilidad de lluvia"), Forecast.percent(f.dayChance[d]));
-        fact(1, Ui.tr("Chuva no dia", "Rain in the Day", "Lluvia en el día"), Forecast.rain(f.dayRain[d]));
-        fact(2, Ui.tr("Vento máximo", "Strongest Wind", "Viento máximo"), Forecast.speed(f.dayWind[d]));
-        fact(3, Ui.tr("Rajadas", "Gusts", "Rachas"), Forecast.speed(f.dayGusts[d]));
-        fact(4, Ui.tr("UV máximo", "Highest UV", "UV máximo"), Double.isNaN(f.dayUv[d]) ? "—"
+        fact(0, Ui.tr("Chance de chuva"), Forecast.percent(f.dayChance[d]));
+        fact(1, Ui.tr("Chuva no dia"), Forecast.rain(f.dayRain[d]));
+        fact(2, Ui.tr("Vento máximo"), Forecast.speed(f.dayWind[d]));
+        fact(3, Ui.tr("Rajadas"), Forecast.speed(f.dayGusts[d]));
+        fact(4, Ui.tr("UV máximo"), Double.isNaN(f.dayUv[d]) ? "—"
                 : Math.round(f.dayUv[d]) + "  " + Forecast.uvLevel(f.dayUv[d]));
-        fact(5, Ui.tr("Nascer do sol", "Sunrise", "Amanecer"), f.sunrise[d] == 0 ? "—" : Ui.time(f.sunrise[d]));
-        fact(6, Ui.tr("Pôr do sol", "Sunset", "Atardecer"), f.sunset[d] == 0 ? "—" : Ui.time(f.sunset[d]));
+        fact(5, Ui.tr("Nascer do sol"), f.sunrise[d] == 0 ? "—" : Ui.time(f.sunrise[d]));
+        fact(6, Ui.tr("Pôr do sol"), f.sunset[d] == 0 ? "—" : Ui.time(f.sunset[d]));
     }
 
     private void fact(int i, String label, String value) {
@@ -735,8 +732,8 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
         fill.setColor(ink(0.06f));
         c.drawRoundRect(rect, 14 * k, 14 * k, fill);
         // The rows' names.
-        c.drawText(Ui.tr("Temp.", "Temp.", "Temp."), x, 372 * k + Ui.halfCap(rowName) - 8 * k, rowName);
-        c.drawText(Ui.tr("Chuva", "Rain", "Lluvia"), x, 516 * k + Ui.halfCap(rowName), rowName);
+        c.drawText(Ui.tr("Temp."), x, 372 * k + Ui.halfCap(rowName) - 8 * k, rowName);
+        c.drawText(Ui.tr("Chuva"), x, 516 * k + Ui.halfCap(rowName), rowName);
         stroke.setStrokeWidth(2.5f * k);
         stroke.setColor(ink(0.35f));
         c.drawPath(curve, stroke);
@@ -841,11 +838,11 @@ final class WeatherView extends ViewGroup implements Choreographer.FrameCallback
         panel(c, DETAIL_L, DAYS_T, R, DAYS_B);
         float y = 196 * k;
         c.drawText(daysTitle, (DAYS_L + 44) * k, y, panelTitle);
-        c.drawText(Ui.tr("Chuva", "Rain", "Lluvia"), (DAYS_L + 384) * k, y, rowName);
+        c.drawText(Ui.tr("Chuva"), (DAYS_L + 384) * k, y, rowName);
         rowName.setTextAlign(Paint.Align.RIGHT);
-        c.drawText(Ui.tr("Mín.", "Low", "Mín."), (DAYS_L + 570) * k, y, rowName);
+        c.drawText(Ui.tr("Mín."), (DAYS_L + 570) * k, y, rowName);
         rowName.setTextAlign(Paint.Align.LEFT);
-        c.drawText(Ui.tr("Máx.", "High", "Máx."), (DAYS_L + 864) * k, y, rowName);
+        c.drawText(Ui.tr("Máx."), (DAYS_L + 864) * k, y, rowName);
     }
 
     /** What the focus changes: the rows (and the pill) and the focused day's details. */

@@ -81,8 +81,8 @@ public class SleepWarningActivity extends Activity {
             for (int i = 0; i < CHOICES.length; i++) {
                 focus[i] = Spring.focus(i == 0 ? 1 : 0);
                 buttons[i] = new RectF();
-                labels[i] = CHOICES[i] == 0 ? Ui.tr("Cancelar", "Cancel", "Cancelar")
-                        : Ui.trf(Ui.tr("+{n} min", "+{n} min", "+{n} min"), "n", CHOICES[i]);
+                labels[i] = CHOICES[i] == 0 ? Ui.tr("Cancelar")
+                        : Ui.trf("+{n} min", "n", CHOICES[i]);
             }
             setFocusable(true);
             // TalkBack: one item per button, id = button + 1.
@@ -151,7 +151,7 @@ public class SleepWarningActivity extends Activity {
                 dismiss();
                 return;
             }
-            countdown = Ui.trf(Ui.tr("A TV desliga em {n} s", "The TV turns off in {n} s", "La TV se apaga en {n} s"),
+            countdown = Ui.trf("A TV desliga em {n} s",
                     "n", (left + 999) / 1000);
             invalidate();
         }
@@ -204,10 +204,8 @@ public class SleepWarningActivity extends Activity {
         /** More time from now, or no timer; said in a toast, as the Control Center says it. */
         private void choose(int minutes) {
             SleepTimer.set(activity, minutes);
-            String said = minutes == 0 ? Ui.tr("Timer desligado. A TV fica ligada.", "Sleep timer off. The TV stays on.",
-                    "Temporizador apagado. La TV sigue encendida.")
-                    : Ui.trf(Ui.tr("A TV desliga em {n} min, às {time}.", "The TV turns off in {n} min, at {time}.",
-                            "La TV se apaga en {n} min, a las {time}."), "n", minutes, "time", Ui.clock(SleepTimer.endsAt(activity)));
+            String said = minutes == 0 ? Ui.tr("Timer desligado. A TV fica ligada.")
+                    : Ui.trf("A TV desliga em {n} min, às {time}.", "n", minutes, "time", Ui.clock(SleepTimer.endsAt(activity)));
             android.widget.Toast.makeText(activity, said, android.widget.Toast.LENGTH_SHORT).show();
             dismiss();
         }
@@ -261,7 +259,7 @@ public class SleepWarningActivity extends Activity {
             title.setColor(ink);
             c.drawText(countdown, panelRect.left + pad, panelRect.top + pad + 34 * k, title);
             detail.setColor(night ? 0xFF98989D : DIM);
-            c.drawText(Ui.tr("Mais tempo, ou cancele o timer.", "More time, or cancel the timer.", "Más tiempo, o cancela el temporizador."),
+            c.drawText(Ui.tr("Mais tempo, ou cancele o timer."),
                     panelRect.left + pad, panelRect.top + pad + 72 * k, detail);
             for (int i = 0; i < buttons.length; i++) {
                 RectF b = buttons[i];

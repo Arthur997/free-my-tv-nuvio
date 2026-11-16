@@ -103,9 +103,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static final float L_PLATTER_TOP = 814, L_TILE_H = 126;
     private static final int L_INK = 0xFF1D1D1F, L_DIM = 0xFF6E6E73;
     // The first tab is what to continue (the apps' Watch Next lists, WatchNext); the others, the picks (Recs).
-    private static final String[] TABS = {"Continuar assistindo", "Filmes", "Séries"};
-    private static final String[] TABS_EN = {"Continue Watching", "Movies", "Shows"};
-    private static final String[] TABS_ES = {"Seguir viendo", "Películas", "Series"};
     private static final String[] TAB_KIND = {null, "movie", "tv"};
     private static final int Z_TOP = 4, Z_CARDS = 5;
 
@@ -508,19 +505,20 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** The corner buttons, with their names in the current language. */
     private void makeLightButtons() {
         lightButtons.clear();
-        lightButtons.add(HomeApps.action(HomeApps.INPUTS, "inputs", Ui.tr("Entradas HDMI", "HDMI Inputs"), "hdmi"));
+        lightButtons.add(HomeApps.action(HomeApps.INPUTS, "inputs", Ui.tr("Entradas HDMI"), "hdmi"));
         // The rest (Wi-Fi, Bluetooth, the speed test, memory, recent apps, both settings) is in the Control Center.
-        lightButtons.add(HomeApps.action(HomeApps.CONTROL, "control", Ui.tr("Central de controle", "Control Center", "Centro de control"), "control"));
+        lightButtons.add(HomeApps.action(HomeApps.CONTROL, "control", Ui.tr("Central de controle"), "control"));
     }
 
     /** The title at the top left: "Sua TCL" (the TV's brand, never its model), or "Para você" when it has none. */
     private static String heading() {
         String brand = Ui.brand();
-        return brand.isEmpty() ? Ui.tr("Para você", "For You") : Ui.tr("Sua " + brand, "Your " + brand, "Tu " + brand);
+        return brand.isEmpty() ? Ui.tr("Para você") : Ui.trf("Sua {brand}", "brand", brand);
     }
 
     private static String[] tabs() {
-        return Ui.es ? TABS_ES : Ui.en ? TABS_EN : TABS;
+        return new String[] {Ui.tr("Continuar assistindo"),
+                Ui.tr("Filmes"), Ui.tr("Séries")};
     }
 
     @Override public void onData() {
@@ -1107,7 +1105,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static List<HomeApps.Item> statusList(Context c) {
         List<HomeApps.Item> list = new ArrayList<>();
         list.addAll(HomeApps.shortcuts(c));
-        list.add(HomeApps.action(HomeApps.ANDROID_SETTINGS, "tv-settings", Ui.tr("Ajustes da TV", "TV Settings"), "settings"));
+        list.add(HomeApps.action(HomeApps.ANDROID_SETTINGS, "tv-settings", Ui.tr("Ajustes da TV"), "settings"));
         return list;
     }
 
@@ -1580,8 +1578,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         hourTemp.setColor(drawerInk(0.95f));
         pricePaint.setColor(drawerInk(0.95f));
         float titleBase = ROW_TITLE * k;
-        if (drawerInputs > 0) c.drawText(Ui.tr("Entradas", "Inputs"), drawerRects[0].left + 4 * k, titleBase, rowTitle);
-        if (drawerInputs < drawerItems.size()) c.drawText(Ui.tr("Atalhos", "Shortcuts"), drawerRects[drawerInputs].left + 4 * k, titleBase, rowTitle);
+        if (drawerInputs > 0) c.drawText(Ui.tr("Entradas"), drawerRects[0].left + 4 * k, titleBase, rowTitle);
+        if (drawerInputs < drawerItems.size()) c.drawText(Ui.tr("Atalhos"), drawerRects[drawerInputs].left + 4 * k, titleBase, rowTitle);
         int top = -1;
         for (int i = 0; i < drawerItems.size(); i++) if (drawerFocus[i].value > 0.02f && (top < 0 || drawerFocus[i].value > drawerFocus[top].value)) top = i;
         for (int i = 0; i < drawerItems.size(); i++) if (i != top) drawDrawerTile(c, i);
@@ -1667,9 +1665,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float chevron = Symbols.width(getContext(), "chevron_right", 24 * k);
         Symbols.draw(getContext(), c, "chevron_right", right - chevron / 2, r.top + 54 * k - Ui.halfCap(cardDimRight), 24 * k, tone(L_DIM, 0xB3FFFFFF));
         if (m == null) {
-            String hint = Prefs.footballTeam().isEmpty() ? Ui.tr("Escolha um time: OK abre os Ajustes.", "Pick a team: OK opens the settings.",
-                    "Elige un equipo: OK abre los ajustes.") : Ui.tr("Sem jogos do time agora.", "No matches for the team right now.",
-                    "Sin partidos del equipo ahora.");
+            String hint = Prefs.footballTeam().isEmpty() ? Ui.tr("Escolha um time: OK abre os Ajustes.") : Ui.tr("Sem jogos do time agora.");
             c.drawText(hint, x, r.top + 150 * k, cardDim);
             if (!ftFoot.isEmpty()) c.drawText(ftFoot, x, r.top + 196 * k, cardText);   // where the team stands
             return;
@@ -1736,7 +1732,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         ftWidth = width;
         Football.Overview o = football.overview;
         String standing = o == null ? "" : o.standing;
-        String title = Prefs.footballTeamName().isEmpty() ? Ui.tr("Futebol", "Football", "Fútbol") : Prefs.footballTeamName();
+        String title = Prefs.footballTeamName().isEmpty() ? Ui.tr("Futebol") : Prefs.footballTeamName();
         float room = r.width() - 64 * k - Symbols.width(getContext(), "chevron_right", 24 * k) - 14 * k;
         if (m == null) {
             ftTitle = fit(title, cardTitle, room);
@@ -1748,7 +1744,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         // A match over for a while (nothing soon after it): "Last match · Sun 9/11".
         boolean past = m.over() && System.currentTimeMillis() - m.at > 12 * 3600_000L;
         ftState = ftLive ? FootballText.state(m).toUpperCase(Ui.locale())
-                : past ? Ui.tr("Último jogo", "Last match", "Último partido") + "  ·  " + FootballText.date(m.at) : FootballText.state(m);
+                : past ? Ui.tr("Último jogo") + "  ·  " + FootballText.date(m.at) : FootballText.state(m);
         ftScore = m.homeScore >= 0 ? FootballText.score(m) : Ui.time(m.at);
         ftHome = m.home.label();
         ftAway = m.away.label();
@@ -1757,7 +1753,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         Football.Match next = o == null ? null : o.match;
         String foot = Football.PRE.equals(m.state) ? FootballText.when(m.at) + (m.broadcast.isEmpty() ? "" : "  ·  " + m.broadcast) : standing;
         if (past && next != null && next != m && Football.PRE.equals(next.state)) {
-            String when = Ui.tr("Próximo: ", "Next: ", "Próximo: ") + FootballText.date(next.at);
+            String when = Ui.trf("Próximo: {date}", "date", FootballText.date(next.at));
             foot = foot.isEmpty() ? when : foot + "  ·  " + when;
         }
         ftFoot = fit(foot, cardDim, r.width() - 68 * k);
@@ -1774,7 +1770,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** What TalkBack reads on the football card. */
     private String footballCardText() {
         Football.Match m = football.current();
-        if (m == null) return Ui.tr("Futebol", "Football", "Fútbol");
+        if (m == null) return Ui.tr("Futebol");
         String score = m.homeScore >= 0 ? FootballData.scoreLine(m) : m.home.label() + " × " + m.away.label() + ", " + FootballText.when(m.at);
         return FootballText.state(m) + ", " + score;
     }
@@ -1800,18 +1796,18 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** What TalkBack reads on the weather card: the city, the temperature and the condition. */
     private String weatherCardText() {
         HomeData.Weather wx = data.weather;
-        String place = Prefs.city().isEmpty() ? Ui.tr("Clima", "Weather") : Prefs.city();
-        if (Double.isNaN(wx.temp)) return Ui.tr("Previsão do tempo", "Forecast", "Pronóstico");
+        String place = Prefs.city().isEmpty() ? Ui.tr("Clima") : Prefs.city();
+        if (Double.isNaN(wx.temp)) return Ui.tr("Previsão do tempo");
         return place + ", " + HomeData.degrees(wx.temp) + ", " + HomeData.condition(wx.code, wx.isDay) + ". "
-                + Ui.tr("Previsão do tempo", "Forecast", "Pronóstico");
+                + Ui.tr("Previsão do tempo");
     }
 
     private void drawWeather(Canvas c, RectF r) {
         float x = r.left + 34 * k;
-        c.drawText(Prefs.city().isEmpty() ? Ui.tr("Clima", "Weather") : Prefs.city(), x, r.top + 54 * k, cardTitle);
+        c.drawText(Prefs.city().isEmpty() ? Ui.tr("Clima") : Prefs.city(), x, r.top + 54 * k, cardTitle);
         HomeData.Weather wx = data.weather;
         if (Double.isNaN(wx.temp)) {
-            c.drawText(Ui.tr("Sem dados do clima agora.", "No weather data right now."), x, r.top + 120 * k, cardDim);
+            c.drawText(Ui.tr("Sem dados do clima agora."), x, r.top + 120 * k, cardDim);
             return;
         }
         String symbol = Symbols.weather(wx.code, wx.isDay);
@@ -1869,18 +1865,18 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         wxTextsEvening = evening;
         wxNow = HomeData.degrees(wx.temp);
         if (evening) {
-            wxRange = Ui.trf(Ui.tr("Amanhã {max}/{min}", "Tomorrow {max}/{min}", "Mañana {max}/{min}"),
+            wxRange = Ui.trf("Amanhã {max}/{min}",
                     "max", HomeData.degrees(wx.tomorrowMax), "min", HomeData.degrees(wx.tomorrowMin));
         } else {
-            wxRange = Ui.en ? "H:" + HomeData.degrees(wx.max) + "   L:" + HomeData.degrees(wx.min)
-                    : "Máx. " + HomeData.degrees(wx.max) + "   Mín. " + HomeData.degrees(wx.min);
+            wxRange = Ui.trf("Máx. {max}   Mín. {min}",
+                    "max", HomeData.degrees(wx.max), "min", HomeData.degrees(wx.min));
         }
         for (int i = 0; i < wx.hours.size() && i < HomeData.HOURS; i++) {
             wxHours[i] = HomeData.hour(wx.hours.get(i));
             wxHourTemps[i] = HomeData.degrees(wx.hourTemp.get(i));
         }
-        wxSunrise = wx.sunrise == 0 ? "" : Ui.tr("Nascer ", "Sunrise ") + Ui.time(wx.sunrise);
-        wxSunset = wx.sunset == 0 ? "" : Ui.tr("Pôr do sol ", "Sunset ") + Ui.time(wx.sunset);
+        wxSunrise = wx.sunrise == 0 ? "" : Ui.trf("Nascer {time}", "time", Ui.time(wx.sunrise));
+        wxSunset = wx.sunset == 0 ? "" : Ui.trf("Pôr do sol {time}", "time", Ui.time(wx.sunset));
         wxTextsZone = Clock.generation;   // read after formatting: formatting may have moved the zone on
     }
 
@@ -1957,9 +1953,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private void drawPrices(Canvas c, RectF r) {
         float x = r.left + 34 * k, right = r.right - 34 * k;
-        c.drawText(Ui.tr("Cotações", "Rates"), x, r.top + 54 * k, cardTitle);
+        c.drawText(Ui.tr("Cotações"), x, r.top + 54 * k, cardTitle);
         String stale = HomeData.staleness(data.pricesAt, 5 * 60_000L);
-        c.drawText(stale.isEmpty() ? Ui.tr("variação em 24 h", "24h change") : Ui.tr("de ", "", "de ") + stale, right, r.top + 54 * k, cardDimRight);
+        c.drawText(stale.isEmpty() ? Ui.tr("variação em 24 h") : Ui.trf("de {ago}", "ago", stale), right, r.top + 54 * k, cardDimRight);
         float cap = Ui.cap(cardText);
         int[] coins = HomeData.active();
         // The whole width (the weather card off): two columns, so the rows don't stretch across the screen.
@@ -2089,7 +2085,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float radius = (GRID_RADIUS + DOCK_PAD) * k;
         dockGlass(c, dockRect, radius, 1);
         sheetTitle.setColor(tone(L_INK, WHITE));
-        c.drawText(Ui.tr("Todos os Apps", "All Apps"), MARGIN * k, DOCK_TITLE * k, sheetTitle);
+        c.drawText(Ui.tr("Todos os Apps"), MARGIN * k, DOCK_TITLE * k, sheetTitle);
     }
 
     /** Every app on the dock, scrolling inside it (rows going past its edges are cut there). */
@@ -2277,17 +2273,17 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private String menuLabel(int action) {
         if (action >= MENU_TARGET) return menuTargets.get(action - MENU_TARGET).label;
         switch (action) {
-            case MENU_OPEN: return Ui.tr("Abrir", "Open");
-            case MENU_OPEN_IN: return Ui.tr("Abrir em…", "Open in…", "Abrir en…");
-            case MENU_REFRESH: return Ui.tr("Atualizar este card", "Refresh this card", "Actualizar esta tarjeta");
-            case MENU_FORCE_STOP: return Ui.tr("Encerrar o app", "Close app", "Cerrar la app");
-            case MENU_CLEAR_CACHE: return Ui.tr("Limpar cache", "Clear cache", "Borrar caché");
-            case MENU_LEFT: return Ui.tr("Mover para a esquerda", "Move left", "Mover a la izquierda");
-            case MENU_RIGHT: return Ui.tr("Mover para a direita", "Move right", "Mover a la derecha");
-            case MENU_SHELF_ADD: return Ui.tr("Pôr na prateleira", "Add to shelf", "Agregar al estante");
-            case MENU_SHELF_REMOVE: return Ui.tr("Tirar da prateleira", "Remove from shelf", "Quitar del estante");
-            case MENU_INFO: return Ui.tr("Informações do app", "App info");
-            default: return Ui.tr("Desinstalar", "Uninstall");
+            case MENU_OPEN: return Ui.tr("Abrir");
+            case MENU_OPEN_IN: return Ui.tr("Abrir em…");
+            case MENU_REFRESH: return Ui.tr("Atualizar este card");
+            case MENU_FORCE_STOP: return Ui.tr("Encerrar o app");
+            case MENU_CLEAR_CACHE: return Ui.tr("Limpar cache");
+            case MENU_LEFT: return Ui.tr("Mover para a esquerda");
+            case MENU_RIGHT: return Ui.tr("Mover para a direita");
+            case MENU_SHELF_ADD: return Ui.tr("Pôr na prateleira");
+            case MENU_SHELF_REMOVE: return Ui.tr("Tirar da prateleira");
+            case MENU_INFO: return Ui.tr("Informações do app");
+            default: return Ui.tr("Desinstalar");
         }
     }
 
@@ -2320,7 +2316,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float top = Math.max(60 * k, Math.min(h - 60 * k - height, menuAnchor.centerY() - height / 2));
         menuRect.set(left, top, left + width, top + height);
         float room = width - 2 * (pad + MENU_TEXT_X * k);
-        String name = menuTargets != null ? Ui.tr("Abrir em", "Open in", "Abrir en") : menuName();
+        String name = menuTargets != null ? Ui.tr("Abrir em") : menuName();
         menuTitle = TextUtils.ellipsize(name, new TextPaint(menuHeader), room, TextUtils.TruncateAt.END).toString();
         menuLayer.setPivotX(menuOnRight ? menuRect.left : menuRect.right);
         menuLayer.setPivotY(menuRect.centerY());
@@ -2396,7 +2392,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         click.open();
         if (action == MENU_REFRESH) {
             recs.refresh(menuPick);
-            showToast(Ui.tr("Atualizando o card…", "Refreshing the card…", "Actualizando la tarjeta…"));
+            showToast(Ui.tr("Atualizando o card…"));
             return;
         }
         if (action == MENU_CLEAR_CACHE) {
@@ -2405,7 +2401,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         if (action == MENU_FORCE_STOP) {
             HomeMode.requestForceStop(getContext(), it.pkg, it.label);
-            showToast(Ui.trf("Closing {app}…", "app", it.label));
+            showToast(Ui.trf("Encerrando o {app}…", "app", it.label));
             return;
         }
         if (action == MENU_SHELF_ADD || action == MENU_SHELF_REMOVE) {
@@ -2413,9 +2409,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             return;
         }
         if (action == MENU_INFO) {
-            if (!HomeApps.openInfo(activity, it.pkg)) showToast(Ui.tr("Não deu para abrir as informações do app.", "Couldn't open the app's info."));
+            if (!HomeApps.openInfo(activity, it.pkg)) showToast(Ui.tr("Não deu para abrir as informações do app."));
         } else if (!HomeApps.uninstall(activity, it.pkg)) {
-            showToast(Ui.tr("Não dá para desinstalar este app por aqui.", "Couldn't uninstall this app here."));
+            showToast(Ui.tr("Não dá para desinstalar este app por aqui."));
         }
     }
 
@@ -2426,11 +2422,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void clearCache(HomeApps.Item it) {
         if (Build.VERSION.SDK_INT >= 34) {
             HomeMode.requestClearCache(getContext(), it.pkg, it.label);
-            showToast(Ui.trf("Clearing {app}'s cache…", "app", it.label));
+            showToast(Ui.trf("Limpando o cache do {app}…", "app", it.label));
         } else if (HomeApps.openInfo(activity, it.pkg)) {
-            showToast(Ui.tr("Storage › Clear cache"));
+            showToast(Ui.tr("Armazenamento › Limpar cache"));
         } else {
-            showToast(Ui.tr("Não deu para abrir as informações do app.", "Couldn't open the app's info."));
+            showToast(Ui.tr("Não deu para abrir as informações do app."));
         }
     }
 
@@ -2472,8 +2468,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             setShelf(list);   // gone at once; the reload below confirms it
         }
         reload(true);
-        showToast(on ? Ui.tr(it.label + " está na prateleira.", it.label + " is on the shelf.", it.label + " está en el estante.")
-                : Ui.tr(it.label + " saiu da prateleira.", it.label + " is off the shelf.", it.label + " salió del estante."));
+        showToast(on ? Ui.trf("{app} está na prateleira.", "app", it.label)
+                : Ui.trf("{app} saiu da prateleira.", "app", it.label));
     }
 
     /** Saves the shelf without the home screen starting over on the way back (as a change in Settings makes it). */
@@ -2960,13 +2956,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (sheetOpen || controlOpen || zone != Z_DRAWER || cardFocused == CARD_NONE) return false;
         if (cardFocused == W_WEATHER) {
             HomeData.get(activity).refreshWeatherNow();
-            showToast(Ui.tr("Atualizando o clima…", "Refreshing the weather…", "Actualizando el clima…"));
+            showToast(Ui.tr("Atualizando o clima…"));
         } else if (cardFocused == W_FOOTBALL) {
             football.refreshNow();
-            showToast(Ui.tr("Atualizando o futebol…", "Refreshing football…", "Actualizando el fútbol…"));
+            showToast(Ui.tr("Atualizando o futebol…"));
         } else {
             HomeData.get(activity).refreshPricesNow();
-            showToast(Ui.tr("Atualizando as cotações…", "Refreshing the prices…", "Actualizando las cotizaciones…"));
+            showToast(Ui.tr("Atualizando as cotações…"));
         }
         click.open();
         return true;
@@ -3151,16 +3147,16 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             r = statusRects[statusIndex];
         } else if (zone == Z_DRAWER && cardFocused == W_WEATHER) {
             click.open();
-            if (!WeatherActivity.open(activity)) showToast(Ui.tr("Não deu para abrir a previsão.", "Couldn't open the forecast."));
+            if (!WeatherActivity.open(activity)) showToast(Ui.tr("Não deu para abrir a previsão."));
             return;
         } else if (zone == Z_DRAWER && cardFocused == W_PRICES) {
-            showToast(Ui.tr("Segure OK para atualizar as cotações.", "Hold OK to refresh the prices.", "Mantén OK para actualizar las cotizaciones."));
+            showToast(Ui.tr("Segure OK para atualizar as cotações."));
             return;
         } else if (zone == Z_DRAWER && cardFocused == W_FOOTBALL) {
             click.open();
             // No team yet: where it's chosen.
             boolean opened = Prefs.footballTeam().isEmpty() ? openSettings() : FootballActivity.open(activity);
-            if (!opened) showToast(Ui.tr("Não deu para abrir o futebol.", "Couldn't open football.", "No se pudo abrir el fútbol."));
+            if (!opened) showToast(Ui.tr("Não deu para abrir o futebol."));
             return;
         } else if (zone == Z_DRAWER) {
             if (drawerItems.isEmpty()) return;
@@ -3202,7 +3198,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void openNow(HomeApps.Item it, RectF r) {
         boolean opened = HomeApps.open(activity, it, this, Math.round(r.left), Math.round(r.top),
                 Math.round(r.width()), Math.round(r.height()));
-        if (!opened) showToast(Ui.tr("Não deu para abrir ", "Couldn't open ") + it.label + ".");
+        if (!opened) showToast(Ui.trf("Não deu para abrir {app}.", "app", it.label));
     }
 
     // MARK: - TalkBack: every reachable item as a virtual node (Spoken). Id = group * 1000 + index + 1.
@@ -3234,22 +3230,22 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         switch (group) {
             case GRID:
                 if (i >= others.size()) return "";
-                return label(others, i) + ", " + (i + 1) + Ui.tr(" de ", " of ") + others.size();
+                return label(others, i) + ", " + Ui.trf("{n} de {total}", "n", i + 1, "total", others.size());
             case Z_TOP:
                 if (i >= 3) return label(lightButtons, i - 3);
-                return tabs()[i] + (i == tab ? Ui.tr(", selecionada", ", selected", ", seleccionada") : "")
-                        + Ui.tr(", aba ", ", tab ") + (i + 1) + Ui.tr(" de 3", " of 3");
+                return tabs()[i] + (i == tab ? Ui.tr(", selecionada") : "")
+                        + ", " + Ui.trf("aba {n} de {total}", "n", i + 1, "total", 3);
             case Z_CARDS: {
                 if (i >= cards.size()) return "";
                 Recs.Pick p = cards.get(i);
-                return (suggestion(p) ? Ui.tr("Sugestão", "Suggested", "Sugerencia") + ": " : "") + pickText(p);
+                return (suggestion(p) ? Ui.tr("Sugestão") + ": " : "") + pickText(p);
             }
             case Z_SHELF: return label(shelf, i);
             case Z_DRAWER:
                 if (i < drawerItems.size()) return label(drawerItems, i);
                 int widget = i - drawerItems.size();
                 return widget == W_WEATHER ? weatherCardText() : widget == W_FOOTBALL ? footballCardText()
-                        : Ui.tr("Cotações", "Rates");
+                        : Ui.tr("Cotações");
             default: return "";
         }
     }
@@ -3369,7 +3365,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         StringBuilder s = new StringBuilder(p.title == null ? "" : p.title);
         if (p.meta != null && !p.meta.isEmpty()) s.append(", ").append(p.meta);
         String app = Recs.serviceName(p);
-        if (app != null && !app.isEmpty()) s.append(Ui.tr(". No app ", ". On ", ". En ")).append(app);
+        if (app != null && !app.isEmpty()) s.append(". ").append(Ui.trf("No app {app}", "app", app));
         return s.toString();
     }
 
@@ -3424,7 +3420,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 retarget(false);
             }
         }
-        cardCounter = all.size() > SLOTS ? (cardOffset + 1) + "–" + (cardOffset + list.size()) + Ui.tr(" de ", " of ") + all.size() : "";
+        cardCounter = all.size() > SLOTS ? Ui.trf("{n} de {total}", "n", (cardOffset + 1) + "–" + (cardOffset + list.size()), "total", all.size()) : "";
         // A queue, in this order (the photos load one at a time, first asked first): the five on screen and the next
         // column of this tab, then the first five of Explore, Movies and Shows, so switching tabs is instant. The rest
         // of a top's list costs nothing until it comes up.
@@ -3778,15 +3774,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /** Continue watching with nothing in it: why, in the cards' place. */
     private void drawNothingToContinue(Canvas c) {
-        String title = watchAllowed ? Ui.tr("Nada para continuar ainda", "Nothing to continue yet", "Nada para seguir todavía")
-                : Ui.tr("Sem acesso ao que você assiste", "No access to what you watch", "Sin acceso a lo que ves");
+        String title = watchAllowed ? Ui.tr("Nada para continuar ainda")
+                : Ui.tr("Sem acesso ao que você assiste");
         String line = watchAllowed
-                ? Ui.tr("O que você começar no YouTube, na Netflix e em outros apps aparece aqui.",
-                        "What you start on YouTube, Netflix and other apps shows up here.",
-                        "Lo que empieces en YouTube, Netflix y otras apps aparece aquí.")
-                : Ui.tr("Aceite quando a TV pedir, ou troque o Início de novo em Free My TV → Início.",
-                        "Allow it when the TV asks, or switch the home screen again in Free My TV → Home Screen.",
-                        "Acéptalo cuando el TV lo pida, o cambia el inicio otra vez en Free My TV → Inicio.");
+                ? Ui.tr("O que você começar no YouTube, na Netflix e em outros apps aparece aqui.")
+                : Ui.tr("Aceite quando a TV pedir, ou troque o Início de novo em Free My TV → Início.");
         drawEmptyTab(c, title, line);
     }
 
@@ -3794,19 +3786,16 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void drawNoPicks(Canvas c) {
         String title, line;
         if (!Recs.hasKey(getContext())) {
-            title = Ui.tr("Sem sugestões", "No picks", "Sin sugerencias");
-            line = Ui.tr("Adicione a chave do TMDB em Free My TV → Recomendações.",
-                    "Add the TMDB key in Free My TV → Picks.", "Añade la clave de TMDB en Free My TV → Recomendaciones.");
+            title = Ui.tr("Sem sugestões");
+            line = Ui.tr("Adicione a chave do TMDB em Free My TV → Recomendações.");
         } else if (recs.fetching()) {
-            title = Ui.tr("Buscando sugestões…", "Finding picks…", "Buscando sugerencias…");
+            title = Ui.tr("Buscando sugestões…");
             line = "";
         } else if (!recs.error().isEmpty()) {
-            title = Ui.tr("Não deu para buscar as sugestões", "Couldn't get the picks", "No se pudieron obtener las sugerencias");
-            line = Ui.tr("Confira a internet. Tenta de novo sozinho em alguns minutos.",
-                    "Check the internet. It tries again by itself in a few minutes.",
-                    "Revisa el internet. Lo intenta de nuevo solo en unos minutos.");
+            title = Ui.tr("Não deu para buscar as sugestões");
+            line = Ui.tr("Confira a internet. Tenta de novo sozinho em alguns minutos.");
         } else {
-            title = Ui.tr("Sem sugestões agora", "No picks right now", "Sin sugerencias ahora");
+            title = Ui.tr("Sem sugestões agora");
             line = "";
         }
         drawEmptyTab(c, title, line);

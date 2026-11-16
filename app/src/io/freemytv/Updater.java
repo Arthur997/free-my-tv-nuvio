@@ -171,7 +171,7 @@ final class Updater {
         if (version.isEmpty() || !version.equals(installedName(c))) return;
         String notes = prefs(c).getString("installingNotes", "");
         prefs(c).edit().remove("installing").remove("installingNotes").apply();
-        String said = Ui.trf(Ui.tr("Atualizado para {version}.", "Updated to {version}.", "Actualizado a {version}."), "version", version);
+        String said = Ui.trf("Atualizado para {version}.", "version", version);
         HomeMode.notice(c, notes.isEmpty() ? said : said + " " + notes);
     }
 
@@ -187,8 +187,7 @@ final class Updater {
 
     private static void failed(Context c, boolean now, IOException e) {
         AppLog.w("update: " + e.getMessage());
-        if (now) HomeMode.notice(c, Ui.trf(Ui.tr("Não deu para atualizar: {error}", "Couldn't update: {error}",
-                "No se pudo actualizar: {error}"), "error", e.getMessage()));
+        if (now) HomeMode.notice(c, Ui.trf("Não deu para atualizar: {error}", "error", e.getMessage()));
     }
 
     /** What the TV's installer answered when this release was installed before and failed; null otherwise. */
@@ -203,8 +202,7 @@ final class Updater {
         if (r.tag.equals(prefs(c).getString("refusedNoticed", ""))) return;
         prefs(c).edit().putString("refusedNoticed", r.tag).apply();
         String shortAnswer = answer.length() > 120 ? answer.substring(0, 120) + "…" : answer;
-        HomeMode.notice(c, Ui.trf(Ui.tr("A TV recusou a atualização {version}: {error}", "The TV refused update {version}: {error}",
-                "La TV rechazó la actualización {version}: {error}"), "version", r.version(), "error", shortAnswer));
+        HomeMode.notice(c, Ui.trf("A TV recusou a atualização {version}: {error}", "version", r.version(), "error", shortAnswer));
     }
 
     /** The release's APK, checked: its size, its SHA-256 when GitHub gives one, and that it's this app at that version. */

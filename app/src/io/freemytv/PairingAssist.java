@@ -73,8 +73,7 @@ public class PairingAssist extends AccessibilityService {
             } catch (IOException | RuntimeException e) {
                 AppLog.w("pairing assistant: " + e.getMessage());
                 String why = e.getMessage();
-                main.post(() -> toast(Ui.tr("Free My TV: não deu para parear (", "Free My TV: couldn't pair (",
-                        "Free My TV: no se pudo emparejar (") + why + ")"));
+                main.post(() -> toast(Ui.trf("Free My TV: não deu para parear ({error})", "error", why)));
             } finally {
                 pairing = false;
             }
@@ -83,7 +82,7 @@ public class PairingAssist extends AccessibilityService {
 
     /** Done: the dialog closes by itself; back to Prepare the TV, and this service is no longer needed. */
     private void paired() {
-        toast(Ui.tr("Free My TV pareado com a TV", "Free My TV paired with the TV", "Free My TV emparejado con la TV"));
+        toast(Ui.tr("Free My TV pareado com a TV"));
         try {
             startActivity(new Intent(this, SettingsActivity.class).putExtra("prepare", true)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP));

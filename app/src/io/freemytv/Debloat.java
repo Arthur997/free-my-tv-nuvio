@@ -103,13 +103,11 @@ final class Debloat {
             for (String pkg : shown) {
                 String why = locks.get(pkg);
                 if (why.isEmpty() && free.contains(pkg) && (needed == null || needed.contains(pkg))) {
-                    why = Ui.tr("as entradas ou o controle da TV precisam dele", "the TV's inputs or remote need it",
-                            "las entradas o el control de la TV la necesitan");
+                    why = Ui.tr("as entradas ou o controle da TV precisam dele");
                 }
                 JSONObject entry = known.get(pkg);
                 int level = entry != null ? Math.max(LIGHT, Math.min(COMPLETE, entry.optInt("level", COMPLETE))) : SUGGESTED;
-                String reason = entry != null ? reason(entry) : Ui.tr("O nome parece de propaganda ou telemetria; confira antes",
-                        "The name looks like ads or telemetry; check it first", "El nombre parece de publicidad o telemetría; revísala antes");
+                String reason = entry != null ? reason(entry) : Ui.tr("O nome parece de propaganda ou telemetria; confira antes");
                 Long mb = memory.get(pkg);
                 out.add(new App(pkg, label(c, pkg), reason, level, !off.contains(pkg), cleaned.contains(pkg), why, mb == null ? 0 : mb));
             }
@@ -127,7 +125,7 @@ final class Debloat {
     /** HomeMode's reasons, plus the screensaver in use (off, the TV would have none). */
     private static String lock(String pkg, Set<String> homes, String keyboard, Set<String> owners, Set<String> dreams) {
         String why = HomeMode.lockReason(pkg, homes, keyboard, owners);
-        if (why.isEmpty() && dreams.contains(pkg)) why = Ui.tr("é o protetor de tela em uso", "the screensaver in use", "es el protector de pantalla en uso");
+        if (why.isEmpty() && dreams.contains(pkg)) why = Ui.tr("é o protetor de tela em uso");
         return why;
     }
 
@@ -145,7 +143,10 @@ final class Debloat {
     private static String reason(JSONObject entry) {
         JSONObject why = entry.optJSONObject("why");
         if (why == null) return "";
-        return Ui.tr(why.optString("pt"), why.optString("en"), why.optString("es", why.optString("en")));
+        // Data, not code: each entry carries its own languages (a newer copy comes from GitHub, also to older versions).
+        String text = why.optString(Ui.language, "");
+        if (text.isEmpty()) text = why.optString("en", "");
+        return text.isEmpty() ? why.optString("pt", "") : text;
     }
 
     private static String label(Context c, String pkg) {
@@ -259,9 +260,7 @@ final class Debloat {
                 if (!off.isEmpty()) {
                     Set<String> owners = HomeMode.wifiOwners(adb);
                     if (owners == null && !"0".equals(adb.shell("settings get global wifi_on").trim())) {
-                        throw new IOException(Ui.tr("não deu para checar qual app guardou o Wi-Fi; nada foi desligado",
-                                "couldn't check which app saved the Wi-Fi; nothing was turned off",
-                                "no se pudo revisar qué app guardó el Wi-Fi; no se apagó nada"));
+                        throw new IOException(Ui.tr("não deu para checar qual app guardou o Wi-Fi; nada foi desligado"));
                     }
                     if (owners == null) owners = new HashSet<>();
                     Set<String> system = HomeMode.packages(adb, "-s"), disabled = HomeMode.packages(adb, "-d");
@@ -273,14 +272,11 @@ final class Debloat {
                         if (system.contains(pkg) && !disabled.contains(pkg) && lock(pkg, homes, keyboard, owners, dreams).isEmpty()) candidates.add(pkg);
                     }
                     Set<String> needed = HomeMode.neededByTv(adb, candidates);
-                    if (needed == null) throw new IOException(Ui.tr("não deu para checar o que as entradas da TV usam; nada foi desligado",
-                            "couldn't check what the TV's inputs need; nothing was turned off",
-                            "no se pudo revisar qué usan las entradas de la TV; no se apagó nada"));
+                    if (needed == null) throw new IOException(Ui.tr("não deu para checar o que as entradas da TV usam; nada foi desligado"));
                     Map<String, Long> memory = HomeMode.appMemoryMB(adb);
                     int done = 0;
                     for (String pkg : HomeMode.sorted(candidates)) {
-                        HomeMode.busy(c, Ui.trf(Ui.tr("Desligando apps ({done}/{total})…", "Turning off apps ({done}/{total})…",
-                                "Apagando apps ({done}/{total})…"), "done", ++done, "total", candidates.size()));
+                        HomeMode.busy(c, Ui.trf("Desligando apps ({done}/{total})…", "done", ++done, "total", candidates.size()));
                         if (needed.contains(pkg)) continue;
                         if (adb.shell("pm disable-user --user 0 " + pkg).contains("disabled-user")) {
                             cleaned.add(pkg);
@@ -297,22 +293,16 @@ final class Debloat {
                 HomeMode.notice(c, summary(turnedOff, turnedOn, mb));
             } catch (Exception e) {
                 AppLog.w("cleanup: " + e.getMessage());
-                HomeMode.done(c, Ui.trf(Ui.tr("A limpeza não terminou: {error}", "The cleanup didn't finish: {error}",
-                        "La limpieza no terminó: {error}"), "error", e.getMessage()));
+                HomeMode.done(c, Ui.trf("A limpeza não terminou: {error}", "error", e.getMessage()));
             }
         }
     }
 
     private static String summary(int off, int on, long mb) {
-        if (off == 0 && on == 0) return Ui.tr("Limpeza: nada mudou", "Cleanup: nothing changed", "Limpieza: nada cambió");
-        if (off == 0) return Ui.plural(Ui.tr("plural|one:Limpeza desfeita: {n} app ligado de novo|other:Limpeza desfeita: {n} apps ligados de novo",
-                "plural|one:Cleanup undone: {n} app back on|other:Cleanup undone: {n} apps back on",
-                "plural|one:Limpieza deshecha: {n} app encendida de nuevo|other:Limpieza deshecha: {n} apps encendidas de nuevo"), on);
-        String text = Ui.plural(Ui.tr("plural|one:Limpeza: {n} app desligado|other:Limpeza: {n} apps desligados",
-                "plural|one:Cleanup: {n} app turned off|other:Cleanup: {n} apps turned off",
-                "plural|one:Limpieza: {n} app apagada|other:Limpieza: {n} apps apagadas"), off);
-        if (mb > 0) text += Ui.trf(Ui.tr(", cerca de {mb} MB de memória livres", ", about {mb} MB of memory freed",
-                ", unos {mb} MB de memoria libres"), "mb", mb);
+        if (off == 0 && on == 0) return Ui.tr("Limpeza: nada mudou");
+        if (off == 0) return Ui.plural("plural|one:Limpeza desfeita: {n} app ligado de novo|other:Limpeza desfeita: {n} apps ligados de novo", on);
+        String text = Ui.plural("plural|one:Limpeza: {n} app desligado|other:Limpeza: {n} apps desligados", off);
+        if (mb > 0) text += Ui.trf(", cerca de {mb} MB de memória livres", "mb", mb);
         return text;
     }
 

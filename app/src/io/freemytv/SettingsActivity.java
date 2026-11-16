@@ -124,20 +124,19 @@ public class SettingsActivity extends Activity {
         android.widget.EditText input = new android.widget.EditText(this);
         input.setSingleLine(true);
         input.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
-        input.setHint(Ui.tr("API Key ou Read Access Token", "API Key or Read Access Token"));
+        input.setHint(Ui.tr("API Key ou Read Access Token"));
         android.widget.FrameLayout box = new android.widget.FrameLayout(this);
         int pad = Math.round(24 * getResources().getDisplayMetrics().density);
         box.setPadding(pad, 0, pad, 0);
         box.addView(input);
         android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle(Ui.tr("Chave do TMDB", "TMDB key"))
+                .setTitle(Ui.tr("Chave do TMDB"))
                 .setMessage(Ui.tr("Crie uma de graça em themoviedb.org → Settings → API e cole aqui. Dica: o app Google TV no "
-                        + "celular serve de teclado (e cola).", "Create one for free at themoviedb.org → Settings → API and paste it "
-                        + "here. Tip: the Google TV app on a phone works as a keyboard (and pastes)."))
+                        + "celular serve de teclado (e cola)."))
                 .setView(box)
-                .setPositiveButton(Ui.tr("Salvar", "Save"), (d, w) -> saveTmdbKey(input.getText().toString()))
-                .setNegativeButton(Ui.tr("Cancelar", "Cancel"), null);
-        if (Prefs.typedTmdbKey()) builder.setNeutralButton(Ui.tr("Apagar", "Remove"), (d, w) -> saveTmdbKey(""));
+                .setPositiveButton(Ui.tr("Salvar"), (d, w) -> saveTmdbKey(input.getText().toString()))
+                .setNegativeButton(Ui.tr("Cancelar"), null);
+        if (Prefs.typedTmdbKey()) builder.setNeutralButton(Ui.tr("Apagar"), (d, w) -> saveTmdbKey(""));
         android.app.AlertDialog dialog = builder.create();
         if (dialog.getWindow() != null) {
             dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
@@ -370,144 +369,111 @@ public class SettingsActivity extends Activity {
             Page p = new Page(null);
             // The last switch failed because the TV's debugging is off (a TV update can do that): the first row then
             // goes straight to where it's turned on.
-            p.rows.add(helped(opens(() -> debuggingOff() ? Ui.tr("Ligar a depuração", "Turn on debugging", "Activar la depuración")
-                    : Ui.tr("Preparar a TV", "Prepare the TV", "Preparar la TV"), () -> {
+            p.rows.add(helped(opens(() -> debuggingOff() ? Ui.tr("Ligar a depuração")
+                    : Ui.tr("Preparar a TV"), () -> {
                         if (debuggingOff()) open(debuggingPage());
                         else openPrepare();
                     }), () -> debuggingOff()
-                    ? Ui.tr("A depuração da TV desligou (uma atualização da TV faz isso). Sem ela, o Free My TV não troca o Início nem desliga apps.",
-                            "The TV's debugging went off (a TV update does that). Without it, Free My TV can't switch the home screen or turn off apps.",
-                            "La depuración de la TV se apagó (una actualización lo hace). Sin ella, Free My TV no cambia el inicio ni apaga apps.")
-                    : Ui.tr("Guia passo a passo: depuração, autorização, Início, limpeza e chave do TMDB.",
-                            "A step-by-step guide: debugging, allowing the app, the home screen, the cleanup and the TMDB key.",
-                            "Guía paso a paso: depuración, autorización, inicio, limpieza y clave de TMDB.")));
-            p.rows.add(helped(new Row(() -> Ui.tr("Início", "Home Screen"),
-                    () -> busy() ? "" : freeActive() ? "Free My TV" : Ui.tr("Original", "Original"), this::openHomeChoice, null, null),
-                    () -> Ui.tr("Escolhe entre o Início do Free My TV e o original da TV. A troca leva alguns segundos e dá para voltar quando quiser.",
-                            "Picks Free My TV's home screen or the TV's original one. Switching takes a few seconds, and you can go back any time.",
-                            "Elige entre el inicio de Free My TV y el original de la TV. El cambio tarda unos segundos y se puede volver.")));
-            p.rows.add(helped(opens(() -> Ui.tr("Aparência", "Appearance", "Apariencia"), () -> open(appearancePage())),
-                    () -> Ui.tr("Idioma, tema claro ou escuro, temperatura, relógio, capas dos apps e sons.",
-                            "Language, light or dark theme, temperature, clock, app art and sounds.",
-                            "Idioma, tema claro u oscuro, temperatura, reloj, portadas de las apps y sonidos.")));
-            p.rows.add(helped(opens(() -> Ui.tr("Conteúdo do Início", "Home screen content", "Contenido del inicio"), () -> open(contentPage())),
-                    () -> Ui.tr("O que aparece no Início: a prateleira de apps, as recomendações, clima, cotações e futebol, e a tela de descanso.",
-                            "What the home screen shows: the app shelf, the picks, weather, prices and football, and the screensaver.",
-                            "Lo que muestra el inicio: la estantería de apps, las recomendaciones, clima, cotizaciones y fútbol, y el protector.")));
-            p.rows.add(helped(opens(() -> Ui.tr("Apps e controle", "Apps and remote", "Apps y control"), () -> open(appsPage())),
-                    () -> Ui.tr("Liga e desliga apps da TV, limpa a TV e escolhe o que cada botão do controle abre.",
-                            "Turns the TV's apps on and off, cleans up the TV and picks what each remote button opens.",
-                            "Enciende y apaga apps de la TV, limpia la TV y elige qué abre cada botón del control.")));
-            p.rows.add(helped(opens(() -> Ui.tr("Sistema", "System", "Sistema"), () -> open(systemPage())),
-                    () -> Ui.tr("Desempenho, atualizações do app, o estado da troca e os ajustes da própria TV.",
-                            "Performance, app updates, the switch's status and the TV's own settings.",
-                            "Rendimiento, actualizaciones de la app, el estado del cambio y los ajustes de la propia TV.")));
+                    ? Ui.tr("A depuração da TV desligou (uma atualização da TV faz isso). Sem ela, o Free My TV não troca o Início nem desliga apps.")
+                    : Ui.tr("Guia passo a passo: depuração, autorização, Início, limpeza e chave do TMDB.")));
+            p.rows.add(helped(new Row(() -> Ui.tr("Início"),
+                    () -> busy() ? "" : freeActive() ? "Free My TV" : Ui.tr("Original"), this::openHomeChoice, null, null),
+                    () -> Ui.tr("Escolhe entre o Início do Free My TV e o original da TV. A troca leva alguns segundos e dá para voltar quando quiser.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Aparência"), () -> open(appearancePage())),
+                    () -> Ui.tr("Idioma, tema claro ou escuro, temperatura, relógio, capas dos apps e sons.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Conteúdo do Início"), () -> open(contentPage())),
+                    () -> Ui.tr("O que aparece no Início: a prateleira de apps, as recomendações, clima, cotações e futebol, e a tela de descanso.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Apps e controle"), () -> open(appsPage())),
+                    () -> Ui.tr("Liga e desliga apps da TV, limpa a TV e escolhe o que cada botão do controle abre.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Sistema"), () -> open(systemPage())),
+                    () -> Ui.tr("Desempenho, atualizações do app, o estado da troca e os ajustes da própria TV.")));
             return p;
         }
 
         /** The home screen's parts: the shelf, the picks, the drawer's cards and the screensaver. */
         private Page contentPage() {
-            Page p = new Page(Ui.tr("Conteúdo do Início", "Home screen content", "Contenido del inicio"));
+            Page p = new Page(Ui.tr("Conteúdo do Início"));
             p.symbol = "home";
-            p.rows.add(helped(opens(() -> Ui.tr("Prateleira", "Shelf"), this::openShelfEditor),
-                    () -> Ui.tr("Os apps da fileira do Início: quais aparecem e em que ordem.", "The apps in the home screen's row: which ones and in what order.",
-                            "Las apps de la fila del inicio: cuáles y en qué orden.")));
-            p.rows.add(helped(opens(() -> Ui.tr("Recomendações", "Picks"), () -> open(picksPage())),
-                    () -> Ui.tr("Filmes e séries sugeridos no topo do Início, a chave do TMDB e o Continuar assistindo.",
-                            "Movies and shows suggested on top of the home screen, the TMDB key and Continue Watching.",
-                            "Películas y series sugeridas arriba del inicio, la clave de TMDB y Seguir viendo.")));
-            p.rows.add(helped(opens(() -> Ui.tr("Clima, cotações e futebol", "Weather, prices and football", "Clima, cotizaciones y fútbol"),
+            p.rows.add(helped(opens(() -> Ui.tr("Prateleira"), this::openShelfEditor),
+                    () -> Ui.tr("Os apps da fileira do Início: quais aparecem e em que ordem.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Recomendações"), () -> open(picksPage())),
+                    () -> Ui.tr("Filmes e séries sugeridos no topo do Início, a chave do TMDB e o Continuar assistindo.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Clima, cotações e futebol"),
                     () -> open(weatherPage())),
-                    () -> Ui.tr("Os cartões da gaveta: o clima da sua cidade e, ao lado, cotações ou o seu time.",
-                            "The drawer's cards: your city's weather and, beside it, prices or your team.",
-                            "Las tarjetas del cajón: el clima de tu ciudad y, al lado, cotizaciones o tu equipo.")));
-            p.rows.add(helped(opens(() -> Ui.tr("Tela de descanso", "Screensaver"), () -> open(screensaverPage())),
-                    () -> Ui.tr("O que a TV mostra parada: as fotos do Google ou a tela de descanso do Free My TV.",
-                            "What the TV shows when idle: Google's photos or Free My TV's screensaver.",
-                            "Lo que muestra la TV en reposo: las fotos de Google o el protector de Free My TV.")));
+                    () -> Ui.tr("Os cartões da gaveta: o clima da sua cidade e, ao lado, cotações ou o seu time.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Tela de descanso"), () -> open(screensaverPage())),
+                    () -> Ui.tr("O que a TV mostra parada: as fotos do Google ou a tela de descanso do Free My TV.")));
             return p;
         }
 
         /** The TV's apps by hand, the cleanup and the remote's buttons. */
         private Page appsPage() {
-            Page p = new Page(Ui.tr("Apps e controle", "Apps and remote", "Apps y control"));
+            Page p = new Page(Ui.tr("Apps e controle"));
             p.symbol = "apps";
-            p.rows.add(helped(opens(() -> Ui.tr("Apps da TV", "TV Apps", "Apps de la TV"), this::openTvApps),
-                    () -> Ui.tr("Todos os apps da TV, um a um: liga ou desliga (nunca desinstala). O que a TV precisa fica protegido.",
-                            "Every app on the TV, one by one: on or off (never uninstalled). What the TV needs stays protected.",
-                            "Todas las apps de la TV, una a una: enciende o apaga (nunca desinstala). Lo que la TV necesita queda protegido.")));
-            p.rows.add(helped(opens(() -> Ui.tr("Limpar a TV", "Clean up the TV", "Limpiar la TV"), this::openCleanup),
-                    () -> Ui.tr("Desliga de uma vez demonstrações, telemetria e propaganda do fabricante, em três níveis. Dá para desfazer.",
-                            "Turns off the maker's demos, telemetry and ads at once, in three levels. It can be undone.",
-                            "Apaga de una vez demos, telemetría y publicidad del fabricante, en tres niveles. Se puede deshacer.")));
-            p.rows.add(helped(opens(() -> Ui.tr("Botões do Controle", "Remote Buttons"), () -> {
+            p.rows.add(helped(opens(() -> Ui.tr("Apps da TV"), this::openTvApps),
+                    () -> Ui.tr("Todos os apps da TV, um a um: liga ou desliga (nunca desinstala). O que a TV precisa fica protegido.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Limpar a TV"), this::openCleanup),
+                    () -> Ui.tr("Desliga de uma vez demonstrações, telemetria e propaganda do fabricante, em três níveis. Dá para desfazer.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Botões do Controle"), () -> {
                 HomeMode.ensureRemoteService(getContext(), 0);   // the buttons work from inside other apps through this service
                 loadApps();
                 open(keysPage());
-            }), () -> Ui.tr("Escolhe o que cada botão de app do controle abre (Netflix, YouTube, Prime…), de qualquer app.",
-                    "Picks what each app button on the remote opens (Netflix, YouTube, Prime…), from any app.",
-                    "Elige qué abre cada botón de app del control (Netflix, YouTube, Prime…), desde cualquier app.")));
+            }), () -> Ui.tr("Escolhe o que cada botão de app do controle abre (Netflix, YouTube, Prime…), de qualquer app.")));
             return p;
         }
 
         /** How fast it runs, the updates, the switch's status and the TV's own settings. */
         private Page systemPage() {
-            Page p = new Page(Ui.tr("Sistema", "System", "Sistema"));
+            Page p = new Page(Ui.tr("Sistema"));
             p.symbol = "settings";
-            p.rows.add(helped(opens(() -> Ui.tr("Desempenho", "Performance", "Rendimiento"), () -> open(performancePage())),
-                    () -> Ui.tr("Para TVs lentas: sem o efeito de vidro, animações rápidas, otimizar apps e serviços em segundo plano.",
-                            "For slow TVs: no glass effect, fast animations, optimizing apps and background services.",
-                            "Para TVs lentas: sin efecto de vidrio, animaciones rápidas, optimizar apps y servicios en segundo plano.")));
-            p.rows.add(helped(opens(() -> Ui.tr("Atualizações", "Updates", "Actualizaciones"), () -> open(updatesPage())),
-                    () -> Ui.tr("A versão instalada, procurar uma nova e atualizar sozinho.", "The installed version, checking for a new one and updating on its own.",
-                            "La versión instalada, buscar una nueva y actualizar sola.")));
-            p.rows.add(helped(opens(() -> Ui.tr("Estado", "Status", "Estado"), () -> go(STATUS, null)),
-                    () -> Ui.tr("O que a última troca fez, os avisos e a memória e o tempo do Início em cada modo.",
-                            "What the last switch did, the notices, and the home screen's memory and time in each mode.",
-                            "Lo que hizo el último cambio, los avisos, y la memoria y el tiempo del inicio en cada modo.")));
-            p.rows.add(helped(opens(() -> Ui.tr("Ajustes da TV", "TV Settings"), () -> HomeApps.openSettings(activity, Settings.ACTION_SETTINGS)),
-                    () -> Ui.tr("Abre as configurações da própria TV (rede, imagem, som, contas).", "Opens the TV's own settings (network, picture, sound, accounts).",
-                            "Abre la configuración de la propia TV (red, imagen, sonido, cuentas).")));
+            p.rows.add(helped(opens(() -> Ui.tr("Desempenho"), () -> open(performancePage())),
+                    () -> Ui.tr("Para TVs lentas: sem o efeito de vidro, animações rápidas, otimizar apps e serviços em segundo plano.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Atualizações"), () -> open(updatesPage())),
+                    () -> Ui.tr("A versão instalada, procurar uma nova e atualizar sozinho.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Estado"), () -> go(STATUS, null)),
+                    () -> Ui.tr("O que a última troca fez, os avisos e a memória e o tempo do Início em cada modo.")));
+            p.rows.add(helped(opens(() -> Ui.tr("Ajustes da TV"), () -> HomeApps.openSettings(activity, Settings.ACTION_SETTINGS)),
+                    () -> Ui.tr("Abre as configurações da própria TV (rede, imagem, som, contas).")));
             return p;
         }
 
         /** Each row's description on the left, in order (a null leaves that row with the page's). */
-        private static void describe(Page p, String[]... texts) {
+        @SafeVarargs
+        private static void describe(Page p, java.util.function.Supplier<String>... texts) {
             for (int i = 0; i < texts.length && i < p.rows.size(); i++) {
-                String[] t = texts[i];
-                if (t != null) p.rows.get(i).help = () -> Ui.tr(t[0], t[1], t[2]);
+                if (texts[i] != null) p.rows.get(i).help = texts[i];
             }
         }
 
         /** Language, theme, units, the top of the home screen, the shelf's art and the sounds. */
         private Page appearancePage() {
-            Page p = new Page(Ui.tr("Aparência", "Appearance", "Apariencia"));
-            p.rows.add(choice(() -> Ui.tr("Idioma", "Language"), this::languageNames, () -> languageIndex(),
+            Page p = new Page(Ui.tr("Aparência"));
+            p.rows.add(choice(() -> Ui.tr("Idioma"), this::languageNames, () -> languageIndex(),
                     at -> Prefs.setLanguage(languageChoices()[at])));
-            p.rows.add(choice(() -> Ui.tr("Tema", "Theme"),
-                    () -> list(Ui.tr("Automático", "Automatic"), Ui.tr("Claro", "Light"), Ui.tr("Escuro", "Dark")),
+            p.rows.add(choice(() -> Ui.tr("Tema"),
+                    () -> list(Ui.tr("Automático"), Ui.tr("Claro"), Ui.tr("Escuro")),
                     () -> Math.max(0, java.util.Arrays.asList(THEMES).indexOf(Prefs.theme())), at -> Prefs.setTheme(THEMES[at])));
-            p.rows.add(choice(() -> Ui.tr("Temperatura", "Temperature"), () -> list(Ui.tr("Automática", "Automatic"), "°C", "°F"),
+            p.rows.add(choice(() -> Ui.tr("Temperatura"), () -> list(Ui.tr("Automática"), "°C", "°F"),
                     () -> Math.max(0, java.util.Arrays.asList(UNITS).indexOf(Prefs.temperature())), at -> Prefs.setTemperature(UNITS[at])));
-            p.rows.add(choice(() -> Ui.tr("Topo do Início", "Top of Home"),
-                    () -> list(Ui.tr("Relógio e clima", "Clock and weather"), Ui.tr("Cotações", "Prices")),
+            p.rows.add(choice(() -> Ui.tr("Topo do Início"),
+                    () -> list(Ui.tr("Relógio e clima"), Ui.tr("Cotações")),
                     () -> Prefs.topClock() ? 0 : 1, at -> Prefs.setTopClock(at == 0)));
-            p.rows.add(choice(() -> Ui.tr("Capa dos apps na prateleira", "Shelf app art"),
-                    () -> list(Ui.tr("Original do app", "The app's own"), Ui.tr("Logo", "Logo")),
+            p.rows.add(choice(() -> Ui.tr("Capa dos apps na prateleira"),
+                    () -> list(Ui.tr("Original do app"), Ui.tr("Logo")),
                     () -> Prefs.originalArt() ? 0 : 1, at -> Prefs.setOriginalArt(at == 0)));
-            p.rows.add(choice(() -> Ui.tr("Volume dos sons", "Sound volume", "Volumen de los sonidos"), SettingsView::soundLevels,
+            p.rows.add(choice(() -> Ui.tr("Volume dos sons"), SettingsView::soundLevels,
                     Prefs::soundLevel, Prefs::setSoundLevel));
-            p.rows.add(opens(() -> Ui.tr("Relógio", "Clock", "Reloj"), () -> open(clockPage())));
+            p.rows.add(opens(() -> Ui.tr("Relógio"), () -> open(clockPage())));
             p.symbol = "visibility";
             describe(p,
-                    new String[] {"O idioma dos textos do Free My TV. Automático segue o da TV.", "The language of Free My TV's text. Automatic follows the TV's.", "El idioma de los textos de Free My TV. Automático sigue el de la TV."},
-                    new String[] {"Claro, escuro, ou automático: claro de dia e escuro à noite.", "Light, dark, or automatic: light by day and dark at night.", "Claro, oscuro o automático: claro de día y oscuro de noche."},
-                    new String[] {"Graus Celsius ou Fahrenheit no clima. Automático segue o país.", "Celsius or Fahrenheit for the weather. Automatic follows the country.", "Grados Celsius o Fahrenheit en el clima. Automático sigue el país."},
-                    new String[] {"O que fica no alto do Início: o relógio com o clima, ou as cotações.", "What sits on top of the home screen: the clock with the weather, or the prices.", "Lo que va arriba del inicio: el reloj con el clima, o las cotizaciones."},
-                    new String[] {"Na prateleira, a imagem que o próprio app traz ou só o logo dele.", "On the shelf, the app's own picture or just its logo.", "En la estantería, la imagen de la propia app o solo su logo."},
-                    new String[] {"O volume do clique ao mover o foco e abrir itens.", "The volume of the click when moving and opening.", "El volumen del clic al moverse y abrir."},
-                    new String[] {"A hora do relógio: automática pela internet, ou fuso e ajuste à mão.", "The clock's time: automatic from the internet, or a zone and adjustment by hand.", "La hora del reloj: automática por internet, o zona y ajuste a mano."});
-            p.hint = () -> Ui.tr("OK abre as opções; ← e → mudam direto.", "OK opens the choices; ← and → change it right away.");
+                    () -> Ui.tr("O idioma dos textos do Free My TV. Automático segue o da TV."),
+                    () -> Ui.tr("Claro, escuro, ou automático: claro de dia e escuro à noite."),
+                    () -> Ui.tr("Graus Celsius ou Fahrenheit no clima. Automático segue o país."),
+                    () -> Ui.tr("O que fica no alto do Início: o relógio com o clima, ou as cotações."),
+                    () -> Ui.tr("Na prateleira, a imagem que o próprio app traz ou só o logo dele."),
+                    () -> Ui.tr("O volume do clique ao mover o foco e abrir itens."),
+                    () -> Ui.tr("A hora do relógio: automática pela internet, ou fuso e ajuste à mão."));
+            p.hint = () -> Ui.tr("OK abre as opções; ← e → mudam direto.");
             return p;
         }
 
@@ -550,7 +516,7 @@ public class SettingsActivity extends Activity {
         }
 
         private static String done(boolean ok) {
-            return ok ? Ui.tr("Pronto", "Done", "Listo") : Ui.tr("Falta fazer", "To do", "Por hacer");
+            return ok ? Ui.tr("Pronto") : Ui.tr("Falta fazer");
         }
 
         void openPrepare() {
@@ -561,55 +527,40 @@ public class SettingsActivity extends Activity {
         }
 
         private Page preparePage() {
-            Page p = new Page(Ui.tr("Preparar a TV", "Prepare the TV", "Preparar la TV"));
+            Page p = new Page(Ui.tr("Preparar a TV"));
             p.symbol = "tv_settings";
             p.live = true;
-            p.about = () -> Ui.tr("Seis passos, uma vez só. Cada um mostra à esquerda o que fazer e se confere sozinho.",
-                    "Six steps, once. Each one shows on the left what to do, and checks itself.",
-                    "Seis pasos, una sola vez. Cada uno muestra a la izquierda qué hacer y se revisa solo.");
-            Row dev = opens(() -> Ui.tr("1. Opções do desenvolvedor", "1. Developer options", "1. Opciones de desarrollador"),
+            p.about = () -> Ui.tr("Seis passos, uma vez só. Cada um mostra à esquerda o que fazer e se confere sozinho.");
+            Row dev = opens(() -> Ui.tr("1. Opções do desenvolvedor"),
                     () -> open(developerPage()));
-            dev.help = () -> Ui.tr("Libera os ajustes que o Free My TV usa. Fica escondido até você apertar 7 vezes o número da versão da TV.",
-                    "Unlocks the settings Free My TV uses. It stays hidden until you press the TV's build number 7 times.",
-                    "Desbloquea los ajustes que usa Free My TV. Queda oculto hasta pulsar 7 veces el número de versión de la TV.");
+            dev.help = () -> Ui.tr("Libera os ajustes que o Free My TV usa. Fica escondido até você apertar 7 vezes o número da versão da TV.");
             p.rows.add(withValue(dev, () -> done(devOn)));
-            Row debug = opens(() -> Ui.tr("2. Depuração", "2. Debugging", "2. Depuración"), () -> open(debuggingPage()));
-            debug.help = () -> Ui.tr("Deixa o Free My TV dar comandos à própria TV (trocar o Início, desligar apps), sem computador.",
-                    "Lets Free My TV give the TV its own commands (switch the home screen, turn off apps), with no computer.",
-                    "Deja que Free My TV dé órdenes a la propia TV (cambiar el inicio, apagar apps), sin computadora.");
+            Row debug = opens(() -> Ui.tr("2. Depuração"), () -> open(debuggingPage()));
+            debug.help = () -> Ui.tr("Deixa o Free My TV dar comandos à própria TV (trocar o Início, desligar apps), sem computador.");
             p.rows.add(withValue(debug, () -> done(port5555 || wirelessOn)));
-            Row allow = new Row(() -> Ui.tr("3. Autorizar o Free My TV", "3. Allow Free My TV", "3. Autorizar Free My TV"),
+            Row allow = new Row(() -> Ui.tr("3. Autorizar o Free My TV"),
                     () -> testingAdb || !adbText.isEmpty() && !adbOk ? adbText : done(adbOk), this::testAdb, null, null);
-            allow.help = () -> Ui.tr("OK testa a conexão. Na primeira vez a TV pergunta “Permitir depuração?”: marque “Sempre permitir” e aceite.",
-                    "OK tests the connection. The first time the TV asks “Allow debugging?”: tick “Always allow” and accept.",
-                    "OK prueba la conexión. La primera vez la TV pregunta “¿Permitir depuración?”: marca “Permitir siempre” y acepta.");
+            allow.help = () -> Ui.tr("OK testa a conexão. Na primeira vez a TV pergunta “Permitir depuração?”: marque “Sempre permitir” e aceite.");
             p.rows.add(allow);
-            Row home = new Row(() -> Ui.tr("4. Início do Free My TV", "4. Free My TV home screen", "4. Inicio de Free My TV"),
-                    () -> busy() ? "" : freeActive() ? "Free My TV" : Ui.tr("Original", "Original"), this::openHomeChoice, null, null);
-            home.help = () -> Ui.tr("Troca o Início e desliga uma lista curta de apps de propaganda (nunca desinstala). “Original” traz tudo de volta.",
-                    "Switches the home screen and turns off a short list of promo apps (never uninstalled). “Original” brings it all back.",
-                    "Cambia el inicio y apaga una lista corta de apps promocionales (nunca las desinstala). “Original” devuelve todo.");
+            Row home = new Row(() -> Ui.tr("4. Início do Free My TV"),
+                    () -> busy() ? "" : freeActive() ? "Free My TV" : Ui.tr("Original"), this::openHomeChoice, null, null);
+            home.help = () -> Ui.tr("Troca o Início e desliga uma lista curta de apps de propaganda (nunca desinstala). “Original” traz tudo de volta.");
             p.rows.add(home);
-            Row clean = opens(() -> Ui.tr("5. Limpar a TV", "5. Clean up the TV", "5. Limpiar la TV"), this::openCleanup);
-            clean.help = () -> Ui.tr("Desliga demonstrações, telemetria e propaganda do fabricante, para sobrar memória. Dá para desfazer.",
-                    "Turns off the maker's demos, telemetry and ads, to free memory. It can be undone.",
-                    "Apaga demos, telemetría y publicidad del fabricante, para liberar memoria. Se puede deshacer.");
+            Row clean = opens(() -> Ui.tr("5. Limpar a TV"), this::openCleanup);
+            clean.help = () -> Ui.tr("Desliga demonstrações, telemetria e propaganda do fabricante, para sobrar memória. Dá para desfazer.");
             p.rows.add(withValue(clean, () -> {
                 int n = HomeMode.stringList(state, "cleaned").size();
-                return n == 0 ? Ui.tr("Opcional", "Optional", "Opcional") : Ui.trf(Ui.tr("{n} desligados", "{n} off", "{n} apagadas"), "n", n);
+                return n == 0 ? Ui.tr("Opcional") : Ui.trf("{n} desligados", "n", n);
             }));
-            Row key = opens(() -> Ui.tr("6. Recomendações (chave do TMDB)", "6. Picks (TMDB key)", "6. Recomendaciones (clave de TMDB)"),
+            Row key = opens(() -> Ui.tr("6. Recomendações (chave do TMDB)"),
                     () -> open(tmdbPage()));
-            key.help = () -> Ui.tr("Os filmes e séries do Início e as fotos do protetor de tela vêm do TMDB, com uma chave grátis sua.",
-                    "The home screen's movies and shows and the screensaver's photos come from TMDB, with a free key of your own.",
-                    "Las películas y series del inicio y las fotos del protector vienen de TMDB, con una clave gratis tuya.");
-            p.rows.add(withValue(key, () -> Prefs.tmdbKey().isEmpty() ? Ui.tr("Opcional", "Optional", "Opcional") : done(true)));
-            Row finish = new Row(() -> Ui.tr("Concluir", "Finish", "Terminar"), () -> "", () -> {
+            key.help = () -> Ui.tr("Os filmes e séries do Início e as fotos do protetor de tela vêm do TMDB, com uma chave grátis sua.");
+            p.rows.add(withValue(key, () -> Prefs.tmdbKey().isEmpty() ? Ui.tr("Opcional") : done(true)));
+            Row finish = new Row(() -> Ui.tr("Concluir"), () -> "", () -> {
                 Prefs.setPrepared(true);
                 goBack();
             }, null, null);
-            finish.help = () -> Ui.tr("Volta às configurações. Este assistente fica em “Preparar a TV”.",
-                    "Back to the settings. This guide stays in “Prepare the TV”.", "Vuelve a la configuración. Esta guía queda en “Preparar la TV”.");
+            finish.help = () -> Ui.tr("Volta às configurações. Este assistente fica em “Preparar a TV”.");
             p.rows.add(finish);
             return p;
         }
@@ -627,65 +578,51 @@ public class SettingsActivity extends Activity {
         }
 
         private Page developerPage() {
-            Page p = new Page(Ui.tr("Opções do desenvolvedor", "Developer options", "Opciones de desarrollador"));
+            Page p = new Page(Ui.tr("Opções do desenvolvedor"));
             p.symbol = "settings";
             p.live = true;
-            p.about = () -> Ui.tr("1. OK em “Abrir Sobre”.\n2. Desça até “Build” (ou “Versão do Android TV OS”) e aperte OK 7 vezes, até a TV dizer que você é desenvolvedor.\n3. Volte aqui com Voltar.",
-                    "1. OK on “Open About”.\n2. Go down to “Build” (or “Android TV OS build”) and press OK 7 times, until the TV says you're a developer.\n3. Come back with Back.",
-                    "1. OK en “Abrir Acerca de”.\n2. Baja hasta “Compilación” y pulsa OK 7 veces, hasta que la TV diga que eres desarrollador.\n3. Vuelve con Atrás.");
-            p.rows.add(new Row(() -> Ui.tr("Abrir Sobre", "Open About", "Abrir Acerca de"), () -> "",
+            p.about = () -> Ui.tr("1. OK em “Abrir Sobre”.\n2. Desça até “Build” (ou “Versão do Android TV OS”) e aperte OK 7 vezes, até a TV dizer que você é desenvolvedor.\n3. Volte aqui com Voltar.");
+            p.rows.add(new Row(() -> Ui.tr("Abrir Sobre"), () -> "",
                     () -> HomeApps.openSettings(activity, Settings.ACTION_DEVICE_INFO_SETTINGS), null, null));
-            p.rows.add(new Row(() -> Ui.tr("Situação", "Status", "Estado"),
-                    () -> devOn ? Ui.tr("Ligadas", "On", "Activadas") : Ui.tr("Ainda escondidas", "Still hidden", "Aún ocultas"), () -> {}, null, null));
+            p.rows.add(new Row(() -> Ui.tr("Situação"),
+                    () -> devOn ? Ui.tr("Ligadas") : Ui.tr("Ainda escondidas"), () -> {}, null, null));
             return p;
         }
 
         private Page debuggingPage() {
-            Page p = new Page(Ui.tr("Depuração", "Debugging", "Depuración"));
+            Page p = new Page(Ui.tr("Depuração"));
             p.symbol = "control";
             p.live = true;
-            p.about = () -> Ui.tr("Um dos dois basta. Comece pela depuração USB; se ela não abrir a conexão, use a depuração por Wi-Fi.",
-                    "One of the two is enough. Start with USB debugging; if it doesn't open the connection, use wireless debugging.",
-                    "Basta uno de los dos. Empieza por la depuración USB; si no abre la conexión, usa la inalámbrica.");
-            p.rows.add(helped(new Row(() -> Ui.tr("Depuração USB", "USB debugging", "Depuración USB"),
-                    () -> port5555 ? Ui.tr("Funcionando", "Working", "Funcionando") : usbOn ? Ui.tr("Ligada, sem conexão", "On, no connection", "Activada, sin conexión")
-                            : Ui.tr("Desligada", "Off", "Desactivada"),
+            p.about = () -> Ui.tr("Um dos dois basta. Comece pela depuração USB; se ela não abrir a conexão, use a depuração por Wi-Fi.");
+            p.rows.add(helped(new Row(() -> Ui.tr("Depuração USB"),
+                    () -> port5555 ? Ui.tr("Funcionando") : usbOn ? Ui.tr("Ligada, sem conexão")
+                            : Ui.tr("Desligada"),
                     () -> HomeApps.openSettings(activity, Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS), null, null),
-                    () -> Ui.tr("OK abre as Opções do desenvolvedor: ligue “Depuração USB” e volte. Na maioria das TVs isso já basta.",
-                            "OK opens Developer options: turn on “USB debugging” and come back. On most TVs that's all it takes.",
-                            "OK abre Opciones de desarrollador: activa “Depuración USB” y vuelve. En la mayoría de las TVs alcanza.")));
+                    () -> Ui.tr("OK abre as Opções do desenvolvedor: ligue “Depuração USB” e volte. Na maioria das TVs isso já basta.")));
             if (AdbTls.supported()) {
-                Row wireless = opens(() -> Ui.tr("Depuração por Wi-Fi", "Wireless debugging", "Depuración inalámbrica"), () -> open(wirelessPage()));
-                wireless.help = () -> Ui.tr("Para TVs em que a depuração USB não abre a conexão (Google TV novas): pareia com um código de 6 números.",
-                        "For TVs where USB debugging doesn't open the connection (newer Google TVs): pairs with a 6-digit code.",
-                        "Para TVs donde la depuración USB no abre la conexión (Google TV nuevas): se empareja con un código de 6 números.");
-                p.rows.add(withValue(wireless, () -> wirelessOn ? Ui.tr("Ligada", "On", "Activada") : Ui.tr("Desligada", "Off", "Desactivada")));
+                Row wireless = opens(() -> Ui.tr("Depuração por Wi-Fi"), () -> open(wirelessPage()));
+                wireless.help = () -> Ui.tr("Para TVs em que a depuração USB não abre a conexão (Google TV novas): pareia com um código de 6 números.");
+                p.rows.add(withValue(wireless, () -> wirelessOn ? Ui.tr("Ligada") : Ui.tr("Desligada")));
             }
             return p;
         }
 
         private Page wirelessPage() {
-            Page p = new Page(Ui.tr("Depuração por Wi-Fi", "Wireless debugging", "Depuración inalámbrica"));
+            Page p = new Page(Ui.tr("Depuração por Wi-Fi"));
             p.symbol = "wifi";
             p.live = true;
-            p.rows.add(helped(new Row(() -> Ui.tr("1. Ligar o assistente de pareamento", "1. Turn on the pairing assistant", "1. Activar el asistente"),
-                    () -> assistOn ? Ui.tr("Ligado", "On", "Activado") : Ui.tr("Desligado", "Off", "Desactivado"),
+            p.rows.add(helped(new Row(() -> Ui.tr("1. Ligar o assistente de pareamento"),
+                    () -> assistOn ? Ui.tr("Ligado") : Ui.tr("Desligado"),
                     () -> HomeApps.openSettings(activity, Settings.ACTION_ACCESSIBILITY_SETTINGS), null, null),
-                    () -> Ui.tr("OK abre Acessibilidade: escolha “Free My TV: pareamento” e ligue. Ele só lê o código da tela de pareamento e se desliga depois.",
-                            "OK opens Accessibility: pick “Free My TV pairing” and turn it on. It only reads the pairing screen's code, and turns off afterwards.",
-                            "OK abre Accesibilidad: elige “Free My TV: emparejamiento” y actívalo. Solo lee el código de emparejamiento y luego se apaga.")));
-            p.rows.add(helped(new Row(() -> Ui.tr("2. Ligar a depuração por Wi-Fi", "2. Turn on wireless debugging", "2. Activar la depuración inalámbrica"),
-                    () -> wirelessOn ? Ui.tr("Ligada", "On", "Activada") : Ui.tr("Desligada", "Off", "Desactivada"),
+                    () -> Ui.tr("OK abre Acessibilidade: escolha “Free My TV: pareamento” e ligue. Ele só lê o código da tela de pareamento e se desliga depois.")));
+            p.rows.add(helped(new Row(() -> Ui.tr("2. Ligar a depuração por Wi-Fi"),
+                    () -> wirelessOn ? Ui.tr("Ligada") : Ui.tr("Desligada"),
                     () -> HomeApps.openSettings(activity, Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS), null, null),
-                    () -> Ui.tr("OK abre as Opções do desenvolvedor: abra “Depuração por Wi-Fi”, ligue e aceite a pergunta da TV.",
-                            "OK opens Developer options: open “Wireless debugging”, turn it on and accept the TV's question.",
-                            "OK abre Opciones de desarrollador: abre “Depuración inalámbrica”, actívala y acepta la pregunta de la TV.")));
-            p.rows.add(helped(new Row(() -> Ui.tr("3. Parear com código", "3. Pair with a code", "3. Emparejar con código"),
-                    () -> adbOk ? Ui.tr("Pareado", "Paired", "Emparejado") : "",
+                    () -> Ui.tr("OK abre as Opções do desenvolvedor: abra “Depuração por Wi-Fi”, ligue e aceite a pergunta da TV.")));
+            p.rows.add(helped(new Row(() -> Ui.tr("3. Parear com código"),
+                    () -> adbOk ? Ui.tr("Pareado") : "",
                     () -> HomeApps.openSettings(activity, Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS), null, null),
-                    () -> Ui.tr("Em “Depuração por Wi-Fi”, escolha “Parear o dispositivo com um código de pareamento”. Com o assistente ligado, o Free My TV lê o código, pareia sozinho e volta para cá.",
-                            "In “Wireless debugging”, pick “Pair device with pairing code”. With the assistant on, Free My TV reads the code, pairs by itself and comes back here.",
-                            "En “Depuración inalámbrica”, elige “Vincular dispositivo con código”. Con el asistente activado, Free My TV lee el código, se empareja solo y vuelve aquí.")));
+                    () -> Ui.tr("Em “Depuração por Wi-Fi”, escolha “Parear o dispositivo com um código de pareamento”. Com o assistente ligado, o Free My TV lê o código, pareia sozinho e volta para cá.")));
             return p;
         }
 
@@ -693,13 +630,13 @@ public class SettingsActivity extends Activity {
         private void testAdb() {
             if (testingAdb) return;
             testingAdb = true;
-            adbText = Ui.tr("Conectando…", "Connecting…", "Conectando…");
+            adbText = Ui.tr("Conectando…");
             Context app = getContext().getApplicationContext();
             new Thread(() -> {
                 boolean ok = false;
                 String text;
                 try (Adb adb = Adb.connect(app, 120_000, () -> handler.post(() -> {
-                    adbText = Ui.tr("Aceite na TV", "Accept on the TV", "Acepta en la TV");
+                    adbText = Ui.tr("Aceite na TV");
                     invalidate();
                 }))) {
                     adb.shell("echo ok");
@@ -712,7 +649,7 @@ public class SettingsActivity extends Activity {
                     text = "";
                 } catch (Exception e) {
                     AppLog.w("prepare: " + e.getMessage());
-                    text = Ui.tr("Não conectou", "No connection", "No conectó");
+                    text = Ui.tr("Não conectou");
                 }
                 boolean result = ok;
                 String shown = text;
@@ -726,12 +663,10 @@ public class SettingsActivity extends Activity {
         }
 
         private Page tmdbPage() {
-            Page p = new Page(Ui.tr("Chave do TMDB", "TMDB key", "Clave de TMDB"));
+            Page p = new Page(Ui.tr("Chave do TMDB"));
             p.symbol = "play";
-            p.about = () -> Ui.tr("1. No celular ou computador, crie uma conta grátis em themoviedb.org.\n2. Em Settings → API, peça uma chave (uso pessoal) e copie a “API Key”.\n3. Aqui, OK em “Digitar a chave”. O app Google TV no celular serve de teclado e cola.",
-                    "1. On a phone or computer, create a free account at themoviedb.org.\n2. In Settings → API, ask for a key (personal use) and copy the “API Key”.\n3. Here, OK on “Type the key”. The Google TV app on a phone works as a keyboard and pastes.",
-                    "1. En el celular o la computadora, crea una cuenta gratis en themoviedb.org.\n2. En Settings → API, pide una clave (uso personal) y copia la “API Key”.\n3. Aquí, OK en “Escribir la clave”. La app Google TV del celular sirve de teclado y pega.");
-            p.rows.add(new Row(() -> Ui.tr("Digitar a chave", "Type the key", "Escribir la clave"), this::tmdbKeyState, activity::askTmdbKey, null, null));
+            p.about = () -> Ui.tr("1. No celular ou computador, crie uma conta grátis em themoviedb.org.\n2. Em Settings → API, peça uma chave (uso pessoal) e copie a “API Key”.\n3. Aqui, OK em “Digitar a chave”. O app Google TV no celular serve de teclado e cola.");
+            p.rows.add(new Row(() -> Ui.tr("Digitar a chave"), this::tmdbKeyState, activity::askTmdbKey, null, null));
             return p;
         }
 
@@ -746,7 +681,7 @@ public class SettingsActivity extends Activity {
 
         private void openCleanup() {
             if (cleanupPage == null) {
-                cleanupPage = new Page(Ui.tr("Limpar a TV", "Clean up the TV", "Limpiar la TV"));
+                cleanupPage = new Page(Ui.tr("Limpar a TV"));
                 cleanupPage.symbol = "clean";
                 cleanupPage.rebuild = this::fillCleanup;
             }
@@ -801,9 +736,9 @@ public class SettingsActivity extends Activity {
 
         private static String levelName(int level) {
             switch (level) {
-                case Debloat.LIGHT: return Ui.tr("Leve", "Light", "Ligera");
-                case Debloat.COMPLETE: return Ui.tr("Completa", "Complete", "Completa");
-                default: return Ui.tr("Recomendada", "Recommended", "Recomendada");
+                case Debloat.LIGHT: return Ui.tr("Leve");
+                case Debloat.COMPLETE: return Ui.tr("Completa");
+                default: return Ui.tr("Recomendada");
             }
         }
 
@@ -812,28 +747,22 @@ public class SettingsActivity extends Activity {
             Page p = cleanupPage;
             if (p == null) return;
             p.rows.clear();
-            p.about = () -> Ui.tr("Desliga apps do fabricante que você não usa (nunca desinstala). Cada app é conferido antes: o que a TV precisa fica ligado.",
-                    "Turns off the maker's apps you don't use (never uninstalled). Each one is checked first: what the TV needs stays on.",
-                    "Apaga apps del fabricante que no usas (nunca las desinstala). Cada una se revisa antes: lo que la TV necesita queda.");
+            p.about = () -> Ui.tr("Desliga apps do fabricante que você não usa (nunca desinstala). Cada app é conferido antes: o que a TV precisa fica ligado.");
             if (analyzing || cleanupApps == null) {
-                p.rows.add(new Row(() -> cleanupError.isEmpty() ? Ui.tr("Analisando os apps da TV…", "Looking at the TV's apps…", "Analizando las apps de la TV…")
-                        : Ui.tr("Não deu para analisar", "Couldn't look at the apps", "No se pudo analizar"),
-                        () -> cleanupError.isEmpty() ? "" : Ui.tr("Tentar de novo", "Try again", "Reintentar"), this::analyzeCleanup, null, null));
+                p.rows.add(new Row(() -> cleanupError.isEmpty() ? Ui.tr("Analisando os apps da TV…")
+                        : Ui.tr("Não deu para analisar"),
+                        () -> cleanupError.isEmpty() ? "" : Ui.tr("Tentar de novo"), this::analyzeCleanup, null, null));
                 if (!cleanupError.isEmpty()) p.rows.get(0).help = () -> cleanupError
-                        + Ui.tr("\n\nConfira os passos 2 e 3 de “Preparar a TV”.", "\n\nCheck steps 2 and 3 of “Prepare the TV”.", "\n\nRevisa los pasos 2 y 3 de “Preparar la TV”.");
+                        + Ui.tr("\n\nConfira os passos 2 e 3 de “Preparar a TV”.");
                 return;
             }
-            Row level = choice(() -> Ui.tr("Nível", "Level", "Nivel"),
+            Row level = choice(() -> Ui.tr("Nível"),
                     () -> list(levelName(Debloat.LIGHT), levelName(Debloat.RECOMMENDED), levelName(Debloat.COMPLETE)),
                     () -> cleanLevel - 1, at -> cleanLevel = at + 1);
-            level.help = () -> Ui.tr("Leve: demonstrações de loja, manuais, telemetria e anúncios.\nRecomendada: também canais de propaganda, lojas e contas do fabricante.\nCompleta: também extras que algumas pessoas usam (espelhar a tela, assistente de voz).",
-                    "Light: store demos, manuals, telemetry and ads.\nRecommended: also promo channels and the maker's stores and accounts.\nComplete: also extras some people use (screen mirroring, the voice assistant).",
-                    "Ligera: demos de tienda, manuales, telemetría y anuncios.\nRecomendada: también canales promocionales, tiendas y cuentas del fabricante.\nCompleta: también extras que algunos usan (duplicar pantalla, asistente de voz).");
+            level.help = () -> Ui.tr("Leve: demonstrações de loja, manuais, telemetria e anúncios.\nRecomendada: também canais de propaganda, lojas e contas do fabricante.\nCompleta: também extras que algumas pessoas usam (espelhar a tela, assistente de voz).");
             p.rows.add(level);
-            Row apply = dimmed(new Row(() -> pickedApps().isEmpty() ? Ui.tr("Nada a desligar neste nível", "Nothing to turn off at this level",
-                    "Nada que apagar en este nivel") : Ui.plural(Ui.tr("plural|one:Desligar {n} app|other:Desligar {n} apps",
-                    "plural|one:Turn off {n} app|other:Turn off {n} apps", "plural|one:Apagar {n} app|other:Apagar {n} apps"), pickedApps().size()),
-                    () -> busy() ? HomeMode.busyText(state) : pickedMb() > 0 ? Ui.trf(Ui.tr("~{mb} MB livres", "~{mb} MB freed", "~{mb} MB libres"), "mb", pickedMb()) : "",
+            Row apply = dimmed(new Row(() -> pickedApps().isEmpty() ? Ui.tr("Nada a desligar neste nível") : Ui.plural("plural|one:Desligar {n} app|other:Desligar {n} apps", pickedApps().size()),
+                    () -> busy() ? HomeMode.busyText(state) : pickedMb() > 0 ? Ui.trf("~{mb} MB livres", "mb", pickedMb()) : "",
                     () -> {
                         List<String> off = pickedApps();
                         if (off.isEmpty()) return;
@@ -841,16 +770,13 @@ public class SettingsActivity extends Activity {
                         cleanAdd.clear();
                         cleanSkip.clear();
                     }, null, null), () -> busy() || pickedApps().isEmpty());
-            apply.help = () -> Ui.tr("Desliga os apps marcados com “Vai desligar” abaixo. A memória é o que eles usam agora.",
-                    "Turns off the apps marked “Goes off” below. The memory is what they're using now.",
-                    "Apaga las apps marcadas con “Se apaga” abajo. La memoria es la que usan ahora.");
+            apply.help = () -> Ui.tr("Desliga os apps marcados com “Vai desligar” abaixo. A memória é o que eles usam agora.");
             p.rows.add(apply);
             int cleaned = HomeMode.stringList(state, "cleaned").size();
             if (cleaned > 0) {
-                Row undo = dimmed(new Row(() -> Ui.tr("Desfazer a limpeza", "Undo the cleanup", "Deshacer la limpieza"),
+                Row undo = dimmed(new Row(() -> Ui.tr("Desfazer a limpeza"),
                         () -> String.valueOf(HomeMode.stringList(state, "cleaned").size()), () -> Debloat.requestUndo(getContext()), null, null), this::busy);
-                undo.help = () -> Ui.tr("Liga de novo tudo o que a limpeza desligou.", "Turns back on everything the cleanup turned off.",
-                        "Vuelve a encender todo lo que la limpieza apagó.");
+                undo.help = () -> Ui.tr("Liga de novo tudo o que a limpeza desligou.");
                 p.rows.add(undo);
             }
             for (Debloat.App a : cleanupApps) p.rows.add(cleanupRow(a));
@@ -859,9 +785,9 @@ public class SettingsActivity extends Activity {
 
         private Row cleanupRow(Debloat.App a) {
             Row r = new Row(() -> a.label, () -> {
-                if (!a.on) return a.cleaned ? Ui.tr("Desligado pela limpeza", "Off (cleanup)", "Apagada (limpieza)") : Ui.tr("Desligado", "Off", "Apagada");
-                if (!a.locked.isEmpty()) return Ui.tr("Protegido", "Protected", "Protegida");
-                return picked(a) ? Ui.tr("Vai desligar", "Goes off", "Se apaga") : Ui.tr("Fica ligado", "Stays on", "Queda encendida");
+                if (!a.on) return a.cleaned ? Ui.tr("Desligado pela limpeza") : Ui.tr("Desligado");
+                if (!a.locked.isEmpty()) return Ui.tr("Protegido");
+                return picked(a) ? Ui.tr("Vai desligar") : Ui.tr("Fica ligado");
             }, () -> {
                 if (!a.on && a.cleaned && !busy()) Debloat.request(getContext(), new ArrayList<>(), Collections.singletonList(a.pkg));
                 if (!a.on || !a.locked.isEmpty()) return;
@@ -873,12 +799,11 @@ public class SettingsActivity extends Activity {
             }, null, null);
             r.help = () -> {
                 StringBuilder b = new StringBuilder(a.why);
-                if (a.level == Debloat.SUGGESTED) b.append(Ui.tr("\n\nNão está na lista: só desliga se você marcar.", "\n\nNot on the list: it goes off only if you pick it.",
-                        "\n\nNo está en la lista: solo se apaga si la marcas."));
-                else b.append("\n\n").append(Ui.tr("Nível: ", "Level: ", "Nivel: ")).append(levelName(a.level));
-                if (!a.locked.isEmpty()) b.append("\n").append(Ui.tr("Fica ligado: ", "Stays on: ", "Queda encendida: ")).append(a.locked);
-                if (a.mb > 0) b.append("\n").append(Ui.trf(Ui.tr("Usando {mb} MB agora", "Using {mb} MB now", "Usando {mb} MB ahora"), "mb", a.mb));
-                if (!a.on && a.cleaned) b.append("\n").append(Ui.tr("OK liga de novo.", "OK turns it back on.", "OK la vuelve a encender."));
+                if (a.level == Debloat.SUGGESTED) b.append(Ui.tr("\n\nNão está na lista: só desliga se você marcar."));
+                else b.append("\n\n").append(Ui.trf("Nível: {level}", "level", levelName(a.level)));
+                if (!a.locked.isEmpty()) b.append("\n").append(Ui.trf("Fica ligado: {why}", "why", a.locked));
+                if (a.mb > 0) b.append("\n").append(Ui.trf("Usando {mb} MB agora", "mb", a.mb));
+                if (!a.on && a.cleaned) b.append("\n").append(Ui.tr("OK liga de novo."));
                 b.append("\n").append(a.pkg);
                 return b.toString();
             };
@@ -891,35 +816,32 @@ public class SettingsActivity extends Activity {
         private boolean releaseRead, releaseFailed, readingRelease, updating;
 
         private Page updatesPage() {
-            Page p = new Page(Ui.tr("Atualizações", "Updates", "Actualizaciones"));
-            p.rows.add(new Row(() -> Ui.tr("Versão instalada", "Installed version", "Versión instalada"),
+            Page p = new Page(Ui.tr("Atualizações"));
+            p.rows.add(new Row(() -> Ui.tr("Versão instalada"),
                     () -> Updater.installedName(getContext()), () -> {}, null, null));
-            p.rows.add(new Row(() -> Ui.tr("Procurar atualização", "Check for updates", "Buscar actualización"), this::releaseState,
+            p.rows.add(new Row(() -> Ui.tr("Procurar atualização"), this::releaseState,
                     this::askUpdate, null, () -> updating));
-            p.rows.add(onOff(() -> Ui.tr("Atualizar sozinho", "Update on its own", "Actualizar solo"), Prefs::autoUpdate,
+            p.rows.add(onOff(() -> Ui.tr("Atualizar sozinho"), Prefs::autoUpdate,
                     Prefs::setAutoUpdate, null));
             p.hint = () -> focus == 2
-                    ? Ui.tr("Procura a cada 6 horas e instala quando você sai do app.", "Checks every 6 hours and installs once you leave the app.",
-                            "Busca cada 6 horas e instala cuando sales de la app.")
-                    : Ui.tr("As versões novas vêm do GitHub do projeto.", "New versions come from the project's GitHub.",
-                            "Las versiones nuevas vienen del GitHub del proyecto.");
-            p.hint2 = () -> Ui.tr("Ao atualizar, o app reinicia sozinho.", "When it updates, the app starts again by itself.",
-                    "Al actualizar, la app se reinicia sola.");
+                    ? Ui.tr("Procura a cada 6 horas e instala quando você sai do app.")
+                    : Ui.tr("As versões novas vêm do GitHub do projeto.");
+            p.hint2 = () -> Ui.tr("Ao atualizar, o app reinicia sozinho.");
             p.symbol = "sync";
             describe(p,
-                    new String[] {"A versão do Free My TV nesta TV.", "The Free My TV version on this TV.", "La versión de Free My TV en esta TV."},
-                    new String[] {"Procura uma versão nova no GitHub do projeto; se houver, OK instala.", "Looks for a new version on the project's GitHub; if there is one, OK installs it.", "Busca una versión nueva en el GitHub del proyecto; si hay, OK la instala."},
-                    new String[] {"Procura a cada 6 horas e instala quando você sai do app.", "Checks every 6 hours and installs once you leave the app.", "Busca cada 6 horas e instala cuando sales de la app."});
+                    () -> Ui.tr("A versão do Free My TV nesta TV."),
+                    () -> Ui.tr("Procura uma versão nova no GitHub do projeto; se houver, OK instala."),
+                    () -> Ui.tr("Procura a cada 6 horas e instala quando você sai do app."));
             readRelease();
             return p;
         }
 
         private String releaseState() {
-            if (updating) return Ui.tr("Atualizando…", "Updating…", "Actualizando…");
+            if (updating) return Ui.tr("Atualizando…");
             if (!releaseRead) return "…";
-            if (releaseFailed) return Ui.tr("Sem conexão: OK tenta de novo", "No connection: OK tries again", "Sin conexión: OK lo intenta de nuevo");
-            if (release == null || release.code <= Updater.installedCode(getContext())) return Ui.tr("Em dia", "Up to date", "Al día");
-            return Ui.trf(Ui.tr("{version} disponível", "{version} available", "{version} disponible"), "version", release.version());
+            if (releaseFailed) return Ui.tr("Sem conexão: OK tenta de novo");
+            if (release == null || release.code <= Updater.installedCode(getContext())) return Ui.tr("Em dia");
+            return Ui.trf("{version} disponível", "version", release.version());
         }
 
         /** A newer release: asks, then installs it now. Otherwise OK reads GitHub again. */
@@ -930,9 +852,8 @@ public class SettingsActivity extends Activity {
                 readRelease();
                 return;
             }
-            openPicker(Ui.trf(Ui.tr("Atualizar para {version}? O app reinicia.", "Update to {version}? The app starts again.",
-                    "¿Actualizar a {version}? La app se reinicia."), "version", release.version()),
-                    list(Ui.tr("Atualizar", "Update", "Actualizar"), Ui.tr("Cancelar", "Cancel")), 1, at -> {
+            openPicker(Ui.trf("Atualizar para {version}? O app reinicia.", "version", release.version()),
+                    list(Ui.tr("Atualizar"), Ui.tr("Cancelar")), 1, at -> {
                         if (at != 0) return;
                         Updater.requestNow(getContext());
                         updating = true;
@@ -988,43 +909,41 @@ public class SettingsActivity extends Activity {
         private long optimizedAt;
 
         private Page performancePage() {
-            Page p = new Page(Ui.tr("Desempenho", "Performance", "Rendimiento"));
-            p.rows.add(choice(() -> Ui.tr("Modo desempenho", "Performance mode"),
-                    () -> list(Ui.tr("Desligado", "Off"), Ui.tr("Ligado (sem vidro)", "On (no glass)")),
+            Page p = new Page(Ui.tr("Desempenho"));
+            p.rows.add(choice(() -> Ui.tr("Modo desempenho"),
+                    () -> list(Ui.tr("Desligado"), Ui.tr("Ligado (sem vidro)")),
                     () -> Prefs.performance() ? 1 : 0, at -> Prefs.setPerformance(at == 1)));
-            p.rows.add(onOff(() -> Ui.tr("Animações rápidas", "Fast animations", "Animaciones rápidas"),
+            p.rows.add(onOff(() -> Ui.tr("Animações rápidas"),
                     () -> HomeMode.fastAnimations(state), on -> HomeMode.requestFastAnimations(getContext(), on), null));
-            p.rows.add(new Row(() -> Ui.tr("Otimizar apps", "Optimize apps", "Optimizar apps"), this::optimizeState,
+            p.rows.add(new Row(() -> Ui.tr("Otimizar apps"), this::optimizeState,
                     this::askOptimize, null, null));
-            Row background = new Row(() -> Ui.tr("Serviços em segundo plano", "Background services", "Servicios en segundo plano"),
+            Row background = new Row(() -> Ui.tr("Serviços em segundo plano"),
                     () -> "", this::openBackgroundApps, null, null);
             background.opens = true;
             p.rows.add(background);
-            p.hint = () -> Ui.tr("OK abre as opções; ← e → mudam direto.", "OK opens the choices; ← and → change it right away.");
+            p.hint = () -> Ui.tr("OK abre as opções; ← e → mudam direto.");
             p.symbol = "speed";
             describe(p,
-                    new String[] {"Tira o efeito de vidro e as sombras: mais leve para TVs lentas.", "Drops the glass effect and the shadows: lighter for slow TVs.", "Quita el efecto de vidrio y las sombras: más liviano para TVs lentas."},
-                    new String[] {"Janelas e transições da TV na metade do tempo. O modo Original volta como era.", "The TV's windows and transitions in half the time. Original brings them back.", "Ventanas y transiciones de la TV en la mitad del tiempo. Original las devuelve."},
-                    new String[] {"Compila o código mais usado dos apps para abrirem mais rápido. A TV fica lenta enquanto roda.", "Compiles the apps' most used code so they open faster. The TV is slower while it runs.", "Compila el código más usado para que las apps abran más rápido. La TV va lenta mientras corre."},
-                    new String[] {"Apps da TV que rodam escondidos e ocupam memória: você escolhe o que fica ligado.", "The TV's apps that run out of sight and hold memory: you pick what stays on.", "Apps de la TV que corren ocultas y ocupan memoria: tú eliges qué queda."});
+                    () -> Ui.tr("Tira o efeito de vidro e as sombras: mais leve para TVs lentas."),
+                    () -> Ui.tr("Janelas e transições da TV na metade do tempo. O modo Original volta como era."),
+                    () -> Ui.tr("Compila o código mais usado dos apps para abrirem mais rápido. A TV fica lenta enquanto roda."),
+                    () -> Ui.tr("Apps da TV que rodam escondidos e ocupam memória: você escolhe o que fica ligado."));
             readOptimize();
             return p;
         }
 
         private String optimizeState() {
             if (!optimizeRead) return "…";
-            if (optimizeRunning) return Ui.tr("Otimizando…", "Optimizing…", "Optimizando…");
-            if (optimizedAt == 0) return Ui.tr("Nunca", "Never", "Nunca");
+            if (optimizeRunning) return Ui.tr("Otimizando…");
+            if (optimizedAt == 0) return Ui.tr("Nunca");
             long days = (System.currentTimeMillis() - optimizedAt) / 86_400_000L;
-            return days == 0 ? Ui.tr("Hoje", "Today", "Hoy") : Ui.plural(Ui.tr("plural|one:Há {n} dia|other:Há {n} dias",
-                    "plural|one:{n} day ago|other:{n} days ago", "plural|one:Hace {n} día|other:Hace {n} días"), (int) days);
+            return days == 0 ? Ui.tr("Hoje") : Ui.plural("plural|one:Há {n} dia|other:Há {n} dias", (int) days);
         }
 
         private void askOptimize() {
             if (optimizeRunning) return;
-            openPicker(Ui.tr("Otimizar os apps agora? A TV fica lenta por alguns minutos.", "Optimize the apps now? The TV is slow for a few minutes.",
-                    "¿Optimizar las apps ahora? La TV va lenta unos minutos."),
-                    list(Ui.tr("Otimizar", "Optimize", "Optimizar"), Ui.tr("Cancelar", "Cancel")), 1, at -> {
+            openPicker(Ui.tr("Otimizar os apps agora? A TV fica lenta por alguns minutos."),
+                    list(Ui.tr("Otimizar"), Ui.tr("Cancelar")), 1, at -> {
                         if (at != 0) return;
                         HomeMode.requestOptimizeApps(getContext());
                         optimizeRunning = true;
@@ -1067,35 +986,33 @@ public class SettingsActivity extends Activity {
          * turn off as the list suggests; OK changes the pick, the hint says what each does. Nothing changes until Apply.
          */
         private void openBackgroundApps() {
-            Page p = new Page(Ui.tr("Serviços em segundo plano", "Background services", "Servicios en segundo plano"));
+            Page p = new Page(Ui.tr("Serviços em segundo plano"));
             p.rebuild = () -> {
                 p.rows.clear();
                 if (backgroundApps == null || backgroundApps.isEmpty()) {
-                    p.rows.add(new Row(() -> backgroundApps == null ? Ui.tr("Lendo os serviços…", "Reading the services…", "Leyendo los servicios…")
-                            : Ui.tr("Nenhum serviço para desligar.", "No services to turn off.", "Ningún servicio para apagar."),
+                    p.rows.add(new Row(() -> backgroundApps == null ? Ui.tr("Lendo os serviços…")
+                            : Ui.tr("Nenhum serviço para desligar."),
                             () -> "", () -> {}, null, () -> true));
                 } else {
-                    Row auto = new Row(() -> Ui.tr("Automático", "Automatic", "Automático"), this::automaticText, this::applyAutomatic, null,
+                    Row auto = new Row(() -> Ui.tr("Automático"), this::automaticText, this::applyAutomatic, null,
                             () -> automaticPlan()[0].isEmpty() && automaticPlan()[1].isEmpty());
                     p.rows.add(auto);
                     for (HomeMode.BackgroundApp app : backgroundApps) {
                         p.rows.add(new Row(() -> serviceText(app.pkg)[0], () -> backgroundValue(app),
                                 () -> backgroundKeep.put(app.pkg, !keeps(app)), dir -> backgroundKeep.put(app.pkg, !keeps(app)), null));
                     }
-                    p.rows.add(new Row(() -> Ui.tr("Aplicar", "Apply", "Aplicar"), this::backgroundChanges, this::askApplyBackground, null,
+                    p.rows.add(new Row(() -> Ui.tr("Aplicar"), this::backgroundChanges, this::askApplyBackground, null,
                             () -> backgroundPlan()[0].isEmpty() && backgroundPlan()[1].isEmpty()));
                 }
                 if (page == p && focus >= p.rows.size()) focus = p.rows.size() - 1;
             };
             // Row 0 is Automatic, then one per service, then Apply.
             p.hint = () -> backgroundApps != null && focus == 0 && !backgroundApps.isEmpty()
-                    ? Ui.tr("Desliga o que não faz falta; mantém o essencial.", "Turns off what isn't missed; keeps what matters.", "Apaga lo que no hace falta; mantiene lo esencial.")
+                    ? Ui.tr("Desliga o que não faz falta; mantém o essencial.")
                     : backgroundApps == null || focus < 1 || focus > backgroundApps.size()
-                    ? Ui.tr("Nada é desinstalado: o modo Original liga todos de volta.", "Nothing is uninstalled: Original turns them all back on.",
-                            "Nada se desinstala: el modo Original las vuelve a encender.")
+                    ? Ui.tr("Nada é desinstalado: o modo Original liga todos de volta.")
                     : serviceText(backgroundApps.get(focus - 1).pkg)[1];
-            p.hint2 = () -> Ui.tr("OK escolhe manter ou desligar; nada muda antes de Aplicar.",
-                    "OK picks keep or turn off; nothing changes before Apply.", "OK elige mantener o apagar; nada cambia antes de Aplicar.");
+            p.hint2 = () -> Ui.tr("OK escolhe manter ou desligar; nada muda antes de Aplicar.");
             p.rebuild.run();
             backgroundPage = p;
             open(p);
@@ -1105,39 +1022,39 @@ public class SettingsActivity extends Activity {
         /** {name, what it does and what turning it off costs}, short enough for the hint's line. */
         private static String[] serviceText(String pkg) {
             switch (pkg) {
-                case "com.google.android.katniss": return new String[] {Ui.tr("Google (busca e Assistente)", "Google (search and Assistant)", "Google (búsqueda y Asistente)"),
-                        Ui.tr("Desligado, o microfone do controle e a busca param.", "Off, the remote's mic and search stop working.", "Apagado, el micrófono del control y la búsqueda no funcionan.")};
-                case "com.google.android.speech.pumpkin": return new String[] {Ui.tr("Voz sem internet", "Offline voice", "Voz sin internet"),
-                        Ui.tr("Comandos de voz sem internet, para o Assistente.", "Voice commands without the internet, for the Assistant.", "Comandos de voz sin internet, para el Asistente.")};
-                case "com.google.android.backdrop": return new String[] {Ui.tr("Modo ambiente", "Ambient mode", "Modo ambiente"),
-                        Ui.tr("A tela de descanso de fotos do Google.", "Google's photo screensaver.", "El protector de fotos de Google.")};
-                case "com.google.android.tts": return new String[] {Ui.tr("Leitura em voz alta", "Text-to-speech", "Lectura en voz alta"),
-                        Ui.tr("Lê textos em voz alta; o TalkBack usa.", "Reads text aloud; TalkBack uses it.", "Lee textos en voz alta; TalkBack lo usa.")};
+                case "com.google.android.katniss": return new String[] {Ui.tr("Google (busca e Assistente)"),
+                        Ui.tr("Desligado, o microfone do controle e a busca param.")};
+                case "com.google.android.speech.pumpkin": return new String[] {Ui.tr("Voz sem internet"),
+                        Ui.tr("Comandos de voz sem internet, para o Assistente.")};
+                case "com.google.android.backdrop": return new String[] {Ui.tr("Modo ambiente"),
+                        Ui.tr("A tela de descanso de fotos do Google.")};
+                case "com.google.android.tts": return new String[] {Ui.tr("Leitura em voz alta"),
+                        Ui.tr("Lê textos em voz alta; o TalkBack usa.")};
                 case "com.google.android.marvin.talkback": return new String[] {"TalkBack",
-                        Ui.tr("O leitor de tela, para quem não enxerga bem.", "The screen reader, for people who don't see well.", "El lector de pantalla, para quien no ve bien.")};
-                case "com.google.android.videos": return new String[] {Ui.tr("Google TV (filmes)", "Google TV (movies)", "Google TV (películas)"),
-                        Ui.tr("Comprar e alugar filmes e séries do Google.", "Buying and renting movies and shows from Google.", "Comprar y alquilar películas y series de Google.")};
-                case "com.android.gallery3d": return new String[] {Ui.tr("Galeria", "Gallery", "Galería"),
-                        Ui.tr("Fotos de um pendrive. A TV tem seu próprio leitor.", "Photos from a USB drive. The TV has its own viewer.", "Fotos de un pendrive. La TV tiene su propio visor.")};
+                        Ui.tr("O leitor de tela, para quem não enxerga bem.")};
+                case "com.google.android.videos": return new String[] {Ui.tr("Google TV (filmes)"),
+                        Ui.tr("Comprar e alugar filmes e séries do Google.")};
+                case "com.android.gallery3d": return new String[] {Ui.tr("Galeria"),
+                        Ui.tr("Fotos de um pendrive. A TV tem seu próprio leitor.")};
                 case "com.google.android.music": return new String[] {"Google Play Music",
-                        Ui.tr("Serviço encerrado pelo Google.", "A service Google closed.", "Servicio cerrado por Google.")};
+                        Ui.tr("Serviço encerrado pelo Google.")};
                 case "com.google.android.youtube.tvmusic": return new String[] {"YouTube Music",
-                        Ui.tr("Música do YouTube, num app à parte.", "Music from YouTube, in an app of its own.", "Música de YouTube, en una app aparte.")};
+                        Ui.tr("Música do YouTube, num app à parte.")};
                 case "com.google.android.play.games": return new String[] {"Play Games",
-                        Ui.tr("Conquistas e perfis de jogos do Google.", "Game achievements and profiles from Google.", "Logros y perfiles de juegos de Google.")};
+                        Ui.tr("Conquistas e perfis de jogos do Google.")};
                 case "com.google.android.tvrecommendations":
-                case "com.google.android.leanbacklauncher.recommendations": return new String[] {Ui.tr("Recomendações do Android TV", "Android TV recommendations", "Recomendaciones de Android TV"),
-                        Ui.tr("Sugestões para a tela inicial original da TV.", "Suggestions for the original home screen of the TV.", "Sugerencias para la pantalla de inicio original.")};
-                case "com.google.android.feedback": return new String[] {Ui.tr("Envio de feedback", "Feedback", "Envío de comentarios"),
-                        Ui.tr("Manda opiniões e travamentos ao Google.", "Sends opinions and crashes to Google.", "Envía opiniones y fallos a Google.")};
-                case "com.google.android.tv.bugreportsender": return new String[] {Ui.tr("Relatórios de erro", "Bug reports", "Informes de errores"),
-                        Ui.tr("Manda relatórios de erro ao Google.", "Sends bug reports to Google.", "Envía informes de errores a Google.")};
-                case "com.android.printspooler": return new String[] {Ui.tr("Impressão", "Printing", "Impresión"),
-                        Ui.tr("Imprimir pela TV.", "Printing from the TV.", "Imprimir desde la TV.")};
-                case "com.google.android.syncadapters.calendar": return new String[] {Ui.tr("Sincronizar agenda", "Calendar sync", "Sincronizar calendario"),
-                        Ui.tr("Copia a agenda do Google para a TV.", "Copies the Google calendar to the TV.", "Copia el calendario de Google a la TV.")};
-                case "com.google.android.syncadapters.contacts": return new String[] {Ui.tr("Sincronizar contatos", "Contacts sync", "Sincronizar contactos"),
-                        Ui.tr("Copia os contatos do Google para a TV.", "Copies the Google contacts to the TV.", "Copia los contactos de Google a la TV.")};
+                case "com.google.android.leanbacklauncher.recommendations": return new String[] {Ui.tr("Recomendações do Android TV"),
+                        Ui.tr("Sugestões para a tela inicial original da TV.")};
+                case "com.google.android.feedback": return new String[] {Ui.tr("Envio de feedback"),
+                        Ui.tr("Manda opiniões e travamentos ao Google.")};
+                case "com.google.android.tv.bugreportsender": return new String[] {Ui.tr("Relatórios de erro"),
+                        Ui.tr("Manda relatórios de erro ao Google.")};
+                case "com.android.printspooler": return new String[] {Ui.tr("Impressão"),
+                        Ui.tr("Imprimir pela TV.")};
+                case "com.google.android.syncadapters.calendar": return new String[] {Ui.tr("Sincronizar agenda"),
+                        Ui.tr("Copia a agenda do Google para a TV.")};
+                case "com.google.android.syncadapters.contacts": return new String[] {Ui.tr("Sincronizar contatos"),
+                        Ui.tr("Copia os contatos do Google para a TV.")};
                 default: return new String[] {pkg, ""};
             }
         }
@@ -1149,8 +1066,8 @@ public class SettingsActivity extends Activity {
 
         private String backgroundValue(HomeMode.BackgroundApp app) {
             String mb = app.megabytes > 0 ? app.megabytes + " MB · " : "";
-            if (!app.enabled) return mb + (keeps(app) ? Ui.tr("Ligar", "Turn on", "Encender") : Ui.tr("Desligado", "Off"));
-            return mb + (keeps(app) ? Ui.tr("Manter", "Keep", "Mantener") : Ui.tr("Desligar", "Turn off", "Apagar"));
+            if (!app.enabled) return mb + (keeps(app) ? Ui.tr("Ligar") : Ui.tr("Desligado"));
+            return mb + (keeps(app) ? Ui.tr("Manter") : Ui.tr("Desligar"));
         }
 
         /** {to turn off, to turn on}: what the picks change. */
@@ -1175,9 +1092,8 @@ public class SettingsActivity extends Activity {
 
         private String automaticText() {
             int n = automaticPlan()[0].size();
-            return n == 0 ? Ui.tr("Já está leve", "Already light", "Ya está liviana")
-                    : Ui.plural(Ui.tr("plural|one:Desliga {n}|other:Desliga {n}", "plural|one:Turns off {n}|other:Turns off {n}",
-                    "plural|one:Apaga {n}|other:Apaga {n}"), n);
+            return n == 0 ? Ui.tr("Já está leve")
+                    : Ui.plural("plural|one:Desliga {n}|other:Desliga {n}", n);
         }
 
         private void applyAutomatic() {
@@ -1188,9 +1104,8 @@ public class SettingsActivity extends Activity {
         private String backgroundChanges() {
             List<String>[] plan = backgroundPlan();
             int n = plan[0].size() + plan[1].size();
-            return n == 0 ? Ui.tr("Nada a mudar", "Nothing to change", "Nada que cambiar")
-                    : Ui.plural(Ui.tr("plural|one:{n} mudança|other:{n} mudanças", "plural|one:{n} change|other:{n} changes",
-                    "plural|one:{n} cambio|other:{n} cambios"), n);
+            return n == 0 ? Ui.tr("Nada a mudar")
+                    : Ui.plural("plural|one:{n} mudança|other:{n} mudanças", n);
         }
 
         private void askApplyBackground() {
@@ -1199,9 +1114,9 @@ public class SettingsActivity extends Activity {
 
         private void confirmBackground(List<String>[] plan) {
             if (plan[0].isEmpty() && plan[1].isEmpty()) return;
-            String question = Ui.trf(Ui.tr("Desligar {off} e ligar {on}?", "Turn off {off} and turn on {on}?", "¿Apagar {off} y encender {on}?"),
+            String question = Ui.trf("Desligar {off} e ligar {on}?",
                     "off", plan[0].size(), "on", plan[1].size());
-            openPicker(question, list(Ui.tr("Aplicar", "Apply", "Aplicar"), Ui.tr("Cancelar", "Cancel")), 1, at -> {
+            openPicker(question, list(Ui.tr("Aplicar"), Ui.tr("Cancelar")), 1, at -> {
                 if (at != 0) return;
                 HomeMode.requestBackgroundApps(getContext(), plan[0], plan[1]);
                 backgroundApps = null;   // read again once the job is through (each app is checked first)
@@ -1233,122 +1148,116 @@ public class SettingsActivity extends Activity {
 
         /** The picks' lists, in Prefs.LIST_* order. */
         private static List<String> recsListNames() {
-            return list(Ui.tr("Original (5 por hora)", "Original (5 an hour)"), Ui.tr("Top do dia", "Today's top"),
-                    Ui.tr("Top da semana", "This week's top", "Top de la semana"), Ui.tr("Lançamentos", "New releases", "Estrenos"),
-                    Ui.tr("Aclamados", "Acclaimed", "Aclamados"));
+            return list(Ui.tr("Original (5 por hora)"), Ui.tr("Top do dia"),
+                    Ui.tr("Top da semana"), Ui.tr("Lançamentos"),
+                    Ui.tr("Aclamados"));
         }
 
         /** The picks: which list, how big the top is, where they open, the TMDB key, and Continue Watching's apps. */
         private Page picksPage() {
-            Page p = new Page(Ui.tr("Recomendações", "Picks"));
-            p.rows.add(choice(() -> Ui.tr("Lista", "List", "Lista"),
+            Page p = new Page(Ui.tr("Recomendações"));
+            p.rows.add(choice(() -> Ui.tr("Lista"),
                     SettingsView::recsListNames, Prefs::recsList, Prefs::setRecsList));
-            Row top = choice(() -> Ui.tr("Títulos na lista", "Titles in the list", "Títulos en la lista"), () -> {
+            Row top = choice(() -> Ui.tr("Títulos na lista"), () -> {
                 List<String> l = new ArrayList<>();
                 for (int n = Prefs.TOP_MIN; n <= Prefs.TOP_MAX; n++) l.add(String.valueOf(n));
                 return l;
             }, () -> Prefs.topCount() - Prefs.TOP_MIN, at -> Prefs.setTopCount(Prefs.TOP_MIN + at));
             p.rows.add(new Row(top.label, top.value, () -> { if (Prefs.topRecs()) top.ok.run(); },   // only the top has a size
                     dir -> { if (Prefs.topRecs()) top.adjust.accept(dir); }, () -> !Prefs.topRecs()));
-            p.rows.add(choice(() -> Ui.tr("Buscar a lista de novo", "Fetch the list again", "Buscar la lista de nuevo"),
-                    () -> list(Ui.tr("A cada hora", "Every hour", "Cada hora"), Ui.tr("A cada 3 horas", "Every 3 hours", "Cada 3 horas"),
-                            Ui.tr("A cada 6 horas", "Every 6 hours", "Cada 6 horas"), Ui.tr("A cada 12 horas", "Every 12 hours", "Cada 12 horas"),
-                            Ui.tr("Uma vez por dia", "Once a day", "Una vez al día")),
+            p.rows.add(choice(() -> Ui.tr("Buscar a lista de novo"),
+                    () -> list(Ui.tr("A cada hora"), Ui.tr("A cada 3 horas"),
+                            Ui.tr("A cada 6 horas"), Ui.tr("A cada 12 horas"),
+                            Ui.tr("Uma vez por dia")),
                     Prefs::recsEveryIndex, Prefs::setRecsEveryIndex));
-            p.rows.add(choice(() -> Ui.tr("Abrir recomendações em", "Open picks in"), SettingsView::targetNames,
+            p.rows.add(choice(() -> Ui.tr("Abrir recomendações em"), SettingsView::targetNames,
                     SettingsView::targetIndex, at -> Prefs.setRecsTarget(targetKeys()[at])));
-            p.rows.add(new Row(() -> Ui.tr("Chave do TMDB", "TMDB key"), this::tmdbKeyState, activity::askTmdbKey, null, null));
-            Row watch = new Row(() -> Ui.tr("Continuar assistindo", "Continue Watching", "Seguir viendo"),
+            p.rows.add(new Row(() -> Ui.tr("Chave do TMDB"), this::tmdbKeyState, activity::askTmdbKey, null, null));
+            Row watch = new Row(() -> Ui.tr("Continuar assistindo"),
                     SettingsView::watchAppsState, this::openWatchApps, null, null);
             p.rows.add(watch);
-            p.hint = () -> Ui.tr("OK abre as opções; ← e → mudam direto.", "OK opens the choices; ← and → change it right away.");
-            p.hint2 = () -> Ui.tr("Usa a API do TMDB, sem endosso ou certificação do TMDB.",
-                    "This product uses the TMDB API but is not endorsed or certified by TMDB.");
+            p.hint = () -> Ui.tr("OK abre as opções; ← e → mudam direto.");
+            p.hint2 = () -> Ui.tr("Usa a API do TMDB, sem endosso ou certificação do TMDB.");
             p.symbol = "play";
             describe(p,
-                    new String[] {"Original: cinco títulos novos por hora. Top do dia e da semana: os mais vistos. Lançamentos: o que saiu nos últimos 2 meses. Aclamados: os mais bem avaliados dos últimos 3 anos.", "Original: five new titles an hour. Today's and this week's top: the most watched. New releases: out in the past 2 months. Acclaimed: the best rated of the past 3 years.", "Original: cinco títulos nuevos por hora. Top del día y de la semana: los más vistos. Estrenos: lo que salió en los últimos 2 meses. Aclamados: los mejor valorados de los últimos 3 años."},
-                    new String[] {"Quantos títulos a lista mostra (menos no Original, que mostra cinco).", "How many titles the list shows (not Original, which shows five).", "Cuántos títulos muestra la lista (no en Original, que muestra cinco)."},
-                    new String[] {"De quanto em quanto tempo a lista é buscada de novo no TMDB. Mais vezes trazem títulos novos mais cedo.", "How often the list is fetched again from TMDB. More often brings new titles sooner.", "Cada cuánto se busca la lista de nuevo en TMDB. Más seguido trae títulos nuevos antes."},
-                    new String[] {"Onde um título abre quando você aperta OK nele.", "Where a title opens when you press OK on it.", "Dónde abre un título al pulsar OK."},
-                    new String[] {"A sua chave grátis do TMDB: sem ela não há recomendações nem fotos na tela de descanso.", "Your free TMDB key: without it there are no picks or screensaver photos.", "Tu clave gratis de TMDB: sin ella no hay recomendaciones ni fotos en el protector."},
-                    new String[] {"Os apps cujos episódios e filmes começados aparecem no Início.", "The apps whose started episodes and movies show on the home screen.", "Las apps cuyos episodios y películas empezados aparecen en el inicio."});
+                    () -> Ui.tr("Original: cinco títulos novos por hora. Top do dia e da semana: os mais vistos. Lançamentos: o que saiu nos últimos 2 meses. Aclamados: os mais bem avaliados dos últimos 3 anos."),
+                    () -> Ui.tr("Quantos títulos a lista mostra (menos no Original, que mostra cinco)."),
+                    () -> Ui.tr("De quanto em quanto tempo a lista é buscada de novo no TMDB. Mais vezes trazem títulos novos mais cedo."),
+                    () -> Ui.tr("Onde um título abre quando você aperta OK nele."),
+                    () -> Ui.tr("A sua chave grátis do TMDB: sem ela não há recomendações nem fotos na tela de descanso."),
+                    () -> Ui.tr("Os apps cujos episódios e filmes começados aparecem no Início."));
             return p;
         }
 
         /** The drawer's widgets, each on or off (the row shares its width among the ones on), and their options. */
         private Page weatherPage() {
-            Page p = new Page(Ui.tr("Clima, cotações e futebol", "Weather, prices and football", "Clima, cotizaciones y fútbol"));
-            p.rows.add(onOff(() -> Ui.tr("Widget do clima", "Weather widget"), Prefs::weather, Prefs::setWeather, null));
-            p.rows.add(new Row(() -> Ui.tr("Cidade do clima", "Weather city"), () -> cityStatus.isEmpty() ? Prefs.city() : cityStatus,
+            Page p = new Page(Ui.tr("Clima, cotações e futebol"));
+            p.rows.add(onOff(() -> Ui.tr("Widget do clima"), Prefs::weather, Prefs::setWeather, null));
+            p.rows.add(new Row(() -> Ui.tr("Cidade do clima"), () -> cityStatus.isEmpty() ? Prefs.city() : cityStatus,
                     this::askCity, null, null));
-            p.rows.add(onOff(() -> Ui.tr("Widget de cotações", "Prices widget", "Widget de cotizaciones"), Prefs::quotes, Prefs::setQuotes, null));
-            p.rows.add(onOff(() -> Ui.tr("Widget de futebol", "Football widget", "Widget de fútbol"),
+            p.rows.add(onOff(() -> Ui.tr("Widget de cotações"), Prefs::quotes, Prefs::setQuotes, null));
+            p.rows.add(onOff(() -> Ui.tr("Widget de futebol"),
                     Prefs::footballWidget, Prefs::setFootballWidget, null));
             // Football: the team (a list, or a search by name) and the extras.
             java.util.function.BooleanSupplier noFootball = () -> !Prefs.footballWidget();
-            Row team = new Row(() -> Ui.tr("Time", "Team", "Equipo"),
-                    () -> Prefs.footballTeamName().isEmpty() ? Ui.tr("Escolher", "Choose", "Elegir") : Prefs.footballTeamName(),
+            Row team = new Row(() -> Ui.tr("Time"),
+                    () -> Prefs.footballTeamName().isEmpty() ? Ui.tr("Escolher") : Prefs.footballTeamName(),
                     this::openTeams, null, null);
             p.rows.add(dimmed(team, noFootball));
-            p.rows.add(onOff(() -> Ui.tr("Avisos de gol e de início", "Goal and kickoff notices", "Avisos de gol y de inicio"),
+            p.rows.add(onOff(() -> Ui.tr("Avisos de gol e de início"),
                     Prefs::footballAlerts, Prefs::setFootballAlerts, noFootball));
-            p.rows.add(onOff(() -> Ui.tr("Placar na tela de descanso", "Score on the screensaver", "Marcador en el salvapantallas"),
+            p.rows.add(onOff(() -> Ui.tr("Placar na tela de descanso"),
                     Prefs::footballInDream, Prefs::setFootballInDream, noFootball));
-            Row every = choice(() -> Ui.tr("Atualizar cotações", "Refresh prices"), () -> list(Ui.tr("Tempo real", "Live"), "1 min", "5 min"),
+            Row every = choice(() -> Ui.tr("Atualizar cotações"), () -> list(Ui.tr("Tempo real"), "1 min", "5 min"),
                     Prefs::pricesEveryIndex, Prefs::setPricesEveryIndex);
             p.rows.add(dimmed(every, () -> !Prefs.quotes()));
-            String[] coins = dollar() ? new String[] {"Bitcoin", "Ethereum", "Solana", Ui.tr("Dólar", "Dollar"), "Euro"}
+            String[] coins = dollar() ? new String[] {"Bitcoin", "Ethereum", "Solana", Ui.tr("Dólar"), "Euro"}
                     : new String[] {"Bitcoin", "Ethereum", "Solana"};
             for (int i = 0; i < coins.length; i++) {
                 int coin = i;
                 String name = coins[i];
                 // No quotes widget, nowhere to show prices: the coins read as off (and stay locked) until it is back on.
                 p.rows.add(helped(onOff(() -> name, () -> Prefs.quotes() && Prefs.coin(coin), on -> Prefs.setCoin(coin, on),
-                        () -> !Prefs.quotes()), () -> Ui.trf(Ui.tr("Mostra a cotação de {coin} no cartão de cotações.",
-                        "Shows {coin}'s price on the prices card.", "Muestra la cotización de {coin} en la tarjeta."), "coin", name)));
+                        () -> !Prefs.quotes()), () -> Ui.trf("Mostra a cotação de {coin} no cartão de cotações.", "coin", name)));
             }
             p.symbol = "partly_cloudy_day";
             describe(p,
-                    new String[] {"O cartão do clima na gaveta do Início. Os widgets ligados dividem a linha entre si.", "The weather card in the home screen's drawer. The widgets that are on share the row.", "La tarjeta del clima en el cajón del inicio. Los widgets activos comparten la fila."},
-                    new String[] {"A cidade da previsão (e do fuso do relógio automático).", "The forecast's city (and the automatic clock's time zone).", "La ciudad del pronóstico (y de la zona del reloj automático)."},
-                    new String[] {"O cartão das cotações: as moedas escolhidas abaixo, com a variação em 24 horas.", "The prices card: the coins picked below, with the 24-hour change.", "La tarjeta de cotizaciones: las monedas elegidas abajo, con la variación en 24 horas."},
-                    new String[] {"O cartão do seu time: o jogo ao vivo ou o próximo; sem jogo perto, o último resultado e a posição.", "Your team's card: the live or next match; with none soon, the last result and the standing.", "La tarjeta de tu equipo: el partido en vivo o el próximo; sin uno cerca, el último resultado y la posición."},
-                    new String[] {"O time do cartão de futebol: da lista ou buscando pelo nome.", "The football card's team: from the list or searched by name.", "El equipo de la tarjeta de fútbol: de la lista o buscando por nombre."},
-                    new String[] {"Um aviso na tela quando o jogo do seu time começa e a cada gol.", "A notice on screen when your team's game starts and at every goal.", "Un aviso en pantalla cuando empieza el partido de tu equipo y en cada gol."},
-                    new String[] {"O placar ao vivo também na tela de descanso.", "The live score on the screensaver too.", "El marcador en vivo también en el protector."},
-                    new String[] {"De quanto em quanto tempo as cotações se atualizam.", "How often the prices refresh.", "Cada cuánto se actualizan las cotizaciones."});
-            p.hint = () -> Ui.tr("OK abre as opções; ← e → mudam direto.", "OK opens the choices; ← and → change it right away.");
+                    () -> Ui.tr("O cartão do clima na gaveta do Início. Os widgets ligados dividem a linha entre si."),
+                    () -> Ui.tr("A cidade da previsão (e do fuso do relógio automático)."),
+                    () -> Ui.tr("O cartão das cotações: as moedas escolhidas abaixo, com a variação em 24 horas."),
+                    () -> Ui.tr("O cartão do seu time: o jogo ao vivo ou o próximo; sem jogo perto, o último resultado e a posição."),
+                    () -> Ui.tr("O time do cartão de futebol: da lista ou buscando pelo nome."),
+                    () -> Ui.tr("Um aviso na tela quando o jogo do seu time começa e a cada gol."),
+                    () -> Ui.tr("O placar ao vivo também na tela de descanso."),
+                    () -> Ui.tr("De quanto em quanto tempo as cotações se atualizam."));
+            p.hint = () -> Ui.tr("OK abre as opções; ← e → mudam direto.");
             return p;
         }
 
         /** The clocks' time: automatic (the weather city's zone and the time from the internet) or a zone and adjustment by hand. */
         private Page clockPage() {
-            Page p = new Page(Ui.tr("Relógio", "Clock", "Reloj"));
-            p.rows.add(choice(() -> Ui.tr("Hora", "Time", "Hora"),
-                    () -> list(Ui.tr("Automática (internet)", "Automatic (internet)", "Automática (internet)"),
-                            Ui.tr("Manual", "Manual", "Manual")),
+            Page p = new Page(Ui.tr("Relógio"));
+            p.rows.add(choice(() -> Ui.tr("Hora"),
+                    () -> list(Ui.tr("Automática (internet)"),
+                            Ui.tr("Manual")),
                     () -> Prefs.manualClock() ? 1 : 0, at -> Prefs.setManualClock(at == 1)));
             java.util.function.BooleanSupplier automatic = () -> !Prefs.manualClock();
-            p.rows.add(dimmed(choice(() -> Ui.tr("Fuso horário", "Time zone", "Zona horaria"), SettingsView::zoneNames,
+            p.rows.add(dimmed(choice(() -> Ui.tr("Fuso horário"), SettingsView::zoneNames,
                     () -> automatic.getAsBoolean() ? nearest(Clock.ZONES, Clock.zoneMinutes()) : nearest(Clock.ZONES, Prefs.clockZone()),
                     at -> Prefs.setClockZone(Clock.ZONES[at])), automatic));
-            p.rows.add(dimmed(choice(() -> Ui.tr("Ajuste da hora", "Time adjustment", "Ajuste de la hora"), SettingsView::adjustNames,
+            p.rows.add(dimmed(choice(() -> Ui.tr("Ajuste da hora"), SettingsView::adjustNames,
                     () -> automatic.getAsBoolean() ? nearest(Clock.ADJUSTS, 0) : nearest(Clock.ADJUSTS, Prefs.clockAdjust()),
                     at -> Prefs.setClockAdjust(Clock.ADJUSTS[at])), automatic));
-            p.rows.add(new Row(() -> Ui.tr("Agora", "Now", "Ahora"), () -> Ui.clock(System.currentTimeMillis()), () -> {}, null, null));
+            p.rows.add(new Row(() -> Ui.tr("Agora"), () -> Ui.clock(System.currentTimeMillis()), () -> {}, null, null));
             p.symbol = "recents";
             describe(p,
-                    new String[] {"Automática: a hora certa da internet no fuso da cidade do clima. Manual: você escolhe.", "Automatic: the exact time from the internet in the weather city's zone. Manual: you pick.", "Automática: la hora exacta de internet en la zona de la ciudad. Manual: tú eliges."},
-                    new String[] {"O fuso do relógio, na hora manual.", "The clock's time zone, for the manual time.", "La zona del reloj, en la hora manual."},
-                    new String[] {"Minutos a mais ou a menos, se a hora ainda estiver errada.", "Minutes more or less, if the time is still off.", "Minutos de más o de menos, si la hora sigue mal."},
-                    new String[] {"A hora que o Free My TV mostra agora.", "The time Free My TV shows now.", "La hora que muestra Free My TV ahora."});
+                    () -> Ui.tr("Automática: a hora certa da internet no fuso da cidade do clima. Manual: você escolhe."),
+                    () -> Ui.tr("O fuso do relógio, na hora manual."),
+                    () -> Ui.tr("Minutos a mais ou a menos, se a hora ainda estiver errada."),
+                    () -> Ui.tr("A hora que o Free My TV mostra agora."));
             p.hint = () -> Prefs.manualClock()
-                    ? Ui.tr("Escolha o fuso e, se a hora ainda estiver errada, ajuste com ← e →.",
-                            "Pick the zone and, if the time is still off, adjust it with ← and →.",
-                            "Elige la zona y, si la hora sigue mal, ajústala con ← y →.")
-                    : Ui.tr("Usa o fuso da cidade do clima e a hora certa da internet.",
-                            "Uses the weather city's time zone and the exact time from the internet.",
-                            "Usa la zona de la ciudad del clima y la hora exacta de internet.");
+                    ? Ui.tr("Escolha o fuso e, se a hora ainda estiver errada, ajuste com ← e →.")
+                    : Ui.tr("Usa o fuso da cidade do clima e a hora certa da internet.");
             return p;
         }
 
@@ -1373,24 +1282,24 @@ public class SettingsActivity extends Activity {
 
         /** Which screensaver Free My TV mode keeps, and a look at Free My TV's. */
         private Page screensaverPage() {
-            Page p = new Page(Ui.tr("Tela de descanso", "Screensaver"));
-            p.rows.add(choice(() -> Ui.tr("Tela de descanso", "Screensaver"),
-                    () -> list(Ui.tr("Da TV (fotos do Google)", "The TV's own (Google photos)"), "Free My TV"),
+            Page p = new Page(Ui.tr("Tela de descanso"));
+            p.rows.add(choice(() -> Ui.tr("Tela de descanso"),
+                    () -> list(Ui.tr("Da TV (fotos do Google)"), "Free My TV"),
                     () -> Prefs.ownScreensaver() ? 1 : 0, at -> {
                         boolean own = at == 1;
                         if (own == Prefs.ownScreensaver()) return;
                         Prefs.setOwnScreensaver(own);
                         HomeMode.requestScreensaver(getContext(), own);   // the TV's setting changes in the main process
                     }));
-            p.rows.add(new Row(() -> Ui.tr("Ver a do Free My TV", "Preview Free My TV's", "Ver la de Free My TV"),
-                    () -> Ui.tr("Ver agora", "Preview"), () -> {
+            p.rows.add(new Row(() -> Ui.tr("Ver a do Free My TV"),
+                    () -> Ui.tr("Ver agora"), () -> {
                         pause();
                         activity.showPreview();
                     }, null, null));
             p.symbol = "bedtime";
             describe(p,
-                    new String[] {"No modo Free My TV: a da TV (fotos do Google) ou a do Free My TV, com relógio, clima e cartazes.", "In Free My TV mode: the TV's own (Google photos) or Free My TV's, with clock, weather and posters.", "En modo Free My TV: el de la TV (fotos de Google) o el de Free My TV, con reloj, clima y carteles."},
-                    new String[] {"Mostra a tela de descanso do Free My TV agora. Qualquer botão fecha.", "Shows Free My TV's screensaver now. Any button closes it.", "Muestra el protector de Free My TV ahora. Cualquier botón lo cierra."});
+                    () -> Ui.tr("No modo Free My TV: a da TV (fotos do Google) ou a do Free My TV, com relógio, clima e cartazes."),
+                    () -> Ui.tr("Mostra a tela de descanso do Free My TV agora. Qualquer botão fecha."));
             return p;
         }
 
@@ -1400,11 +1309,10 @@ public class SettingsActivity extends Activity {
          * buttons are told apart by what this TV receives, not by a brand's list of names.
          */
         private Page keysPage() {
-            Page p = new Page(Ui.tr("Botões do Controle", "Remote Buttons"));
+            Page p = new Page(Ui.tr("Botões do Controle"));
             p.rebuild = () -> {
                 p.rows.clear();
-                p.rows.add(new Row(() -> learningKeys ? Ui.tr("Aperte o botão no controle…", "Press the button on the remote…",
-                        "Pulsa el botón en el control…") : Ui.tr("Identificar um botão", "Identify a button", "Identificar un botón"),
+                p.rows.add(new Row(() -> learningKeys ? Ui.tr("Aperte o botão no controle…") : Ui.tr("Identificar um botão"),
                         () -> "", this::startLearningKeys, null, null));
                 for (int key : Prefs.keysInUse()) {
                     // A brand default this remote never sent (another model's code) would only confuse: it shows once seen.
@@ -1415,15 +1323,10 @@ public class SettingsActivity extends Activity {
                 keepVisible(false);
             };
             p.symbol = "control";
-            p.about = () -> Ui.tr("“Identificar um botão”: aperte o botão no controle e escolha o que ele abre. Os botões já escolhidos vêm abaixo.",
-                    "“Identify a button”: press the button on the remote and pick what it opens. The buttons already set are below.",
-                    "“Identificar un botón”: pulsa el botón en el control y elige qué abre. Los botones ya elegidos van abajo.");
+            p.about = () -> Ui.tr("“Identificar um botão”: aperte o botão no controle e escolha o que ele abre. Os botões já escolhidos vêm abaixo.");
             p.hint = this::keysHint;
-            p.hint2 = () -> learningKeys ? Ui.tr("Setas, OK, Voltar, Home, energia e volume não mudam. Voltar cancela.",
-                    "Arrows, OK, Back, Home, power and volume don't change. Back cancels.",
-                    "Flechas, OK, Atrás, Inicio, encendido y volumen no cambian. Atrás cancela.")
-                    : Ui.tr("Em Nada, a TV volta a cuidar do botão.", "On Nothing, the TV handles the button again.",
-                    "En Nada, la TV vuelve a encargarse del botón.");
+            p.hint2 = () -> learningKeys ? Ui.tr("Setas, OK, Voltar, Home, energia e volume não mudam. Voltar cancela.")
+                    : Ui.tr("Em Nada, a TV volta a cuidar do botão.");
             p.rebuild.run();
             return p;
         }
@@ -1462,7 +1365,7 @@ public class SettingsActivity extends Activity {
                 pickKeyTarget(key);
             } else if (System.currentTimeMillis() - learningSince > 60_000) {
                 stopLearningKeys();
-                keysError = Ui.tr("Nenhum botão foi apertado.", "No button was pressed.", "No se pulsó ningún botón.");
+                keysError = Ui.tr("Nenhum botão foi apertado.");
             }
         }
 
@@ -1473,7 +1376,7 @@ public class SettingsActivity extends Activity {
 
         private String targetName(int key) {
             int at = appPkgs.indexOf(Prefs.keyApp(key));
-            return at >= 0 ? appLabels.get(at) : Ui.tr("Não instalado", "Not installed");
+            return at >= 0 ? appLabels.get(at) : Ui.tr("Não instalado");
         }
 
         /** The brand's name for one of its buttons (one remote per brand), else what this TV calls the key. */
@@ -1492,14 +1395,13 @@ public class SettingsActivity extends Activity {
                 String s = KeyEvent.keyCodeToString(key);
                 name = s.startsWith("KEYCODE_") ? s.substring(8).replace('_', ' ') : String.valueOf(key);
             }
-            return Ui.trf(Ui.tr("Botão {name}", "{name} button", "Botón {name}"), "name", name);
+            return Ui.trf("Botão {name}", "name", name);
         }
 
         /** Saves a button's app; if it didn't save, says so; and makes sure the key service is on to use it. */
         private void setKeyApp(int key, String pkg) {
             keysError = Prefs.setKeyApp(key, pkg) ? ""
-                    : Ui.tr("Não deu para salvar a escolha. Tente de novo.", "Couldn't save the choice. Try again.",
-                    "No se pudo guardar la elección. Inténtalo de nuevo.");
+                    : Ui.tr("Não deu para salvar a escolha. Tente de novo.");
             if (!keysServiceOn) HomeMode.ensureRemoteService(getContext(), 0);
         }
 
@@ -1521,23 +1423,19 @@ public class SettingsActivity extends Activity {
         /** Waiting for a button, else what's wrong, else the button just pressed and what it opens, else how to start. */
         private String keysHint() {
             if (learningKeys) {
-                return Ui.tr("Aperte o botão do controle que você quer configurar.", "Press the button on the remote you want to set.",
-                        "Pulsa el botón del control que quieres configurar.");
+                return Ui.tr("Aperte o botão do controle que você quer configurar.");
             }
             if (!keysError.isEmpty()) return keysError;
             // The service runs only in Free My TV mode (Original turns it off on purpose).
             if (!keysServiceOn && RemoteKeys.supported() && HomeMode.FREE.equals(state.optString("mode"))) {
-                return Ui.tr("O serviço dos botões está desligado. Ligando…", "The buttons' service is off. Turning it on…",
-                        "El servicio de los botones está apagado. Encendiéndolo…");
+                return Ui.tr("O serviço dos botões está desligado. Ligando…");
             }
             long now = System.currentTimeMillis();
             for (int key : Prefs.keysInUse()) {
                 if (now - Prefs.keySeenAt(key) > 15_000) continue;
-                return Ui.trf("{button} works: it opens {app}.", "button", keyLabel(key), "app", targetName(key));
+                return Ui.trf("{button} funciona: abre o {app}.", "button", keyLabel(key), "app", targetName(key));
             }
-            return Ui.tr("Identificar um botão: aperte qualquer botão do controle e escolha o que ele abre.",
-                    "Identify a button: press any button on the remote and pick what it opens.",
-                    "Identificar un botón: pulsa cualquier botón del control y elige qué abre.");
+            return Ui.tr("Identificar um botão: aperte qualquer botão do controle e escolha o que ele abre.");
         }
 
         /** A row that opens a page (a chevron instead of a value). */
@@ -1566,7 +1464,7 @@ public class SettingsActivity extends Activity {
         /** On / Off, with ← → or OK (a list of the two). `dim`: greyed out and locked. */
         private Row onOff(java.util.function.Supplier<String> label, java.util.function.BooleanSupplier on,
                           java.util.function.Consumer<Boolean> set, java.util.function.BooleanSupplier dim) {
-            Row r = choice(label, () -> list(Ui.tr("Ligado", "On"), Ui.tr("Desligado", "Off")), () -> on.getAsBoolean() ? 0 : 1,
+            Row r = choice(label, () -> list(Ui.tr("Ligado"), Ui.tr("Desligado")), () -> on.getAsBoolean() ? 0 : 1,
                     at -> set.accept(at == 0));
             return dim == null ? r : dimmed(r, dim);
         }
@@ -1644,7 +1542,7 @@ public class SettingsActivity extends Activity {
                 r.check = i == current;
                 p.rows.add(r);
             }
-            p.hint = () -> (focus + 1) + " / " + p.rows.size() + "  ·  " + Ui.tr("OK escolhe, Voltar cancela.", "OK picks, Back cancels.");
+            p.hint = () -> (focus + 1) + " / " + p.rows.size() + "  ·  " + Ui.tr("OK escolhe, Voltar cancela.");
             back.push(new Place(screen, page, focus, scroll.target));
             showPage(p, Math.max(0, current));
         }
@@ -1705,16 +1603,16 @@ public class SettingsActivity extends Activity {
         /** A row as TalkBack reads it: its name and its value, as on screen. */
         private String rowText(int row) {
             if (screen == HOME_CHOICE) {
-                String name = row == 0 ? "Free My TV, " + Ui.tr("sem anúncios, com a tela de descanso da TV", "no ads, with the TV's own screensaver")
-                        : "Original, " + Ui.tr("o Início de fábrica da TV", "the TV's factory home screen");
+                String name = row == 0 ? "Free My TV, " + Ui.tr("sem anúncios, com a tela de descanso da TV")
+                        : "Original, " + Ui.tr("o Início de fábrica da TV");
                 boolean inUse = (row == 0) == freeActive();
-                return name + (inUse ? Ui.tr(". Em uso", ". In use") : "") + ", " + (row + 1) + Ui.tr(" de 2", " of 2");
+                return name + (inUse ? Ui.tr(". Em uso") : "") + ", " + Ui.trf("{n} de {total}", "n", row + 1, "total", 2);
             }
             if (page == null || row >= page.rows.size()) return "";
             Row r = page.rows.get(row);
             String value = page == main && row == HOME_ROW && busy() ? busyLine() : r.value.get();
-            return r.label.get() + (value.isEmpty() ? "" : ", " + value) + (r.check ? Ui.tr(", escolhido", ", selected") : "")
-                    + ", " + (row + 1) + Ui.tr(" de ", " of ") + page.rows.size();
+            return r.label.get() + (value.isEmpty() ? "" : ", " + value) + (r.check ? Ui.tr(", escolhido") : "")
+                    + ", " + Ui.trf("{n} de {total}", "n", row + 1, "total", page.rows.size());
         }
 
         private RectF rowBox(int row) {
@@ -1861,7 +1759,7 @@ public class SettingsActivity extends Activity {
 
         private String busyLine() {
             String text = HomeMode.busyText(state);
-            return text.isEmpty() ? Ui.tr("Começando…", "Starting…") : text;
+            return text.isEmpty() ? Ui.tr("Começando…") : text;
         }
 
         private boolean freeActive() {
@@ -1911,7 +1809,7 @@ public class SettingsActivity extends Activity {
                 if (page.about != null) return page.about.get();
                 if (page != main) return "";
             }
-            return Ui.tr("Início e tela de descanso da TV", "Your TV's home screen and screensaver", "Inicio y protector de pantalla de la TV");
+            return Ui.tr("Início e tela de descanso da TV");
         }
 
         private final java.util.HashMap<String, StaticLayout> aboutLayouts = new java.util.HashMap<>();
@@ -2080,7 +1978,7 @@ public class SettingsActivity extends Activity {
             boolean working = busy();
             String busyText = HomeMode.busyText(state);
             if (working && (busyText.contains("Permitir") || busyText.contains("Allow"))) {
-                c.drawText(Ui.tr("Na TV: marque “Sempre permitir” e aperte OK.", "On the TV: tick “Always allow” and press OK."),
+                c.drawText(Ui.tr("Na TV: marque “Sempre permitir” e aperte OK."),
                         LIST_X * k + 30 * k, y, warn);
             } else if (!working && !error.isEmpty()) {
                 // The whole message, on up to four lines: some say what to do (the Wi-Fi one, #14).
@@ -2100,7 +1998,7 @@ public class SettingsActivity extends Activity {
         /** Status: the comparison with the original home screen, the picks, and the latest notices. */
         private void drawStatus(Canvas c) {
             float x = LIST_X * k + 30 * k;
-            c.drawText(Ui.tr("Estado", "Status", "Estado"), x, (LIST_TOP - 24) * k, heading);
+            c.drawText(Ui.tr("Estado"), x, (LIST_TOP - 24) * k, heading);
             float y = drawComparison(c, (LIST_TOP + 40) * k);
             y = drawRecs(c, y + 40 * k);
             drawNotices(c, y + 56 * k);
@@ -2109,28 +2007,25 @@ public class SettingsActivity extends Activity {
         /** Home screen picks: status, and the credit TMDB asks for. */
         private float drawRecs(Canvas c, float y) {
             float x = LIST_X * k + 30 * k;
-            c.drawText(Ui.tr("RECOMENDAÇÕES", "RECOMMENDATIONS"), x, y, header);
+            c.drawText(Ui.tr("RECOMENDAÇÕES"), x, y, header);
             String line;
             String error = recs.optString("error");
             int count = recs.optInt("count");
-            if (!hasKey) line = Ui.tr("Sem chave do TMDB: adicione em Recomendações → Chave do TMDB.", "No TMDB key: add one in Picks → TMDB key.");
-            else if (!error.isEmpty()) line = Ui.tr("Erro: ", "Error: ") + error + ".";
-            else if (count > 0 && Prefs.topRecs()) line = Ui.trf(Ui.tr("Ligadas · {list}, {n} títulos.", "On · {list}, {n} titles.",
-                    "Activadas · {list}, {n} títulos."), "list", recsListNames().get(Prefs.recsList()), "n", count);
-            else if (count > 0) line = Ui.tr("Ligadas · " + count + " títulos nos apps da TV, 5 novos a cada hora.",
-                    "On · " + count + " titles from the TV's apps, 5 new ones every hour.");
-            else line = Ui.tr("Buscando os títulos…", "Fetching titles…");
+            if (!hasKey) line = Ui.tr("Sem chave do TMDB: adicione em Recomendações → Chave do TMDB.");
+            else if (!error.isEmpty()) line = Ui.trf("Erro: {error}.", "error", error);
+            else if (count > 0 && Prefs.topRecs()) line = Ui.trf("Ligadas · {list}, {n} títulos.", "list", recsListNames().get(Prefs.recsList()), "n", count);
+            else if (count > 0) line = Ui.trf("Ligadas · {n} títulos nos apps da TV, 5 novos a cada hora.", "n", count);
+            else line = Ui.tr("Buscando os títulos…");
             c.drawText(TextUtils.ellipsize(line, notice, 790 * k, TextUtils.TruncateAt.END).toString(), x, y + 42 * k, notice);
             version.setTextAlign(Paint.Align.LEFT);
-            c.drawText(Ui.tr("Usa a API do TMDB, sem endosso ou certificação do TMDB.",
-                    "This product uses the TMDB API but is not endorsed or certified by TMDB."), x, y + 78 * k, version);
+            c.drawText(Ui.tr("Usa a API do TMDB, sem endosso ou certificação do TMDB."), x, y + 78 * k, version);
             version.setTextAlign(Paint.Align.CENTER);
             return y + 78 * k;
         }
 
         private float drawComparison(Canvas c, float y) {
             float x = LIST_X * k + 30 * k, colA = LIST_R * k - 220 * k, colB = LIST_R * k - 30 * k;
-            c.drawText(Ui.tr("COMPARAÇÃO", "COMPARISON"), x, y, header);
+            c.drawText(Ui.tr("COMPARAÇÃO"), x, y, header);
             cellValue.setColor(fg(0x73FFFFFF));
             c.drawText("Original", colA, y, cellValue);
             c.drawText("Free My TV", colB, y, cellValue);
@@ -2138,8 +2033,8 @@ public class SettingsActivity extends Activity {
             JSONObject metrics = state.optJSONObject("metrics");
             JSONObject a = metrics == null ? null : metrics.optJSONObject(HomeMode.ORIGINAL);
             JSONObject b = metrics == null ? null : metrics.optJSONObject(HomeMode.FREE);
-            String[][] rows = {{Ui.tr("Botão Início", "Home button"), "homeMs"}, {Ui.tr("Memória livre", "Free memory"), "memAvailableMB"},
-                    {Ui.tr("Memória do Início", "Home screen memory"), "homePssMB"}};
+            String[][] rows = {{Ui.tr("Botão Início"), "homeMs"}, {Ui.tr("Memória livre"), "memAvailableMB"},
+                    {Ui.tr("Memória do Início"), "homePssMB"}};
             for (int i = 0; i < rows.length; i++) {
                 float base = y + (46 + 40 * i) * k;
                 c.drawText(rows[i][0], x, base, cellLabel);
@@ -2151,7 +2046,7 @@ public class SettingsActivity extends Activity {
 
         private void drawNotices(Canvas c, float y) {
             float x = LIST_X * k + 30 * k;
-            c.drawText(Ui.tr("AVISOS", "NOTICES"), x, y, header);
+            c.drawText(Ui.tr("AVISOS"), x, y, header);
             JSONArray notices = state.optJSONArray("notices");
             int shown = 0;
             for (int i = 0; notices != null && i < notices.length() && shown < 5; i++) {
@@ -2161,14 +2056,14 @@ public class SettingsActivity extends Activity {
                 c.drawText(TextUtils.ellipsize(line, notice, 790 * k, TextUtils.TruncateAt.END).toString(), x, y + (42 + 38 * shown) * k, notice);
                 shown++;
             }
-            if (shown == 0) c.drawText(Ui.tr("Nenhum ainda.", "None yet."), x, y + 42 * k, notice);
+            if (shown == 0) c.drawText(Ui.tr("Nenhum ainda."), x, y + 42 * k, notice);
         }
 
         /** Home screen choice: Free My TV or the original, with a check on the one in use. */
         private void drawChoice(Canvas c) {
-            c.drawText(Ui.tr("Início", "Home Screen"), LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
-            String[][] options = {{"Free My TV", Ui.tr("Sem anúncios, com a tela de descanso da TV", "No ads, with the TV's own screensaver")},
-                    {"Original", Ui.tr("O Início de fábrica da TV", "The TV's factory home screen")}};
+            c.drawText(Ui.tr("Início"), LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
+            String[][] options = {{"Free My TV", Ui.tr("Sem anúncios, com a tela de descanso da TV")},
+                    {"Original", Ui.tr("O Início de fábrica da TV")}};
             int current = freeActive() ? 0 : 1;
             for (int i = 0; i < 2; i++) {
                 float y = (LIST_TOP + 20 + i * (CHOICE_H + ROW_GAP)) * k;
@@ -2183,8 +2078,7 @@ public class SettingsActivity extends Activity {
                     Symbols.draw(getContext(), c, "check", rowRect.right - 30 * k - cw / 2, rowRect.centerY(), 26 * k, blend(fg(0xFFFFFFFF), INK, f));
                 }
             }
-            c.drawText(Ui.tr("A troca leva uns segundos e a tela pisca nas medições.",
-                    "Switching takes a few seconds; the screen blinks while it measures."), LIST_X * k + 30 * k,
+            c.drawText(Ui.tr("A troca leva uns segundos e a tela pisca nas medições."), LIST_X * k + 30 * k,
                     (LIST_TOP + 20 + 2 * (CHOICE_H + ROW_GAP) + 40) * k, hint);
         }
 
@@ -2205,10 +2099,10 @@ public class SettingsActivity extends Activity {
 
         private static String ago(long at) {
             long minutes = Math.max(0, (System.currentTimeMillis() - at) / 60_000);
-            if (minutes < 1) return Ui.tr("agora", "now");
-            if (minutes < 60) return Ui.tr("há " + minutes + " min", minutes + " min ago");
-            if (minutes < 48 * 60) return Ui.tr("há " + (minutes / 60) + " h", (minutes / 60) + " h ago");
-            return Ui.tr("há " + (minutes / 1440) + " dias", (minutes / 1440) + " days ago");
+            if (minutes < 1) return Ui.tr("agora");
+            if (minutes < 60) return Ui.trf("há {n} min", "n", minutes);
+            if (minutes < 48 * 60) return Ui.trf("há {n} h", "n", minutes / 60);
+            return Ui.trf("há {n} dias", "n", minutes / 1440);
         }
 
         private String versionText;   // read once: drawn on every frame of a focus animation
@@ -2324,9 +2218,9 @@ public class SettingsActivity extends Activity {
 
         private static final String[] UNITS = {"auto", "C", "F"}, THEMES = {"auto", "light", "dark"};
 
-        /** "auto", then English and every language with a catalogue (assets/i18n). */
+        /** "auto", then the app's languages (Ui.LANGUAGES). */
         private static String[] languageChoices() {
-            String[] all = Ui.languages();
+            String[] all = Ui.LANGUAGES;
             String[] v = new String[all.length + 1];
             v[0] = "auto";
             System.arraycopy(all, 0, v, 1, all.length);
@@ -2335,7 +2229,7 @@ public class SettingsActivity extends Activity {
 
         private List<String> languageNames() {
             List<String> l = new ArrayList<>();
-            for (String code : languageChoices()) l.add(code.equals("auto") ? Ui.tr("Automático", "Automatic") : Ui.languageName(code));
+            for (String code : languageChoices()) l.add(code.equals("auto") ? Ui.tr("Automático") : Ui.languageName(code));
             return l;
         }
 
@@ -2349,23 +2243,22 @@ public class SettingsActivity extends Activity {
 
         /** Whether there is a key and where it comes from; never the key itself. */
         private String tmdbKeyState() {
-            if (Prefs.typedTmdbKey()) return Ui.tr("Configurada na TV", "Set on the TV");
-            return Prefs.tmdbKey().isEmpty() ? Ui.tr("Nenhuma: OK para inserir", "None: OK to add one")
-                    : Ui.tr("Do config.properties", "From config.properties");
+            if (Prefs.typedTmdbKey()) return Ui.tr("Configurada na TV");
+            return Prefs.tmdbKey().isEmpty() ? Ui.tr("Nenhuma: OK para inserir")
+                    : Ui.tr("Do config.properties");
         }
 
         /** The click's volume, from off to high (Prefs.soundLevel). */
         private static List<String> soundLevels() {
-            return list(Ui.tr("Desligado", "Off"), Ui.tr("Baixo", "Low", "Bajo"), Ui.tr("Médio", "Medium", "Medio"),
-                    Ui.tr("Alto", "High", "Alto"));
+            return list(Ui.tr("Desligado"), Ui.tr("Baixo"), Ui.tr("Médio"),
+                    Ui.tr("Alto"));
         }
 
         /** Continue watching: every app, or how many are kept out. */
         private static String watchAppsState() {
             int off = Prefs.watchNextOffCount();
-            return off == 0 ? Ui.tr("Todos os apps", "All apps", "Todas las apps")
-                    : Ui.tr(off + (off == 1 ? " app desligado" : " apps desligados"), off + (off == 1 ? " app off" : " apps off"),
-                            off + (off == 1 ? " app desactivada" : " apps desactivadas"));
+            return off == 0 ? Ui.tr("Todos os apps")
+                    : Ui.plural("plural|one:{n} app desligado|other:{n} apps desligados", off);
         }
 
         /** "Open picks in": each title's own streaming app (the default), then the apps that open IMDb links. */
@@ -2378,7 +2271,7 @@ public class SettingsActivity extends Activity {
 
         private static List<String> targetNames() {
             List<String> names = new ArrayList<>();
-            names.add(Ui.tr("App de cada título", "Each title's app"));
+            names.add(Ui.tr("App de cada título"));
             for (String[] a : Recs.LINK_APPS) names.add(a[1]);
             return names;
         }
@@ -2388,12 +2281,12 @@ public class SettingsActivity extends Activity {
         }
 
         private String[] keyLabels() {
-            if (RemoteKeys.STEM_NETFLIX) return new String[] {Ui.tr("Botão Netflix", "Netflix button")};
-            if (RemoteKeys.KTC) return new String[] {Ui.tr("Botão Tabii", "Tabii button")};
-            if (RemoteKeys.SONY) return new String[] {Ui.tr("Botão BRAVIA CORE", "BRAVIA CORE button"),
-                    Ui.tr("Botão Netflix", "Netflix button"), Ui.tr("Botão Disney+", "Disney+ button"),
-                    Ui.tr("Botão Prime Video", "Prime Video button"), Ui.tr("Botão YouTube", "YouTube button"),
-                    Ui.tr("Botão Crunchyroll", "Crunchyroll button"), Ui.tr("Botão Google Play", "Google Play button")};
+            if (RemoteKeys.STEM_NETFLIX) return new String[] {Ui.tr("Botão Netflix")};
+            if (RemoteKeys.KTC) return new String[] {Ui.tr("Botão Tabii")};
+            if (RemoteKeys.SONY) return new String[] {Ui.tr("Botão BRAVIA CORE"),
+                    Ui.tr("Botão Netflix"), Ui.tr("Botão Disney+"),
+                    Ui.tr("Botão Prime Video"), Ui.tr("Botão YouTube"),
+                    Ui.tr("Botão Crunchyroll"), Ui.tr("Botão Google Play")};
             // TCL's remotes send other codes for the same button from one model to the next: no names, the code (keyName).
             return new String[0];
         }
@@ -2414,14 +2307,14 @@ public class SettingsActivity extends Activity {
             appLabels.clear();
             appPkgs.add("");
             // On Sony, "nothing" leaves the key to the TV, which opens its usual app.
-            appLabels.add(RemoteKeys.SONY ? Ui.tr("Sony default") : Ui.tr("Nada", "Nothing"));
+            appLabels.add(RemoteKeys.SONY ? Ui.tr("Padrão da Sony") : Ui.tr("Nada"));
             // Free My TV's own, over any app.
             appPkgs.add(Prefs.OPEN_CONTROL);
-            appLabels.add(Ui.tr("Central de controle", "Control Center", "Centro de control"));
+            appLabels.add(Ui.tr("Central de controle"));
             appPkgs.add(Prefs.OPEN_RECENTS);
-            appLabels.add(Ui.tr("Apps recentes", "Recent apps", "Apps recientes"));
+            appLabels.add(Ui.tr("Apps recentes"));
             appPkgs.add(Prefs.SLEEP_CYCLE);
-            appLabels.add(Ui.tr("Timer de desligar", "Sleep timer", "Temporizador de apagado"));
+            appLabels.add(Ui.tr("Timer de desligar"));
             for (String[] f : found) {
                 appPkgs.add(f[0]);
                 appLabels.add(f[1]);
@@ -2430,16 +2323,16 @@ public class SettingsActivity extends Activity {
 
         /** Weather city: type the name (the Google TV app on a phone types too); the matches follow, as a list. */
         private void askCity() {
-            if (Ui.tr("Buscando…", "Searching…").equals(cityStatus)) return;
+            if (Ui.tr("Buscando…").equals(cityStatus)) return;
             android.widget.EditText field = new android.widget.EditText(activity);
             field.setSingleLine(true);
-            field.setHint(Ui.tr("Digite o nome da cidade", "Type the city's name"));
+            field.setHint(Ui.tr("Digite o nome da cidade"));
             field.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
             android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(activity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                    .setTitle(Ui.tr("Cidade do clima", "Weather city"))
+                    .setTitle(Ui.tr("Cidade do clima"))
                     .setView(field)
-                    .setPositiveButton(Ui.tr("Buscar", "Search"), (d, which) -> searchCity(field.getText().toString()))
-                    .setNegativeButton(Ui.tr("Cancelar", "Cancel"), null)
+                    .setPositiveButton(Ui.tr("Buscar"), (d, which) -> searchCity(field.getText().toString()))
+                    .setNegativeButton(Ui.tr("Cancelar"), null)
                     .create();
             field.setOnEditorActionListener((v, action, event) -> {
                 dialog.dismiss();
@@ -2451,7 +2344,7 @@ public class SettingsActivity extends Activity {
 
         private void searchCity(String name) {
             if (name.trim().isEmpty()) return;
-            cityStatus = Ui.tr("Buscando…", "Searching…");
+            cityStatus = Ui.tr("Buscando…");
             Page from = page;
             invalidate();
             new Thread(() -> {
@@ -2459,10 +2352,10 @@ public class SettingsActivity extends Activity {
                 String error;
                 try {
                     found = HomeData.findCity(name);
-                    error = found.isEmpty() ? Ui.tr("Nenhuma cidade com esse nome.", "No city with that name.") : "";
+                    error = found.isEmpty() ? Ui.tr("Nenhuma cidade com esse nome.") : "";
                 } catch (Exception e) {
                     found = new ArrayList<>();
-                    error = Ui.tr("Não deu para buscar agora.", "Couldn't search now.");
+                    error = Ui.tr("Não deu para buscar agora.");
                     AppLog.w("city search: " + e.getMessage());
                 }
                 List<String[]> result = found;
@@ -2473,7 +2366,7 @@ public class SettingsActivity extends Activity {
                         List<String> labels = new ArrayList<>();
                         for (String[] city : result) labels.add(city[0]);
                         // {label, name, latitude, longitude}
-                        openPicker(Ui.tr("Cidade do clima", "Weather city"), labels, -1, at -> {
+                        openPicker(Ui.tr("Cidade do clima"), labels, -1, at -> {
                             String[] city = result.get(at);
                             Prefs.setCity(city[1], city[2], city[3]);
                         });
@@ -2494,12 +2387,10 @@ public class SettingsActivity extends Activity {
         private String teamsStatus = "";
 
         private void openTeams() {
-            Page p = new Page(Ui.tr("Time", "Team", "Equipo"));
+            Page p = new Page(Ui.tr("Time"));
             p.rebuild = () -> fillTeams(p);
             fillTeams(p);
-            p.hint = () -> Ui.tr("O time aparece no widget ao lado do clima, com o jogo ao vivo ou o próximo.",
-                    "The team shows in the widget beside the weather, with its live or next match.",
-                    "El equipo aparece en el widget junto al clima, con el partido en vivo o el próximo.");
+            p.hint = () -> Ui.tr("O time aparece no widget ao lado do clima, com o jogo ao vivo ou o próximo.");
             open(p);
             if (teamList == null) readTeams(p);
         }
@@ -2507,11 +2398,11 @@ public class SettingsActivity extends Activity {
         /** The search first, then every team of the listed leagues, by league; the team followed has a check. */
         private void fillTeams(Page p) {
             p.rows.clear();
-            Row search = new Row(() -> teamsStatus.isEmpty() ? Ui.tr("Buscar pelo nome…", "Search by name…", "Buscar por nombre…") : teamsStatus,
+            Row search = new Row(() -> teamsStatus.isEmpty() ? Ui.tr("Buscar pelo nome…") : teamsStatus,
                     () -> "", this::askTeam, null, null);
             p.rows.add(search);
             if (teamList == null) {
-                p.rows.add(new Row(() -> Ui.tr("Lendo os times…", "Reading the teams…", "Leyendo los equipos…"), () -> "", () -> {}, null, () -> true));
+                p.rows.add(new Row(() -> Ui.tr("Lendo os times…"), () -> "", () -> {}, null, () -> true));
                 return;
             }
             for (Football.Team t : teamList) {
@@ -2539,8 +2430,7 @@ public class SettingsActivity extends Activity {
                 List<Football.Team> result = all;
                 handler.post(() -> {
                     teamList = result;
-                    if (result.isEmpty()) teamsStatus = Ui.tr("Sem conexão: tente buscar pelo nome.", "No connection: try a search.",
-                            "Sin conexión: prueba a buscar.");
+                    if (result.isEmpty()) teamsStatus = Ui.tr("Sem conexão: tente buscar pelo nome.");
                     if (page == p) {
                         fillTeams(p);
                         focus = Math.min(focus, p.rows.size() - 1);
@@ -2595,16 +2485,16 @@ public class SettingsActivity extends Activity {
 
         /** A team by name (any club the source knows: lower divisions, other countries). */
         private void askTeam() {
-            if (Ui.tr("Buscando…", "Searching…").equals(teamsStatus)) return;
+            if (Ui.tr("Buscando…").equals(teamsStatus)) return;
             android.widget.EditText field = new android.widget.EditText(activity);
             field.setSingleLine(true);
-            field.setHint(Ui.tr("Digite o nome do time", "Type the team's name", "Escribe el nombre del equipo"));
+            field.setHint(Ui.tr("Digite o nome do time"));
             field.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
             android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(activity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                    .setTitle(Ui.tr("Time", "Team", "Equipo"))
+                    .setTitle(Ui.tr("Time"))
                     .setView(field)
-                    .setPositiveButton(Ui.tr("Buscar", "Search"), (d, which) -> searchTeam(field.getText().toString()))
-                    .setNegativeButton(Ui.tr("Cancelar", "Cancel"), null)
+                    .setPositiveButton(Ui.tr("Buscar"), (d, which) -> searchTeam(field.getText().toString()))
+                    .setNegativeButton(Ui.tr("Cancelar"), null)
                     .create();
             field.setOnEditorActionListener((v, action, event) -> {
                 dialog.dismiss();
@@ -2616,7 +2506,7 @@ public class SettingsActivity extends Activity {
 
         private void searchTeam(String name) {
             if (name.trim().isEmpty()) return;
-            teamsStatus = Ui.tr("Buscando…", "Searching…");
+            teamsStatus = Ui.tr("Buscando…");
             Page from = page;
             invalidate();
             new Thread(() -> {
@@ -2624,10 +2514,10 @@ public class SettingsActivity extends Activity {
                 String error;
                 try {
                     found = FootballSource.get().search(name);
-                    error = found.isEmpty() ? Ui.tr("Nenhum time com esse nome.", "No team with that name.", "Ningún equipo con ese nombre.") : "";
+                    error = found.isEmpty() ? Ui.tr("Nenhum time com esse nome.") : "";
                 } catch (Exception e) {
                     found = new ArrayList<>();
-                    error = Ui.tr("Não deu para buscar agora.", "Couldn't search now.");
+                    error = Ui.tr("Não deu para buscar agora.");
                     AppLog.w("team search: " + e.getMessage());
                 }
                 List<Football.Team> result = found;
@@ -2637,7 +2527,7 @@ public class SettingsActivity extends Activity {
                     if (!result.isEmpty() && screen == PAGE && page == from) {
                         List<String> labels = new ArrayList<>();
                         for (Football.Team t : result) labels.add(t.leagueName.isEmpty() ? t.name : t.name + "  ·  " + t.leagueName);
-                        openPicker(Ui.tr("Time", "Team", "Equipo"), labels, -1, at -> pickTeam(result.get(at)));
+                        openPicker(Ui.tr("Time"), labels, -1, at -> pickTeam(result.get(at)));
                         spoken.focusMoved();
                     }
                     invalidate();
@@ -2656,10 +2546,10 @@ public class SettingsActivity extends Activity {
         private boolean readingTvApps;
 
         private void openTvApps() {
-            Page p = new Page(Ui.tr("Apps da TV", "TV Apps", "Apps de la TV"));
-            p.rows.add(tvAppsGroup(() -> Ui.tr("Apps instalados", "Installed apps", "Apps instaladas"), APPS_INSTALLED));
-            p.rows.add(tvAppsGroup(() -> Ui.tr("Apps do sistema", "System apps", "Apps del sistema"), APPS_SYSTEM));
-            p.rows.add(tvAppsGroup(() -> Ui.tr("Desligados", "Turned off", "Apagadas"), APPS_OFF));
+            Page p = new Page(Ui.tr("Apps da TV"));
+            p.rows.add(tvAppsGroup(() -> Ui.tr("Apps instalados"), APPS_INSTALLED));
+            p.rows.add(tvAppsGroup(() -> Ui.tr("Apps do sistema"), APPS_SYSTEM));
+            p.rows.add(tvAppsGroup(() -> Ui.tr("Desligados"), APPS_OFF));
             p.hint = this::tvAppsHint;
             open(p);
             readTvApps();
@@ -2695,7 +2585,7 @@ public class SettingsActivity extends Activity {
                             () -> !app.locked.isEmpty()));
                 }
                 if (p.rows.isEmpty()) {
-                    p.rows.add(new Row(() -> tvApps == null ? Ui.tr("Lendo os apps…", "Reading the apps…", "Leyendo las apps…") : Ui.tr("Nenhum.", "None.", "Ninguna."), () -> "", () -> {}, null, () -> true));
+                    p.rows.add(new Row(() -> tvApps == null ? Ui.tr("Lendo os apps…") : Ui.tr("Nenhum."), () -> "", () -> {}, null, () -> true));
                 }
                 tvAppsShownByPage.put(p, shown);
                 for (int i = 0; focused != null && i < shown.size(); i++) if (shown.get(i).equals(focused)) focus = i;
@@ -2715,26 +2605,26 @@ public class SettingsActivity extends Activity {
 
         private String tvAppState(HomeMode.TvApp app) {
             Boolean asked = tvAppsPending.get(app.pkg);
-            if (asked != null) return asked ? Ui.tr("Ligando…", "Turning on…", "Encendiendo…") : Ui.tr("Desligando…", "Turning off…", "Apagando…");
-            if (!app.enabled) return Ui.tr("Desligado", "Off");
-            return app.locked.isEmpty() ? Ui.tr("Ligado", "On") : Ui.tr("Protegido", "Protected", "Protegida");
+            if (asked != null) return asked ? Ui.tr("Ligando…") : Ui.tr("Desligando…");
+            if (!app.enabled) return Ui.tr("Desligado");
+            return app.locked.isEmpty() ? Ui.tr("Ligado") : Ui.tr("Protegido");
         }
 
         private String tvAppsHint() {
             if (!tvAppsStatus.isEmpty()) return tvAppsStatus;
-            return Ui.tr("Nada é desinstalado: o modo Original liga todos os apps de volta.", "Nothing is uninstalled: Original turns every app back on.", "Nada se desinstala: el modo Original vuelve a encender todas las apps.");
+            return Ui.tr("Nada é desinstalado: o modo Original liga todos os apps de volta.");
         }
 
         private void toggleTvApp(HomeMode.TvApp app, String name) {
             if (!app.locked.isEmpty()) {
-                tvAppsStatus = Ui.trf(Ui.tr("{app} fica como está: {reason}.", "{app} stays as it is: {reason}.", "{app} queda como está: {reason}."), "app", name, "reason", app.locked);
+                tvAppsStatus = Ui.trf("{app} fica como está: {reason}.", "app", name, "reason", app.locked);
                 return;
             }
             if (tvAppsPending.containsKey(app.pkg)) return;
             if (app.enabled && app.system) {
                 // A system app: asked first, it can be a piece the TV uses.
-                openPicker(Ui.trf(Ui.tr("Desligar {app}?", "Turn off {app}?", "¿Apagar {app}?"), "app", name),
-                        list(Ui.tr("Desligar", "Turn off", "Apagar"), Ui.tr("Cancelar", "Cancel")), 1, at -> { if (at == 0) askTvApp(app.pkg, false); });
+                openPicker(Ui.trf("Desligar {app}?", "app", name),
+                        list(Ui.tr("Desligar"), Ui.tr("Cancelar")), 1, at -> { if (at == 0) askTvApp(app.pkg, false); });
                 return;
             }
             askTvApp(app.pkg, !app.enabled);
@@ -2783,7 +2673,7 @@ public class SettingsActivity extends Activity {
                     });
                 } catch (java.io.IOException e) {
                     AppLog.w("tv apps: " + e.getMessage());
-                    error = Ui.trf(Ui.tr("Não deu para ler os apps: {error}", "Couldn't read the apps: {error}", "No se pudieron leer las apps: {error}"), "error", e.getMessage());
+                    error = Ui.trf("Não deu para ler os apps: {error}", "error", e.getMessage());
                 }
                 List<HomeMode.TvApp> result = list;
                 String message = error;
@@ -2810,7 +2700,7 @@ public class SettingsActivity extends Activity {
             shelfOrder.clear();
             shelfOrder.addAll(HomeApps.shelfPackages(getContext()));
             List<String[]> candidates = HomeApps.shelfCandidates(getContext());
-            Page p = new Page(Ui.tr("Prateleira", "Shelf"));
+            Page p = new Page(Ui.tr("Prateleira"));
             p.rebuild = () -> {
                 // Selected apps first, in shelf order, then the rest in the order they came; the focus stays on its app.
                 String focused = focus < shelfRows.size() ? shelfRows.get(focus)[0] : null;
@@ -2824,15 +2714,13 @@ public class SettingsActivity extends Activity {
                     String pkg = app[0];
                     p.rows.add(new Row(() -> app[1], () -> {
                         int place = shelfOrder.indexOf(pkg);
-                        return place >= 0 ? "#" + (place + 1) : Ui.tr("Fora", "Off");
+                        return place >= 0 ? "#" + (place + 1) : Ui.tr("Fora");
                     }, () -> toggleShelfApp(pkg), dir -> moveShelfApp(pkg, dir), () -> !shelfOrder.contains(pkg)));
                 }
                 for (int i = 0; focused != null && i < shelfRows.size(); i++) if (shelfRows.get(i)[0].equals(focused)) focus = i;
                 keepVisible(false);
             };
-            p.hint = () -> Ui.tr("OK põe ou tira da prateleira (até " + HomeApps.MAX_SHELF + "). ← → mudam a ordem.",
-                    "OK adds or removes (up to " + HomeApps.MAX_SHELF + "). ← → change the order.",
-                    "OK pone o quita del estante (hasta " + HomeApps.MAX_SHELF + "). ← → cambian el orden.");
+            p.hint = () -> Ui.trf("OK põe ou tira da prateleira (até {n}). ← → mudam a ordem.", "n", HomeApps.MAX_SHELF);
             shelfRows.clear();
             open(p);
             p.rebuild.run();
@@ -2861,7 +2749,7 @@ public class SettingsActivity extends Activity {
 
         /** The TV's video apps and any with something to continue, on or off for the home screen. */
         private void openWatchApps() {
-            Page p = new Page(Ui.tr("Continuar assistindo", "Continue Watching", "Seguir viendo"));
+            Page p = new Page(Ui.tr("Continuar assistindo"));
             for (String[] app : WatchNext.apps(getContext())) {
                 String pkg = app[0];
                 p.rows.add(new Row(() -> app[1], () -> onOffText(!Prefs.watchNextOff(pkg)),
@@ -2869,19 +2757,15 @@ public class SettingsActivity extends Activity {
                         dir -> Prefs.setWatchNextOff(pkg, !Prefs.watchNextOff(pkg)), () -> Prefs.watchNextOff(pkg)));
             }
             p.hint = () -> !WatchNext.allowed(getContext())
-                    ? Ui.tr("Sem acesso à lista dos apps: troque o Início para Free My TV de novo.",
-                            "No access to the apps' lists: switch the home screen to Free My TV again.",
-                            "Sin acceso a la lista de las apps: cambia el inicio a Free My TV otra vez.")
+                    ? Ui.tr("Sem acesso à lista dos apps: troque o Início para Free My TV de novo.")
                     : p.rows.isEmpty()
-                    ? Ui.tr("Nenhum app de vídeo instalado.", "No video apps installed.", "Ninguna app de video instalada.")
-                    : Ui.tr("OK liga ou desliga. Os apps de vídeo da TV e os que têm algo para continuar.",
-                            "OK turns it on or off. The TV's video apps and any with something to continue.",
-                            "OK activa o desactiva. Las apps de video del TV y las que tienen algo para seguir.");
+                    ? Ui.tr("Nenhum app de vídeo instalado.")
+                    : Ui.tr("OK liga ou desliga. Os apps de vídeo da TV e os que têm algo para continuar.");
             open(p);
         }
 
         private static String onOffText(boolean on) {
-            return on ? Ui.tr("Ligado", "On") : Ui.tr("Desligado", "Off");
+            return on ? Ui.tr("Ligado") : Ui.tr("Desligado");
         }
     }
 }

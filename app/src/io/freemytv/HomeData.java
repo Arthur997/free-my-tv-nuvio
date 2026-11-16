@@ -108,7 +108,7 @@ final class HomeData {
     }
 
     static String coinName(int i) {
-        return i == DOLLAR ? Ui.tr("Dólar", "Dollar") : COIN_NAMES[i];
+        return i == DOLLAR ? Ui.tr("Dólar") : COIN_NAMES[i];
     }
 
     /** The coin's pair on Binance (the euro's is in dollars, converted with the dollar's). */
@@ -447,21 +447,21 @@ final class HomeData {
     /** The weather in words, from Open-Meteo's WMO code. */
     static String condition(int code, boolean day) {
         if (code < 0) return "";
-        if (code == 0) return day ? Ui.tr("Clear") : Ui.tr("night|Clear");
-        if (code == 1) return day ? Ui.tr("Mostly Sunny") : Ui.tr("Mostly Clear");
-        if (code == 2) return Ui.tr("Partly Cloudy");
-        if (code == 3) return Ui.tr("Cloudy");
-        if (code == 45 || code == 48) return Ui.tr("Fog");
-        if (code >= 51 && code <= 57) return Ui.tr("Drizzle");
-        if (code == 65 || code == 67 || code == 82) return Ui.tr("Heavy Rain");
-        if (code >= 71 && code <= 77 || code == 85 || code == 86) return Ui.tr("Snow");
-        if (code >= 95) return Ui.tr("Thunderstorms");
-        return Ui.tr("Rain");
+        if (code == 0) return day ? Ui.tr("Céu limpo") : Ui.tr("night|Noite limpa");
+        if (code == 1) return day ? Ui.tr("Poucas nuvens") : Ui.tr("night|Poucas nuvens");
+        if (code == 2) return Ui.tr("Parcialmente nublado");
+        if (code == 3) return Ui.tr("Nublado");
+        if (code == 45 || code == 48) return Ui.tr("Neblina");
+        if (code >= 51 && code <= 57) return Ui.tr("Garoa");
+        if (code == 65 || code == 67 || code == 82) return Ui.tr("Chuva forte");
+        if (code >= 71 && code <= 77 || code == 85 || code == 86) return Ui.tr("Neve");
+        if (code >= 95) return Ui.tr("Tempestade");
+        return Ui.tr("Chuva");
     }
 
     /** "H:24°  L:15°" (in Portuguese, "Máx. 24°  Mín. 15°"), with the given space between the two. */
     static String highLow(Weather wx, String space) {
-        return Ui.trf("H:{max}", "max", degrees(wx.max)) + space + Ui.trf("L:{min}", "min", degrees(wx.min));
+        return Ui.trf("Máx. {max}", "max", degrees(wx.max)) + space + Ui.trf("Mín. {min}", "min", degrees(wx.min));
     }
 
     private static String currencySymbol() {
@@ -500,7 +500,7 @@ final class HomeData {
     }
 
     static String hour(long at) {
-        return Ui.once("hour", at, () -> Ui.datePattern("format|h a").format(at));
+        return Ui.once("hour", at, () -> Ui.datePattern("format|HH'h'").format(at));
     }
 
     /** How long ago the data was fetched, if it's stale (no internet): "12 min ago". */
@@ -516,7 +516,7 @@ final class HomeData {
         staleAt[slot] = at;
         staleMinutes[slot] = minutes;
         staleLanguage[slot] = Ui.generation;
-        staleText[slot] = minutes < 60 ? Ui.trf("{n} min ago", "n", minutes) : Ui.trf("{n} h ago", "n", minutes / 60);
+        staleText[slot] = minutes < 60 ? Ui.trf("há {n} min", "n", minutes) : Ui.trf("há {n} h", "n", minutes / 60);
         return staleText[slot];
     }
 

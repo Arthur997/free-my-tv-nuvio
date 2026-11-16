@@ -42,9 +42,7 @@ public class HomeActivity extends Activity {
      */
     private void showCrashScreen() {
         crashText = new TextView(this);
-        crashText.setText(Ui.tr("A tela inicial do Free My TV teve um problema.\nVoltando para a tela inicial original da TV…",
-                "Free My TV's home screen ran into a problem.\nGoing back to the TV's original home screen…",
-                "La pantalla de inicio de Free My TV tuvo un problema.\nVolviendo a la pantalla de inicio original de la TV…"));
+        crashText.setText(Ui.tr("A tela inicial do Free My TV teve um problema.\nVoltando para a tela inicial original da TV…"));
         crashText.setTextColor(Color.WHITE);
         crashText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
         crashText.setGravity(Gravity.CENTER);
@@ -56,9 +54,7 @@ public class HomeActivity extends Activity {
 
     private void checkReverted() {
         if (isFinishing() || HomeMode.state(this).optBoolean("homeReverted")) return;
-        crashText.setText(Ui.tr("Não deu para voltar à tela inicial original da TV.\nOK abre os Ajustes da TV.",
-                "Couldn't go back to the TV's original home screen.\nOK opens the TV's settings.",
-                "No se pudo volver a la pantalla de inicio original de la TV.\nOK abre los Ajustes de la TV."));
+        crashText.setText(Ui.tr("Não deu para voltar à tela inicial original da TV.\nOK abre os Ajustes da TV."));
     }
 
     /** On the crash screen: OK, Enter or Back open the TV's settings. */

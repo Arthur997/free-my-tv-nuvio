@@ -60,8 +60,7 @@ final class AdbTls {
      * 6 digits. After it, the TV trusts the app's key on wireless debugging (as "Always allow" does on USB debugging).
      */
     static void pair(Context c, int port, String code) throws IOException {
-        if (!supported()) throw new IOException(Ui.tr("esta TV não tem depuração sem fio", "this TV has no wireless debugging",
-                "esta TV no tiene depuración inalámbrica"));
+        if (!supported()) throw new IOException(Ui.tr("esta TV não tem depuração sem fio"));
         KeyPair keys = Adb.keys(c);
         try (SSLSocket tls = tls(keys, port)) {
             byte[] exported = android.net.ssl.SSLSockets.exportKeyingMaterial(tls, "adb-label\0", null, 64);
@@ -75,7 +74,7 @@ final class AdbTls {
             writePacket(out, SPAKE2_MSG, spake.message());
             byte[] theirs = readPacket(in, SPAKE2_MSG);
             byte[] key = spake.key(theirs);
-            if (key == null) throw new IOException(Ui.tr("resposta inválida da TV", "invalid reply from the TV", "respuesta inválida de la TV"));
+            if (key == null) throw new IOException(Ui.tr("resposta inválida da TV"));
             byte[] aesKey = hkdf(key, "adb pairing_auth aes-128-gcm key".getBytes(StandardCharsets.US_ASCII), 16);
             // Our PeerInfo: type 0 (an ADB RSA public key), the key as adb_keys has it, zero-padded to 8192 bytes.
             byte[] info = new byte[PEER_INFO_SIZE];
@@ -87,14 +86,12 @@ final class AdbTls {
                 reply = readPacket(in, PEER_INFO);
             } catch (IOException e) {
                 // A wrong code: the TV closes the connection instead of answering.
-                throw new IOException(Ui.tr("o código não confere; confira os 6 números e tente de novo",
-                        "the code doesn't match; check the 6 digits and try again", "el código no coincide; revisa los 6 números"));
+                throw new IOException(Ui.tr("o código não confere; confira os 6 números e tente de novo"));
             }
             gcm(Cipher.DECRYPT_MODE, aesKey, 0, reply);   // decrypts only with the same key: the code matched
             AppLog.w("wireless debugging: paired");
         } catch (GeneralSecurityException e) {
-            throw new IOException(Ui.tr("o código não confere; confira os 6 números e tente de novo",
-                    "the code doesn't match; check the 6 digits and try again", "el código no coincide; revisa los 6 números"));
+            throw new IOException(Ui.tr("o código não confere; confira os 6 números e tente de novo"));
         }
     }
 
@@ -110,7 +107,7 @@ final class AdbTls {
     private static byte[] readPacket(DataInputStream in, int type) throws IOException {
         int version = in.readUnsignedByte(), got = in.readUnsignedByte(), size = in.readInt();
         if (version != HEADER_VERSION || got != type || size <= 0 || size > MAX_PAYLOAD) {
-            throw new IOException(Ui.tr("resposta inválida da TV", "invalid reply from the TV", "respuesta inválida de la TV"));
+            throw new IOException(Ui.tr("resposta inválida da TV"));
         }
         byte[] payload = new byte[size];
         in.readFully(payload);

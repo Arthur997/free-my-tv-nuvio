@@ -294,12 +294,11 @@ final class Forecast {
         return f.format(v);
     }
 
-    /** N, NE, E… where the wind comes from (in Portuguese, L for east and O for west). */
+    /** N, NE, E… where the wind comes from (each language's letters: in Portuguese, L for east and O for west). */
     static String compass(double degrees) {
         if (Double.isNaN(degrees)) return "";
-        String[] names = Ui.en || Ui.language.equals("de") ? new String[] {"N", "NE", "E", "SE", "S", "SW", "W", "NW"}
-                : Ui.es ? new String[] {"N", "NE", "E", "SE", "S", "SO", "O", "NO"}
-                : new String[] {"N", "NE", "L", "SE", "S", "SO", "O", "NO"};
+        String[] names = Ui.tr("rosa dos ventos|N,NE,L,SE,S,SO,O,NO").split(",");
+        if (names.length != 8) names = "N,NE,E,SE,S,SW,W,NW".split(",");
         return names[(int) Math.round(((degrees % 360) + 360) % 360 / 45) % 8];
     }
 
@@ -308,36 +307,36 @@ final class Forecast {
     /** The UV index's band, as the WHO names it. */
     static String uvLevel(double uv) {
         if (Double.isNaN(uv)) return "";
-        if (uv < 3) return Ui.tr("Baixo", "Low", "Bajo");
-        if (uv < 6) return Ui.tr("Moderado", "Moderate", "Moderado");
-        if (uv < 8) return Ui.tr("Alto", "High", "Alto");
-        if (uv < 11) return Ui.tr("Muito alto", "Very High", "Muy alto");
-        return Ui.tr("Extremo", "Extreme", "Extremo");
+        if (uv < 3) return Ui.tr("Baixo");
+        if (uv < 6) return Ui.tr("Moderado");
+        if (uv < 8) return Ui.tr("Alto");
+        if (uv < 11) return Ui.tr("Muito alto");
+        return Ui.tr("Extremo");
     }
 
     /** The US AQI's band. */
     static String airLevel(int aqi) {
         if (aqi < 0) return "";
-        if (aqi <= 50) return Ui.tr("Boa", "Good", "Buena");
-        if (aqi <= 100) return Ui.tr("Moderada", "Moderate", "Moderada");
-        if (aqi <= 150) return Ui.tr("Ruim para sensíveis", "Unhealthy for Some", "Mala para sensibles");
-        if (aqi <= 200) return Ui.tr("Ruim", "Unhealthy", "Mala");
-        if (aqi <= 300) return Ui.tr("Muito ruim", "Very Unhealthy", "Muy mala");
-        return Ui.tr("Perigosa", "Hazardous", "Peligrosa");
+        if (aqi <= 50) return Ui.tr("Boa");
+        if (aqi <= 100) return Ui.tr("Moderada");
+        if (aqi <= 150) return Ui.tr("Ruim para sensíveis");
+        if (aqi <= 200) return Ui.tr("Ruim");
+        if (aqi <= 300) return Ui.tr("Muito ruim");
+        return Ui.tr("Perigosa");
     }
 
     static String humidityLevel(double h) {
         if (Double.isNaN(h)) return "";
-        if (h < 30) return Ui.tr("Ar seco", "Dry air", "Aire seco");
-        if (h < 70) return Ui.tr("Confortável", "Comfortable", "Confortable");
-        return Ui.tr("Ar úmido", "Humid air", "Aire húmedo");
+        if (h < 30) return Ui.tr("Ar seco");
+        if (h < 70) return Ui.tr("Confortável");
+        return Ui.tr("Ar úmido");
     }
 
     static String visibilityLevel(double meters) {
         if (Double.isNaN(meters)) return "";
-        if (meters >= 10_000) return Ui.tr("Ótima", "Excellent", "Excelente");
-        if (meters >= 4_000) return Ui.tr("Boa", "Good", "Buena");
-        if (meters >= 1_000) return Ui.tr("Moderada", "Moderate", "Moderada");
-        return Ui.tr("Baixa", "Poor", "Baja");
+        if (meters >= 10_000) return Ui.tr("Ótima");
+        if (meters >= 4_000) return Ui.tr("Boa");
+        if (meters >= 1_000) return Ui.tr("Moderada");
+        return Ui.tr("Baixa");
     }
 }

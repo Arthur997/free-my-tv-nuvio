@@ -106,7 +106,7 @@ final class Adb implements Closeable {
                     adb.close();
                     return again;
                 }
-                if (SystemClock.uptimeMillis() > until) throw new IOException(Ui.tr("debugging permission wasn't accepted on the TV"));
+                if (SystemClock.uptimeMillis() > until) throw new IOException(Ui.tr("a permissão de depuração não foi aceita na TV"));
             }
         } catch (IOException | RuntimeException e) {
             adb.close();
@@ -126,8 +126,7 @@ final class Adb implements Closeable {
                 s = AdbPorts.connect(port, 3000);   // wireless debugging: on the TV's network address
             }
         } catch (IOException e) {
-            throw new IOException(Ui.tr("a depuração está desligada na TV (porta 5555 fechada)",
-                    "debugging is off on the TV (port 5555 closed)", "la depuración está apagada en la TV (puerto 5555 cerrado)"));
+            throw new IOException(Ui.tr("a depuração está desligada na TV (porta 5555 fechada)"));
         }
         try {
             s.setSoTimeout(10_000);
@@ -192,7 +191,7 @@ final class Adb implements Closeable {
             try {
                 m = read();
             } catch (SocketTimeoutException e) {
-                throw new IOException(Ui.tr("the TV's ADB didn't respond"));
+                throw new IOException(Ui.tr("o ADB da TV não respondeu"));
             }
             if (m.command == CNXN) {
                 socket.setSoTimeout(20_000);
@@ -204,7 +203,7 @@ final class Adb implements Closeable {
                 startTls(keys);
                 continue;
             }
-            if (m.command != AUTH || m.arg0 != AUTH_TOKEN) throw new IOException(Ui.tr("unexpected reply from ADB"));
+            if (m.command != AUTH || m.arg0 != AUTH_TOKEN) throw new IOException(Ui.tr("resposta inesperada do ADB"));
             if (!signed) {
                 send(AUTH, AUTH_SIGNATURE, 0, sign(keys.getPrivate(), m.data));
                 signed = true;
@@ -227,8 +226,7 @@ final class Adb implements Closeable {
             throw new IOException("TLS: " + e.getMessage());
         } catch (IOException e) {
             // The TV refuses a key it never paired with.
-            throw new IOException(Ui.tr("a TV não reconhece este app na depuração sem fio; faça o pareamento de novo",
-                    "the TV doesn't know this app on wireless debugging; pair again", "la TV no reconoce esta app; vuelve a emparejar"));
+            throw new IOException(Ui.tr("a TV não reconhece este app na depuração sem fio; faça o pareamento de novo"));
         }
     }
 
@@ -247,7 +245,7 @@ final class Adb implements Closeable {
                 result.write(m.data);
                 send(OKAY, local, m.arg0, null);
             } else if (m.command == CLSE) {
-                if (remote == 0 && m.arg0 == 0) throw new IOException(Ui.tr("ADB refused the command"));
+                if (remote == 0 && m.arg0 == 0) throw new IOException(Ui.tr("o ADB recusou o comando"));
                 send(CLSE, local, m.arg0, null);
                 return result.toString("UTF-8");
             }
@@ -269,8 +267,8 @@ final class Adb implements Closeable {
         int length = b.getInt();
         b.getInt(); // checksum (newer adbd doesn't check it)
         int magic = b.getInt();
-        if ((m.command ^ 0xffffffff) != magic) throw new IOException(Ui.tr("invalid ADB message"));
-        if (length < 0 || length > 1024 * 1024) throw new IOException(Ui.tr("ADB message too large"));
+        if ((m.command ^ 0xffffffff) != magic) throw new IOException(Ui.tr("mensagem do ADB inválida"));
+        if (length < 0 || length > 1024 * 1024) throw new IOException(Ui.tr("mensagem do ADB grande demais"));
         m.data = new byte[length];
         in.readFully(m.data);
         return m;

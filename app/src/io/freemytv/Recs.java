@@ -200,7 +200,7 @@ final class Recs {
 
     static String periodLabel() {
         int p = period(System.currentTimeMillis());
-        return p == MANHA ? Ui.tr("THIS MORNING") : p == TARDE ? Ui.tr("THIS AFTERNOON") : Ui.tr("TONIGHT");
+        return p == MANHA ? Ui.tr("PARA ESTA MANHÃ") : p == TARDE ? Ui.tr("PARA ESTA TARDE") : Ui.tr("PARA ESTA NOITE");
     }
 
     private static boolean sameDay(long a, long b) {
@@ -855,17 +855,17 @@ final class Recs {
         p.logo = bestLogo(o.optJSONObject("images"));
         List<String> parts = new ArrayList<>();
         JSONArray genres = o.optJSONArray("genres");
-        if (p.kind.equals("tv")) parts.add(Ui.tr("Series"));
+        if (p.kind.equals("tv")) parts.add(Ui.tr("Série"));
         if (genres != null && genres.length() > 0) {
             String name = genres.getJSONObject(0).optString("name");
             parts.add(genre(name));
         }
         if (p.kind.equals("movie")) {
             int minutes = o.optInt("runtime");
-            if (minutes > 0) parts.add(minutes >= 60 ? Ui.trf("{h}h {m}m", "h", minutes / 60, "m", minutes % 60) : Ui.trf("{m}m", "m", minutes));
+            if (minutes > 0) parts.add(minutes >= 60 ? Ui.trf("{h} h {m} min", "h", minutes / 60, "m", minutes % 60) : Ui.trf("{m} min", "m", minutes));
         } else {
             int seasons = o.optInt("number_of_seasons");
-            if (seasons > 0) parts.add(Ui.plural("plural|one:{n} season|other:{n} seasons", seasons));
+            if (seasons > 0) parts.add(Ui.plural("plural|one:{n} temporada|other:{n} temporadas", seasons));
         }
         JSONObject wp = o.optJSONObject("watch/providers");
         JSONObject br = wp == null ? null : wp.optJSONObject("results") == null ? null : wp.optJSONObject("results").optJSONObject(REGION);
@@ -920,13 +920,13 @@ final class Recs {
     /** TV genres that TMDB returns in English even in other languages (pt-BR, es, de…). */
     private static String genre(String name) {
         switch (name) {
-            case "Action & Adventure": return Ui.tr("genre|Action & Adventure");
-            case "Sci-Fi & Fantasy": return Ui.tr("genre|Sci-Fi & Fantasy");
-            case "War & Politics": return Ui.tr("genre|War & Politics");
-            case "Kids": return Ui.tr("genre|Kids");
-            case "News": return Ui.tr("genre|News");
-            case "Soap": return Ui.tr("genre|Soap");
-            case "Talk": return Ui.tr("genre|Talk");
+            case "Action & Adventure": return Ui.tr("genre|Ação e Aventura");
+            case "Sci-Fi & Fantasy": return Ui.tr("genre|Ficção Científica e Fantasia");
+            case "War & Politics": return Ui.tr("genre|Guerra e Política");
+            case "Kids": return Ui.tr("genre|Infantil");
+            case "News": return Ui.tr("genre|Notícias");
+            case "Soap": return Ui.tr("genre|Novela");
+            case "Talk": return Ui.tr("genre|Entrevistas");
             default: return name;
         }
     }

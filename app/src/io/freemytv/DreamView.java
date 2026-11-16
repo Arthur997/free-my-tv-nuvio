@@ -821,7 +821,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         String stale = HomeData.staleness(data.pricesAt, 5 * 60_000L);
         if (!stale.isEmpty() && values.length > 0) {
             if (!stale.equals(staleFor) || Ui.generation != staleGeneration) {
-                staleLine = Ui.trf("prices from {ago}", "ago", stale);
+                staleLine = Ui.trf("cotações de {ago}", "ago", stale);
                 staleFor = stale;
                 staleGeneration = Ui.generation;
             }

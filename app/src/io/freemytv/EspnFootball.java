@@ -26,7 +26,13 @@ final class EspnFootball implements FootballSource {
     private EspnFootball() {}
 
     private static String lang() {
-        return Ui.language.equals("pt") ? "lang=pt&region=br" : Ui.es ? "lang=es&region=es" : "lang=en&region=us";
+        switch (Ui.language) {
+            case "pt": return "lang=pt&region=br";
+            case "es": return "lang=es&region=es";
+            case "fr": return "lang=fr&region=fr";
+            case "it": return "lang=it&region=it";
+            default: return "lang=en&region=us";
+        }
     }
 
     private static JSONObject json(String url) throws Exception {

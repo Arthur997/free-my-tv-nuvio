@@ -50,10 +50,10 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
     private final FootballSource source = FootballSource.get();
     private final String teamId = Prefs.footballTeam();
     private final Spring page = new Spring(0.34f, 0.92f, 0);
-    private final TabBar tabs = new TabBar(Ui.tr("Time", "Team", "Equipo"), Ui.tr("Jogos", "Matches", "Partidos"),
-            Ui.tr("Tabela", "Table", "Tabla"));
-    private final TabBar matchTabs = new TabBar(Ui.tr("Resumo", "Summary", "Resumen"), Ui.tr("Números", "Numbers", "Números"),
-            Ui.tr("Escalações", "Line-ups", "Alineaciones"), Ui.tr("Retrospecto", "Record", "Historial"), "Odds");
+    private final TabBar tabs = new TabBar(Ui.tr("Time"), Ui.tr("Jogos"),
+            Ui.tr("Tabela"));
+    private final TabBar matchTabs = new TabBar(Ui.tr("Resumo"), Ui.tr("Números"),
+            Ui.tr("Escalações"), Ui.tr("Retrospecto"), "Odds");
     private final Layer[] layers = new Layer[5];
     private final Scene scene = new Scene();
     private final Shadows shadows = new Shadows();
@@ -146,7 +146,7 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
 
     /** The team first (light), then its season (heavier), then the tables of its competitions, one by one. */
     private void load() {
-        status = Ui.tr("Carregando…", "Loading…", "Cargando…");
+        status = Ui.tr("Carregando…");
         io.execute(() -> {
             try {
                 Football.Overview o = source.overview(teamId);
@@ -163,7 +163,7 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
                 AppLog.w("football screen: " + e.getMessage());
                 handler.post(() -> {
                     failed = true;
-                    status = Ui.tr("Sem conexão agora.", "No connection right now.", "Sin conexión ahora.");
+                    status = Ui.tr("Sem conexão agora.");
                     redraw();
                 });
             }
@@ -184,9 +184,9 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
         }
         next = coming.isEmpty() ? null : coming.get(0);
         gameRows.clear();
-        section(Ui.tr("Ao vivo", "Live", "En vivo"), live);
-        section(Ui.tr("Próximos", "Next", "Próximos"), coming);
-        section(Ui.tr("Anteriores", "Played", "Anteriores"), played);
+        section(Ui.tr("Ao vivo"), live);
+        section(Ui.tr("Próximos"), coming);
+        section(Ui.tr("Anteriores"), played);
         gameItem = firstMatchRow();
         leagues.clear();
         leagueNames.clear();
@@ -501,17 +501,12 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
 
     /** What the keys do where the focus is. */
     private String hint() {
-        if (open != null) return Ui.tr("← → troca de aba  ·  Voltar fecha o jogo", "← → change tabs  ·  Back closes the match",
-                "← → cambia de pestaña  ·  Volver cierra el partido");
-        if (zone == ON_TABS) return tab == TEAM ? Ui.tr("← → troca de aba  ·  ↓ entra  ·  Voltar sai", "← → change tabs  ·  ↓ go in  ·  Back exits",
-                "← → cambia de pestaña  ·  ↓ entra  ·  Volver sale")
-                : Ui.tr("← → troca de aba  ·  ↓ entra", "← → change tabs  ·  ↓ go in", "← → cambia de pestaña  ·  ↓ entra");
-        if (zone == ON_CHIPS) return Ui.tr("← → troca o campeonato  ·  ↓ desce na tabela", "← → change competition  ·  ↓ into the table",
-                "← → cambia de torneo  ·  ↓ baja a la tabla");
-        if (tab == TABLE) return Ui.tr("↑ ↓ percorre a tabela  ·  Voltar volta", "↑ ↓ move through the table  ·  Back returns",
-                "↑ ↓ recorre la tabla  ·  Volver regresa");
-        return Ui.tr("↑ ↓ escolhe o jogo  ·  OK abre o jogo  ·  Voltar volta às abas", "↑ ↓ pick a match  ·  OK opens it  ·  Back returns",
-                "↑ ↓ elige el partido  ·  OK lo abre  ·  Volver regresa");
+        if (open != null) return Ui.tr("← → troca de aba  ·  Voltar fecha o jogo");
+        if (zone == ON_TABS) return tab == TEAM ? Ui.tr("← → troca de aba  ·  ↓ entra  ·  Voltar sai")
+                : Ui.tr("← → troca de aba  ·  ↓ entra");
+        if (zone == ON_CHIPS) return Ui.tr("← → troca o campeonato  ·  ↓ desce na tabela");
+        if (tab == TABLE) return Ui.tr("↑ ↓ percorre a tabela  ·  Voltar volta");
+        return Ui.tr("↑ ↓ escolhe o jogo  ·  OK abre o jogo  ·  Voltar volta às abas");
     }
 
     // MARK: - Frames: only while the tabs slide
@@ -721,11 +716,11 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
     }
 
     private static String side(Football.Match m, String team) {
-        return m.home.id.equals(team) ? Ui.tr("em casa", "home", "en casa") : Ui.tr("fora", "away", "fuera");
+        return m.home.id.equals(team) ? Ui.tr("em casa") : Ui.tr("fora");
     }
 
     private void loading(Canvas c, float x, float y) {
-        c.drawText(failed ? status : Ui.tr("Carregando…", "Loading…", "Cargando…"), x, y, dim);
+        c.drawText(failed ? status : Ui.tr("Carregando…"), x, y, dim);
     }
 
     // MARK: - The title, the tabs and the keys' line (still)
@@ -760,8 +755,8 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
         float cx = w / 2f;
         if (m == null) {
             dim.setTextAlign(Paint.Align.CENTER);
-            c.drawText(overview == null || schedule == null ? Ui.tr("Carregando…", "Loading…", "Cargando…")
-                    : Ui.tr("Nenhum jogo marcado.", "No match scheduled.", "Ningún partido programado."), cx, 340 * k, dim);
+            c.drawText(overview == null || schedule == null ? Ui.tr("Carregando…")
+                    : Ui.tr("Nenhum jogo marcado."), cx, 340 * k, dim);
             dim.setTextAlign(Paint.Align.LEFT);
         } else {
             matchStrip(c, m, 212, 330, focused);
@@ -814,10 +809,10 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
     private void drawForm(Canvas c) {
         panel(c, M, 530, 940, 1028);
         float x = (M + 36) * k, r = (940 - 36) * k;
-        c.drawText(Ui.tr("Últimos jogos", "Last matches", "Últimos partidos"), x, 580 * k, panelTitle);
+        c.drawText(Ui.tr("Últimos jogos"), x, 580 * k, panelTitle);
         if (last.isEmpty()) {
             if (schedule == null) loading(c, x, 640 * k);
-            else c.drawText(Ui.tr("Nenhum ainda.", "None yet.", "Ninguno aún."), x, 640 * k, dim);
+            else c.drawText(Ui.tr("Nenhum ainda."), x, 640 * k, dim);
             return;
         }
         for (int i = 0; i < last.size(); i++) {
@@ -862,7 +857,7 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
     private void drawPositions(Canvas c) {
         panel(c, 980, 530, R, 1028);
         float x = (980 + 36) * k, r = (R - 36) * k;
-        c.drawText(Ui.tr("Nos campeonatos", "In the competitions", "En los torneos"), x, 580 * k, panelTitle);
+        c.drawText(Ui.tr("Nos campeonatos"), x, 580 * k, panelTitle);
         int shown = 0;
         for (int i = 0; i < leagues.size() && shown < 5; i++) {
             Football.Table t = tables.get(leagues.get(i));
@@ -870,16 +865,16 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
             if (row == null) continue;
             float mid = (640 + shown * 84) * k;
             numbersBold.setTextAlign(Paint.Align.LEFT);
-            c.drawText(Ui.trf(Ui.tr("{n}º", "#{n}", "{n}º"), "n", row.rank), x, mid + Ui.halfCap(numbersBold), numbersBold);
+            c.drawText(Ui.trf("{n}º", "n", row.rank), x, mid + Ui.halfCap(numbersBold), numbersBold);
             numbersBold.setTextAlign(Paint.Align.RIGHT);
             c.drawText(leagueNames.get(i), x + 80 * k, mid - 4 * k, text);
-            c.drawText(Ui.trf(Ui.tr("{p} pts  ·  {j} jogos", "{p} pts  ·  {j} played", "{p} pts  ·  {j} partidos"), "p", row.points,
+            c.drawText(Ui.trf("{p} pts  ·  {j} jogos", "p", row.points,
                     "j", row.played), x + 80 * k, mid + 28 * k, smallDim);
             shown++;
         }
         if (shown == 0) {
             if (loadingTables || schedule == null) loading(c, x, 640 * k);
-            else c.drawText(Ui.tr("Sem tabela agora.", "No table right now.", "Sin tabla ahora."), x, 640 * k, dim);
+            else c.drawText(Ui.tr("Sem tabela agora."), x, 640 * k, dim);
         }
     }
 
@@ -898,7 +893,7 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
             return;
         }
         if (gameRows.isEmpty()) {
-            c.drawText(Ui.tr("Nenhum jogo nesta temporada.", "No matches this season.", "Ningún partido esta temporada."), x, 230 * k, dim);
+            c.drawText(Ui.tr("Nenhum jogo nesta temporada."), x, 230 * k, dim);
             return;
         }
         for (int i = gameFirst; i < gameRows.size() && i < gameFirst + GAME_ROWS; i++) {
@@ -968,16 +963,16 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
         }
         Football.Table t = tables.get(leagues.get(league));
         if (t == null || t.rows.isEmpty()) {
-            c.drawText(tables.containsKey(leagues.get(league)) ? Ui.tr("Sem tabela nesta fase.", "No table at this stage.", "Sin tabla en esta fase.")
-                    : Ui.tr("Carregando…", "Loading…", "Cargando…"), x, 300 * k, dim);
+            c.drawText(tables.containsKey(leagues.get(league)) ? Ui.tr("Sem tabela nesta fase.")
+                    : Ui.tr("Carregando…"), x, 300 * k, dim);
             return;
         }
         int g = group(t);
         String group = g < t.groups.size() ? t.groups.get(g) : "";
         c.drawText(group.isEmpty() ? t.name : group, x, 282 * k, panelTitle);
         float[] cols = {1300, 1410, 1510, 1610, 1710, 1800};
-        String[] heads = {Ui.tr("P", "Pts", "Pts"), Ui.tr("J", "P", "J"), Ui.tr("V", "W", "G"), Ui.tr("E", "D", "E"), Ui.tr("D", "L", "P"),
-                Ui.tr("SG", "GD", "DG")};
+        String[] heads = {Ui.tr("futebol|P"), Ui.tr("futebol|J"), Ui.tr("futebol|V"), Ui.tr("futebol|E"), Ui.tr("futebol|D"),
+                Ui.tr("futebol|SG")};
         smallDim.setTextAlign(Paint.Align.RIGHT);
         for (int i = 0; i < cols.length; i++) c.drawText(heads[i], cols[i] * k, 282 * k, smallDim);
         smallDim.setTextAlign(Paint.Align.LEFT);
@@ -1036,7 +1031,7 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
     private boolean empty(Canvas c, boolean nothing, String none) {
         if (details != null && !nothing) return false;
         dim.setTextAlign(Paint.Align.CENTER);
-        c.drawText(details == null && loadingMatch ? Ui.tr("Carregando…", "Loading…", "Cargando…") : none, w / 2f, 700 * k, dim);
+        c.drawText(details == null && loadingMatch ? Ui.tr("Carregando…") : none, w / 2f, 700 * k, dim);
         dim.setTextAlign(Paint.Align.LEFT);
         return true;
     }
@@ -1045,8 +1040,8 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
     private void drawSummary(Canvas c, Football.Match m) {
         panel(c, M, 430, R, 1028);
         if (empty(c, details != null && details.events.isEmpty(), Football.PRE.equals(m.state)
-                ? Ui.tr("O jogo ainda não começou.", "It hasn't started yet.", "Aún no empezó.")
-                : Ui.tr("Nenhum gol ou cartão.", "No goals or cards.", "Ningún gol o tarjeta."))) return;
+                ? Ui.tr("O jogo ainda não começou.")
+                : Ui.tr("Nenhum gol ou cartão."))) return;
         float cx = w / 2f;
         stroke(c, cx, 470 * k, cx, 1000 * k);
         List<Football.Event> events = details.events;
@@ -1072,7 +1067,7 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
                 c.drawRoundRect(rect, 2 * k, 2 * k, fill);
             }
             String who = e.player + (e.kind == Football.Event.GOAL ? "" : e.kind == Football.Event.RED
-                    ? "  ·  " + Ui.tr("vermelho", "red", "roja") : "  ·  " + Ui.tr("amarelo", "yellow", "amarilla"));
+                    ? "  ·  " + Ui.tr("vermelho") : "  ·  " + Ui.tr("amarelo"));
             small.setTextAlign(home ? Paint.Align.RIGHT : Paint.Align.LEFT);
             c.drawText(who, home ? icon - 24 * k : icon + 24 * k, mid + Ui.halfCap(small), small);
             small.setTextAlign(Paint.Align.LEFT);
@@ -1088,13 +1083,12 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
     /** The numbers side by side, with a bar split by each team's share. */
     private void drawNumbers(Canvas c) {
         panel(c, M, 430, R, 1028);
-        if (empty(c, details != null && details.stats.isEmpty(), Ui.tr("Sem números deste jogo.", "No numbers for this match.",
-                "Sin números de este partido."))) return;
+        if (empty(c, details != null && details.stats.isEmpty(), Ui.tr("Sem números deste jogo."))) return;
         float left = 360 * k, right = 1560 * k, cx = w / 2f;
         // Before kickoff the source gives each team's season so far: said so, not to read as this match's.
         boolean season = open != null && Football.PRE.equals(open.state);
-        c.drawText(season ? Ui.tr("Números de cada time na temporada", "Each team's numbers this season", "Números de cada equipo en la temporada")
-                : Ui.tr("Números do jogo", "This match's numbers", "Números del partido"), (M + 40) * k, 478 * k, panelTitle);
+        c.drawText(season ? Ui.tr("Números de cada time na temporada")
+                : Ui.tr("Números do jogo"), (M + 40) * k, 478 * k, panelTitle);
         for (int i = 0; i < details.stats.size() && i < 9; i++) {
             String[] s = details.stats.get(i);
             float mid = (540 + i * 54) * k;
@@ -1130,7 +1124,7 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
         panel(c, M, 430, 940, 1028);
         panel(c, 980, 430, R, 1028);
         if (details == null || details.homeLineup.isEmpty()) {
-            empty(c, true, Ui.tr("Escalações ainda não divulgadas.", "Line-ups not out yet.", "Alineaciones aún no publicadas."));
+            empty(c, true, Ui.tr("Escalações ainda não divulgadas."));
             return;
         }
         lineup(c, m.home, details.homeFormation, details.homeLineup, (M + 36) * k);
@@ -1149,10 +1143,10 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
         panel(c, 930, 430, R, 728);
         panel(c, 930, 752, R, 1028);
         float x = (M + 36) * k, r = (900 - 36) * k;
-        c.drawText(Ui.tr("Confrontos diretos", "Head to head", "Enfrentamientos"), x, 478 * k, panelTitle);
+        c.drawText(Ui.tr("Confrontos diretos"), x, 478 * k, panelTitle);
         if (details == null) {
             if (loadingMatch) loading(c, x, 540 * k);
-            else c.drawText(Ui.tr("Sem dados agora.", "No data right now.", "Sin datos ahora."), x, 540 * k, dim);
+            else c.drawText(Ui.tr("Sem dados agora."), x, 540 * k, dim);
             return;
         }
         if (!details.meetingsSummary.isEmpty()) {
@@ -1160,7 +1154,7 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
             c.drawText(details.meetingsSummary, r, 478 * k, dim);
             dim.setTextAlign(Paint.Align.LEFT);
         }
-        if (details.meetings.isEmpty()) c.drawText(Ui.tr("Nenhum confronto recente.", "No recent meetings.", "Ningún enfrentamiento reciente."), x, 540 * k, dim);
+        if (details.meetings.isEmpty()) c.drawText(Ui.tr("Nenhum confronto recente."), x, 540 * k, dim);
         for (int i = 0; i < details.meetings.size() && i < 6; i++) {
             Football.Match g = details.meetings.get(i);
             float mid = (536 + i * 80) * k;
@@ -1179,9 +1173,9 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
 
     /** A team's last five: its name, then V/E/D squares with the opponent and score under each. */
     private void formPanel(Canvas c, Football.Team t, List<Football.Match> form, float x, float r, float top) {
-        c.drawText(Ui.trf(Ui.tr("Últimos 5 do {team}", "{team}'s last 5", "Últimos 5 de {team}"), "team", t.label()), x, top * k, panelTitle);
+        c.drawText(Ui.trf("Últimos 5 do {team}", "team", t.label()), x, top * k, panelTitle);
         if (form.isEmpty()) {
-            c.drawText(Ui.tr("Sem dados.", "No data.", "Sin datos."), x, (top + 60) * k, dim);
+            c.drawText(Ui.tr("Sem dados."), x, (top + 60) * k, dim);
             return;
         }
         float col = (r - x) / 5;
@@ -1205,13 +1199,13 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
         if (o == null || !o.any()) {
             panel(c, M, 430, R, 1028);
             dim.setTextAlign(Paint.Align.CENTER);
-            c.drawText(loadingMatch ? Ui.tr("Carregando…", "Loading…", "Cargando…")
-                    : Ui.tr("Sem odds para este jogo.", "No odds for this match.", "Sin cuotas para este partido."), w / 2f, 700 * k, dim);
+            c.drawText(loadingMatch ? Ui.tr("Carregando…")
+                    : Ui.tr("Sem odds para este jogo."), w / 2f, 700 * k, dim);
             dim.setTextAlign(Paint.Align.LEFT);
             return;
         }
-        String[] labels = {Ui.trf(Ui.tr("Vitória do {team}", "{team} wins", "Gana {team}"), "team", m.home.label()),
-                Ui.tr("Empate", "Draw", "Empate"), Ui.trf(Ui.tr("Vitória do {team}", "{team} wins", "Gana {team}"), "team", m.away.label())};
+        String[] labels = {Ui.trf("Vitória do {team}", "team", m.home.label()),
+                Ui.tr("Empate"), Ui.trf("Vitória do {team}", "team", m.away.label())};
         double[] values = {o.home, o.draw, o.away};
         float gap = 30, wd = (R - M - 2 * gap) / 3;
         for (int i = 0; i < 3; i++) {
@@ -1228,7 +1222,7 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
             }
             c.drawText(String.format(Ui.locale(), "%.2f", values[i]), cx, 660 * k, oddsBig);
             dim.setTextAlign(Paint.Align.CENTER);
-            c.drawText(Ui.trf(Ui.tr("{p}% de chance", "{p}% chance", "{p}% de probabilidad"), "p", o.chance(values[i])), cx, 730 * k, dim);
+            c.drawText(Ui.trf("{p}% de chance", "p", o.chance(values[i])), cx, 730 * k, dim);
             dim.setTextAlign(Paint.Align.LEFT);
             // The chance as a bar.
             float bl = cx - 140 * k, br = cx + 140 * k;
@@ -1242,12 +1236,10 @@ final class FootballView extends ViewGroup implements Choreographer.FrameCallbac
         }
         String books = String.join(", ", o.bookmakers);
         String source = o.bookmakers.size() == 1
-                ? Ui.trf(Ui.tr("Odd decimal de {b}, via ESPN.", "Decimal odds from {b}, via ESPN.", "Cuota decimal de {b}, vía ESPN."), "b", books)
-                : Ui.trf(Ui.tr("Média das odds decimais de {n} casas ({b}), via ESPN.", "Average decimal odds of {n} bookmakers ({b}), via ESPN.",
-                "Promedio de cuotas de {n} casas ({b}), vía ESPN."), "n", o.bookmakers.size(), "b", books);
+                ? Ui.trf("Odd decimal de {b}, via ESPN.", "b", books)
+                : Ui.trf("Média das odds decimais de {n} casas ({b}), via ESPN.", "n", o.bookmakers.size(), "b", books);
         dim.setTextAlign(Paint.Align.CENTER);
-        c.drawText(source + "  " + Ui.tr("A chance já desconta a margem das casas.", "The chance leaves out the bookmakers' margin.",
-                "La probabilidad descuenta el margen de las casas."), w / 2f, 960 * k, dim);
+        c.drawText(source + "  " + Ui.tr("A chance já desconta a margem das casas."), w / 2f, 960 * k, dim);
         dim.setTextAlign(Paint.Align.LEFT);
     }
 }

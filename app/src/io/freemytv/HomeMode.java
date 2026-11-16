@@ -375,7 +375,7 @@ final class HomeMode {
         // Kalley 43G200 turns Google TV's setup app back on at every start: without its home screen the next start
         // looped at the logo, and that TV only came back with a USB reflash (CleanYourTV, examples/kalley-43g200).
         if ("R3_GTV".equals(Build.DEVICE)) {
-            done(c, Ui.tr("On this TV model, switching the home screen kept a TV from starting. Free My TV stays an app here: open it from your apps."));
+            done(c, Ui.tr("Neste modelo de TV, trocar a tela inicial impediu uma TV de ligar. Aqui o Free My TV fica como app: abra pelos seus apps."));
             return;
         }
         try (Adb adb = connect(c, s)) {
@@ -400,24 +400,22 @@ final class HomeMode {
             if (owners == null) {
                 // Nobody can tell who saved the networks: on Wi-Fi, stop before anything changes.
                 if (!"0".equals(adb.shell("settings get global wifi_on").trim())) {
-                    throw new IOException(Ui.tr("I couldn't check which app saved the Wi-Fi, so nothing changed. Try again in a minute."));
+                    throw new IOException(Ui.tr("Não consegui ver qual app salvou o Wi-Fi, então nada mudou. Tente de novo daqui a um minuto."));
                 }
                 owners = new HashSet<>();
             }
             boolean setupHome = setupIsHome(adb);
             if ((setupHome && owners.contains(GOOGLE_SETUP)) || owners.contains(packageOf(home))) {
-                throw new IOException(Ui.tr("the TV's first setup saved the Wi-Fi, and turning it off would erase those networks. "
-                        + "In Settings → Network & Internet, forget the network and connect again (networks out of range don't "
-                        + "show there: Claude Code can remove them from your computer), then try once more."));
+                throw new IOException(Ui.tr("a configuração inicial da TV salvou o Wi-Fi, e desligá-la apagaria essas redes. Em Configurações → Rede e Internet, esqueça a rede e conecte de novo (as fora de alcance não aparecem lá: o Claude Code apaga pelo computador) e tente outra vez."));
             }
             if (metrics(latest, ORIGINAL) == null && !home.isEmpty()) {
-                busy(c, Ui.tr("Measuring the original home screen…"));
+                busy(c, Ui.tr("Medindo o Início original…"));
                 measureSafely(c, adb, ORIGINAL, true);
             }
-            busy(c, Ui.tr("Switching the home screen and screensaver…"));
+            busy(c, Ui.tr("Trocando o Início e a tela de descanso…"));
             Watchdog.clear(c);
             check(adb.shell("cmd package set-home-activity " + HOME_ACTIVITY), "Success",
-                    Ui.tr("Android didn't accept the new home screen"));
+                    Ui.tr("o Android não aceitou o novo Início"));
             // The TV's own screensaver stays (and isn't turned off) unless More Settings > Screensaver picks ours.
             boolean ownDream = s.optBoolean("ownDream");
             String offDream = ownDream ? dream : "";
@@ -453,7 +451,7 @@ final class HomeMode {
             int done = 0;
             for (String pkg : targets) {
                 done++;
-                busy(c, Ui.trf("Turning off apps ({done}/{total})…", "done", done, "total", targets.size()));
+                busy(c, Ui.trf("Desligando apps ({done}/{total})…", "done", done, "total", targets.size()));
                 if (!candidates.contains(pkg) || needed.contains(pkg) || owners.contains(pkg) || keptOff.contains(pkg)
                         || keptOn.contains(pkg)) continue;
                 // The TV's home screen only once Google TV's setup app is off: its recovery screen would take Home.
@@ -486,24 +484,22 @@ final class HomeMode {
             }
             // "Continue watching" reads the apps' Watch Next lists (WatchNext): granted here, so the TV doesn't ask.
             adb.shell("pm grant " + PKG + " " + WatchNext.PERMISSION);
-            notice(c, ownDream ? Ui.trf("Free My TV is on: new home screen and screensaver, {n} apps turned off.", "n", disabled.size())
-                    : Ui.tr("Free My TV ligado: Início novo, " + disabled.size() + " apps desligados.",
-                            "Free My TV is on: new home screen, " + disabled.size() + " apps turned off.",
-                            "Free My TV está activo: nueva pantalla de inicio, " + disabled.size() + " apps desactivadas."));
-            busy(c, Ui.tr("Measuring Free My TV…"));
+            notice(c, ownDream ? Ui.trf("Free My TV ligado: Início e tela de descanso novos, {n} apps desligados.", "n", disabled.size())
+                    : Ui.trf("Free My TV ligado: Início novo, {n} apps desligados.", "n", disabled.size()));
+            busy(c, Ui.tr("Medindo o Free My TV…"));
             measureSafely(c, adb, FREE, false);
             done(c, null);
             adb.shell("am start -a android.intent.action.MAIN -c android.intent.category.HOME");
             ModeJob.schedule(c, ModeJob.MEMORY, FREE, 120_000);
         } catch (Exception e) {
-            done(c, Ui.trf("Couldn't turn on Free My TV: {error}", "error", e.getMessage()));
+            done(c, Ui.trf("Não deu para ligar o Free My TV: {error}", "error", e.getMessage()));
         }
     }
 
     private static void applyOriginal(Context c) {
         JSONObject s = state(c);
         try (Adb adb = connect(c, s)) {
-            busy(c, Ui.tr("Turning the apps back on…"));
+            busy(c, Ui.tr("Religando os apps…"));
             String home = originalHome(s);
             Set<String> toEnable = new HashSet<>(stringList(s, "disabled"));
             for (String pkg : targets(home, originalDream(s), true)) {
@@ -521,13 +517,13 @@ final class HomeMode {
             List<String> failed = new ArrayList<>();
             for (String pkg : order) {
                 done++;
-                busy(c, Ui.trf("Turning apps back on ({done}/{total})…", "done", done, "total", order.size()));
+                busy(c, Ui.trf("Religando apps ({done}/{total})…", "done", done, "total", order.size()));
                 if (!present.contains(pkg)) continue;
                 // Checked: whatever didn't come back stays on the list (and in the notice); nothing disappears silently.
                 String out = adb.shell("pm enable " + pkg);
                 if (!out.contains("new state: enabled")) failed.add(pkg);
             }
-            busy(c, Ui.tr("Restoring the original home screen…"));
+            busy(c, Ui.tr("Devolvendo o Início original…"));
             boolean homeOk = restoreHome(adb, home);
             if (setupBack) {
                 if (homeOk && adb.shell("pm enable " + GOOGLE_SETUP).contains("new state: enabled")) {
@@ -549,19 +545,19 @@ final class HomeMode {
                     .put("disabled", new JSONArray(failed)).remove("keptOff");
             save(c, s);
             if (failed.isEmpty() && homeOk) {
-                notice(c, Ui.tr("Original mode: the factory home screen, screensaver and apps are back."));
+                notice(c, Ui.tr("Modo original: Início, tela de descanso e apps de fábrica de volta."));
             } else {
                 List<String> problems = new ArrayList<>(failed);
-                if (!homeOk) problems.add(Ui.tr("the original home screen"));
-                notice(c, Ui.trf("Original mode, but I couldn't turn back on: {list}.", "list", String.join(", ", problems)));
+                if (!homeOk) problems.add(Ui.tr("o Início original"));
+                notice(c, Ui.trf("Modo original, mas não consegui religar: {list}.", "list", String.join(", ", problems)));
             }
-            busy(c, Ui.tr("Measuring the original home screen…"));
+            busy(c, Ui.tr("Medindo o Início original…"));
             measureSafely(c, adb, ORIGINAL, false);
             done(c, null);
             adb.shell("am start -a android.intent.action.MAIN -c android.intent.category.HOME");
             ModeJob.schedule(c, ModeJob.MEMORY, ORIGINAL, 120_000);
         } catch (Exception e) {
-            done(c, Ui.trf("Couldn't go back to the original: {error}", "error", e.getMessage()));
+            done(c, Ui.trf("Não deu para voltar ao original: {error}", "error", e.getMessage()));
         }
     }
 
@@ -645,7 +641,7 @@ final class HomeMode {
                 restoreScreensaver(adb, s);
                 s.put("homeReverted", true).put("disabled", kept);
                 save(app, s);
-                notice(app, Ui.tr("Free My TV's home screen crashed 3 times in a row; I switched back to the original one."));
+                notice(app, Ui.tr("O Início do Free My TV caiu 3 vezes seguidas; voltei para o Início original."));
                 adb.shell("am start -a android.intent.action.MAIN -c android.intent.category.HOME");
             } catch (Exception e) {
                 AppLog.w("could not give the home screen back: " + e.getMessage());
@@ -726,7 +722,7 @@ final class HomeMode {
                         }
                     }
                 }
-                if (!back.isEmpty()) notice(app, Ui.trf("Turned back on {list}: the TV's inputs or remote need it.", "list", String.join(", ", back)));
+                if (!back.isEmpty()) notice(app, Ui.trf("Religuei {list}: as entradas ou o controle da TV precisam disso.", "list", String.join(", ", back)));
                 boolean setupOn = present.contains(GOOGLE_SETUP) && !disabledNow.contains(GOOGLE_SETUP)
                         && s.optBoolean("setupHome", true);
                 List<String> keptOn = stringList(s, "keptOn");
@@ -750,12 +746,12 @@ final class HomeMode {
                 }
                 if (!reverted && !homeHolder(adb).contains(PKG)) {
                     adb.shell("cmd package set-home-activity " + HOME_ACTIVITY);
-                    fixed.add(Ui.tr("the home screen"));
+                    fixed.add(Ui.tr("o Início"));
                 }
                 // Whole component names: ".ScreensaverAlone" (Android 11) contains ".Screensaver" (12 and newer).
                 if (!reverted && ownDream && !Arrays.asList(adb.shell("settings get secure screensaver_components").trim().split(",")).contains(DREAM)) {
                     adb.shell("settings put secure screensaver_components " + DREAM);
-                    fixed.add(Ui.tr("the screensaver"));
+                    fixed.add(Ui.tr("a tela de descanso"));
                 } else if (!reverted && !ownDream) {
                     keepStockScreensaver(adb, s, disabled);
                 }
@@ -768,18 +764,18 @@ final class HomeMode {
                     AppLog.w("check " + attempt + " failed, trying again in 2 min: " + e.getMessage());
                     ModeJob.schedule(app, ModeJob.VERIFY, (attempt + 1) + (updated ? ":updated" : ""), VERIFY_RETRY_MS);
                 } else {
-                    notice(app, Ui.trf("Couldn't check Free My TV: {error}", "error", e.getMessage()));
+                    notice(app, Ui.trf("Não consegui conferir o Free My TV: {error}", "error", e.getMessage()));
                 }
                 return;
             } catch (Exception e) {
-                notice(app, Ui.trf("Couldn't check Free My TV: {error}", "error", e.getMessage()));
+                notice(app, Ui.trf("Não consegui conferir o Free My TV: {error}", "error", e.getMessage()));
                 return;
             }
             if (!fixed.isEmpty()) {
-                notice(app, updated ? Ui.trf("The TV update turned back on {list}.", "list", String.join(", ", fixed))
-                        : Ui.trf("Turned off what was missing: {list}.", "list", String.join(", ", fixed)));
+                notice(app, updated ? Ui.trf("A atualização da TV religou {list}.", "list", String.join(", ", fixed))
+                        : Ui.trf("Desliguei o que faltava: {list}.", "list", String.join(", ", fixed)));
             } else if (updated) {
-                notice(app, Ui.tr("The TV was updated; Free My TV is still on."));
+                notice(app, Ui.tr("A TV foi atualizada; o Free My TV continua igual."));
             }
         }
     }
@@ -955,8 +951,8 @@ final class HomeMode {
     }
 
     private static Adb connect(Context c, JSONObject s) throws IOException {
-        busy(c, Ui.tr("Connecting…"));
-        Adb adb = Adb.connect(c, 120_000, () -> busy(c, Ui.tr("Accept “Allow USB debugging?” on the TV (tick “Always allow”).")));
+        busy(c, Ui.tr("Conectando…"));
+        Adb adb = Adb.connect(c, 120_000, () -> busy(c, Ui.tr("Aceite o aviso “Permitir depuração” na TV (marque “Sempre permitir”).")));
         if (!s.optBoolean("adbAuthorized")) {
             JSONObject latest = state(c);
             try { latest.put("adbAuthorized", true); } catch (JSONException ignored) {}
@@ -1040,16 +1036,16 @@ final class HomeMode {
                 apps.removeAll(busyApps(adb));
                 if (apps.isEmpty()) {
                     AppLog.w("free memory: nothing open in the background");
-                    notice(c, Ui.tr("Nenhum app aberto em segundo plano.", "No apps open in the background.", "Ninguna app abierta en segundo plano."));
+                    notice(c, Ui.tr("Nenhum app aberto em segundo plano."));
                     return;
                 }
                 long mb = closeApps(adb, apps, appMemoryMB(adb));
                 AppLog.w("free memory: closed " + apps + ", " + mb + " MB");
-                notice(c, Ui.plural(Ui.tr("plural|one:{n} app encerrado, {mb} MB liberados|other:{n} apps encerrados, {mb} MB liberados", "plural|one:Closed {n} app, {mb} MB freed|other:Closed {n} apps, {mb} MB freed", "plural|one:{n} app cerrada, {mb} MB liberados|other:{n} apps cerradas, {mb} MB liberados"),
+                notice(c, Ui.plural("plural|one:{n} app encerrado, {mb} MB liberados|other:{n} apps encerrados, {mb} MB liberados",
                         apps.size()).replace("{mb}", String.valueOf(mb)));
             } catch (Exception e) {
                 AppLog.w("free memory failed: " + e.getMessage());
-                notice(c, Ui.trf("Couldn't free memory: {error}", "error", e.getMessage()));
+                notice(c, Ui.trf("Não deu para liberar memória: {error}", "error", e.getMessage()));
             }
         }
     }
@@ -1075,16 +1071,16 @@ final class HomeMode {
     static void forceStopNow(Context c, String pkg, String label) {
         synchronized (RUN) {
             if (!mayTurnOff(pkg)) {
-                notice(c, Ui.trf("{app} is part of the TV and stays open", "app", label));
+                notice(c, Ui.trf("{app} faz parte da TV e continua aberto", "app", label));
                 return;
             }
             try (Adb adb = Adb.connect(c, 10_000, null)) {
                 adb.shell("am force-stop " + pkg);
                 AppLog.w("force-stopped " + pkg);
-                notice(c, Ui.trf("{app} closed", "app", label));
+                notice(c, Ui.trf("{app} encerrado", "app", label));
             } catch (Exception e) {
                 AppLog.w("force stop failed: " + e.getMessage());
-                notice(c, Ui.trf("Couldn't close {app}", "app", label));
+                notice(c, Ui.trf("Não deu para encerrar o {app}", "app", label));
             }
         }
     }
@@ -1095,11 +1091,11 @@ final class HomeMode {
             try (Adb adb = Adb.connect(c, 10_000, null)) {
                 String out = adb.shell("pm clear --cache-only " + pkg);
                 AppLog.w("clear cache " + pkg + ": " + out.trim());
-                notice(c, out.contains("Success") ? Ui.trf("{app}'s cache cleared", "app", label)
-                        : Ui.trf("Couldn't clear {app}'s cache", "app", label));
+                notice(c, out.contains("Success") ? Ui.trf("Cache do {app} limpo", "app", label)
+                        : Ui.trf("Não deu para limpar o cache do {app}", "app", label));
             } catch (Exception e) {
                 AppLog.w("clear cache failed: " + e.getMessage());
-                notice(c, Ui.trf("Couldn't clear {app}'s cache", "app", label));
+                notice(c, Ui.trf("Não deu para limpar o cache do {app}", "app", label));
             }
         }
     }
@@ -1153,8 +1149,7 @@ final class HomeMode {
             AppLog.w("optimizing the apps");
         } catch (IOException e) {
             AppLog.w("optimize apps: " + e.getMessage());
-            notice(c, Ui.trf(Ui.tr("Não deu para otimizar os apps: {error}", "Couldn't optimize the apps: {error}",
-                    "No se pudieron optimizar las apps: {error}"), "error", e.getMessage()));
+            notice(c, Ui.trf("Não deu para otimizar os apps: {error}", "error", e.getMessage()));
         }
     }
 
@@ -1433,12 +1428,10 @@ final class HomeMode {
             AppLog.w("sleep timer: the TV's shell didn't run it, running it now");
             adb.shell(writeShellScript(SLEEP_FILES, SLEEP_SCRIPT) + "sh " + SLEEP_FILES + ".sh " + at);
             if (!adb.shell("dumpsys power | grep -m 1 mWakefulness=").contains("Awake")) return;
-            notice(c, Ui.tr("O timer acabou, mas a TV não aceitou desligar.", "The sleep timer ended, but the TV wouldn't turn off.",
-                    "El temporizador terminó, pero la TV no se apagó."));
+            notice(c, Ui.tr("O timer acabou, mas a TV não aceitou desligar."));
         } catch (IOException e) {
             AppLog.w("sleep timer: couldn't turn the TV off: " + e.getMessage());
-            notice(c, Ui.trf(Ui.tr("O timer acabou, mas não deu para desligar a TV: {error}", "The sleep timer ended, but the TV couldn't be turned off: {error}",
-                    "El temporizador terminó, pero no se pudo apagar la TV: {error}"), "error", e.getMessage()));
+            notice(c, Ui.trf("O timer acabou, mas não deu para desligar a TV: {error}", "error", e.getMessage()));
         }
     }
 
@@ -1490,7 +1483,7 @@ final class HomeMode {
                 JSONObject s = state(c);
                 String why = lockReason(pkg, homePackages(adb, s), keyboardPackage(adb), on ? new HashSet<>() : wifiOwners(adb));
                 if (!why.isEmpty()) {
-                    notice(c, Ui.trf(Ui.tr("{app} fica como está: {reason}.", "{app} stays as it is: {reason}.", "{app} queda como está: {reason}."), "app", label, "reason", why));
+                    notice(c, Ui.trf("{app} fica como está: {reason}.", "app", label, "reason", why));
                     return;
                 }
                 Set<String> disabled = new HashSet<>(stringList(s, "disabled"));
@@ -1506,7 +1499,7 @@ final class HomeMode {
                 } else {
                     Set<String> needed = neededByTv(adb, Collections.singleton(pkg));
                     if (needed == null || needed.contains(pkg)) {
-                        notice(c, Ui.trf(Ui.tr("{app} continua ligado: as entradas ou o controle da TV precisam dele.", "{app} stays on: the TV's inputs or remote need it.", "{app} sigue encendida: las entradas o el control de la TV la necesitan."), "app", label));
+                        notice(c, Ui.trf("{app} continua ligado: as entradas ou o controle da TV precisam dele.", "app", label));
                         return;
                     }
                     done = adb.shell("pm disable-user --user 0 " + pkg).contains("disabled-user");
@@ -1523,11 +1516,11 @@ final class HomeMode {
                     save(c, latest);
                 }
                 AppLog.w((on ? "turned on " : "turned off ") + pkg + (done ? "" : " (refused)"));
-                notice(c, done ? (on ? Ui.trf(Ui.tr("{app} está ligado", "{app} is on", "{app} está encendida"), "app", label) : Ui.trf(Ui.tr("{app} está desligado", "{app} is off", "{app} está apagada"), "app", label))
-                        : on ? Ui.trf(Ui.tr("Não deu para ligar {app}", "Couldn't turn on {app}", "No se pudo encender {app}"), "app", label) : Ui.trf(Ui.tr("Não deu para desligar {app}", "Couldn't turn off {app}", "No se pudo apagar {app}"), "app", label));
+                notice(c, done ? (on ? Ui.trf("{app} está ligado", "app", label) : Ui.trf("{app} está desligado", "app", label))
+                        : on ? Ui.trf("Não deu para ligar {app}", "app", label) : Ui.trf("Não deu para desligar {app}", "app", label));
             } catch (Exception e) {
                 AppLog.w("app state " + pkg + ": " + e.getMessage());
-                notice(c, on ? Ui.trf(Ui.tr("Não deu para ligar {app}", "Couldn't turn on {app}", "No se pudo encender {app}"), "app", label) : Ui.trf(Ui.tr("Não deu para desligar {app}", "Couldn't turn off {app}", "No se pudo apagar {app}"), "app", label));
+                notice(c, on ? Ui.trf("Não deu para ligar {app}", "app", label) : Ui.trf("Não deu para desligar {app}", "app", label));
             }
         }
     }
@@ -1539,12 +1532,12 @@ final class HomeMode {
      * `owners` null = nobody could tell, so none).
      */
     static String lockReason(String pkg, Set<String> homes, String keyboard, Set<String> owners) {
-        if (pkg.equals(PKG)) return Ui.tr("é o Free My TV", "it's Free My TV", "es Free My TV");
-        if (pkg.equals(GOOGLE_SETUP) || homes.contains(pkg)) return Ui.tr("é uma tela inicial, a troca de modo cuida dela", "a home screen, the switch handles it", "es una pantalla de inicio, el cambio de modo se encarga");
-        if (!mayTurnOff(pkg)) return Ui.tr("faz parte da TV", "part of the TV", "es parte de la TV");
-        if (pkg.equals(keyboard)) return Ui.tr("é o teclado", "the keyboard", "es el teclado");
-        if (owners == null) return Ui.tr("não deu para checar o Wi-Fi", "couldn't check the Wi-Fi", "no se pudo revisar el Wi-Fi");
-        if (owners.contains(pkg)) return Ui.tr("ele guardou o Wi-Fi", "it saved the Wi-Fi", "guardó el Wi-Fi");
+        if (pkg.equals(PKG)) return Ui.tr("é o Free My TV");
+        if (pkg.equals(GOOGLE_SETUP) || homes.contains(pkg)) return Ui.tr("é uma tela inicial, a troca de modo cuida dela");
+        if (!mayTurnOff(pkg)) return Ui.tr("faz parte da TV");
+        if (pkg.equals(keyboard)) return Ui.tr("é o teclado");
+        if (owners == null) return Ui.tr("não deu para checar o Wi-Fi");
+        if (owners.contains(pkg)) return Ui.tr("ele guardou o Wi-Fi");
         return "";
     }
 

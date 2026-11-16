@@ -97,7 +97,7 @@ final class RecentsView extends View implements Choreographer.FrameCallback {
         activity = a;
         click = new Click(a);
         setFocusable(true);
-        message = Ui.tr("Procurando os apps abertos…", "Looking for open apps…", "Buscando las apps abiertas…");
+        message = Ui.tr("Procurando os apps abertos…");
         border.setStyle(Paint.Style.STROKE);
     }
 
@@ -148,7 +148,7 @@ final class RecentsView extends View implements Choreographer.FrameCallback {
                 AppLog.w("recent apps: " + e.getMessage());
                 disconnect();
                 main.post(() -> {
-                    message = Ui.trf(Ui.tr("Não deu para ler os apps abertos: {error}", "Couldn't read the open apps: {error}", "No se pudieron leer las apps abiertas: {error}"), "error", e.getMessage());
+                    message = Ui.trf("Não deu para ler os apps abertos: {error}", "error", e.getMessage());
                     invalidate();
                 });
             }
@@ -159,9 +159,7 @@ final class RecentsView extends View implements Choreographer.FrameCallback {
     private Adb connection() throws IOException {
         // The first time (a TV that never allowed this app), the TV asks "Allow USB debugging?": the panel says so.
         if (adb == null) adb = Adb.connect(getContext(), 60_000, () -> main.post(() -> {
-            message = Ui.tr("Aceite “Permitir depuração USB?” na TV (marque “Sempre permitir”).",
-                    "Accept “Allow USB debugging?” on the TV (tick “Always allow”).",
-                    "Acepta “¿Permitir depuración USB?” en la TV (marca “Permitir siempre”).");
+            message = Ui.tr("Aceite “Permitir depuração USB?” na TV (marque “Sempre permitir”).");
             invalidate();
         }));
         return adb;
@@ -186,7 +184,7 @@ final class RecentsView extends View implements Choreographer.FrameCallback {
     }
 
     private static String nothingOpen() {
-        return Ui.tr("Nenhum app aberto. Tudo já está encerrado.", "No apps open. Everything is already closed.", "Ninguna app abierta. Todo ya está cerrado.");
+        return Ui.tr("Nenhum app aberto. Tudo já está encerrado.");
     }
 
     private void showMemory(Map<String, Long> memory) {
@@ -210,9 +208,9 @@ final class RecentsView extends View implements Choreographer.FrameCallback {
             status = "";
             return;
         }
-        String open = Ui.plural(Ui.tr("plural|one:{n} app aberto|other:{n} apps abertos", "plural|one:{n} app open|other:{n} apps open", "plural|one:{n} app abierta|other:{n} apps abiertas"), apps.size());
+        String open = Ui.plural("plural|one:{n} app aberto|other:{n} apps abertos", apps.size());
         long mb = totalMb();
-        status = mb > 0 ? Ui.trf(Ui.tr("{open} · {mb} MB em uso", "{open} · {mb} MB in use", "{open} · {mb} MB en uso"), "open", open, "mb", mb) : open;
+        status = mb > 0 ? Ui.trf("{open} · {mb} MB em uso", "open", open, "mb", mb) : open;
     }
 
     /** Closes one app (its card flies up), or all of them (`app` null), and takes them off the row. */
@@ -244,13 +242,13 @@ final class RecentsView extends View implements Choreographer.FrameCallback {
             try {
                 long mb = HomeMode.closeApps(connection(), pkgs, memory);
                 AppLog.w("recent apps: closed " + pkgs + ", " + mb + " MB");
-                done = what != null ? (mb > 0 ? Ui.trf(Ui.tr("{app} encerrado, {mb} MB liberados", "{app} closed, {mb} MB freed", "{app} cerrada, {mb} MB liberados"), "app", what, "mb", mb) : Ui.trf(Ui.tr("{app} encerrado", "{app} closed", "{app} cerrada"), "app", what))
-                        : Ui.plural(Ui.tr("plural|one:{n} app encerrado, {mb} MB liberados|other:{n} apps encerrados, {mb} MB liberados", "plural|one:Closed {n} app, {mb} MB freed|other:Closed {n} apps, {mb} MB freed", "plural|one:{n} app cerrada, {mb} MB liberados|other:{n} apps cerradas, {mb} MB liberados"), pkgs.size())
+                done = what != null ? (mb > 0 ? Ui.trf("{app} encerrado, {mb} MB liberados", "app", what, "mb", mb) : Ui.trf("{app} encerrado", "app", what))
+                        : Ui.plural("plural|one:{n} app encerrado, {mb} MB liberados|other:{n} apps encerrados, {mb} MB liberados", pkgs.size())
                                 .replace("{mb}", String.valueOf(mb));
             } catch (IOException e) {
                 AppLog.w("recent apps: close failed: " + e.getMessage());
                 disconnect();
-                done = what != null ? Ui.trf(Ui.tr("Não deu para encerrar {app}", "Couldn't close {app}", "No se pudo cerrar {app}"), "app", what) : Ui.tr("Não deu para encerrar os apps.", "Couldn't close the apps.", "No se pudieron cerrar las apps.");
+                done = what != null ? Ui.trf("Não deu para encerrar {app}", "app", what) : Ui.tr("Não deu para encerrar os apps.");
             }
             String text = done;
             main.post(() -> {
@@ -410,9 +408,8 @@ final class RecentsView extends View implements Choreographer.FrameCallback {
         messagePaint.setTextAlign(Paint.Align.CENTER);
         shadow.setMaskFilter(new BlurMaskFilter(SHADOW_BLUR * k, BlurMaskFilter.Blur.NORMAL));
         border.setStrokeWidth(2 * k);
-        closeAllLabel = Ui.tr("Encerrar todos", "Close all", "Cerrar todas");
-        hintText = Ui.tr("OK abre · ↑ encerra · ↓ Encerrar todos · Voltar sai", "OK opens · ↑ closes · ↓ Close all · Back leaves",
-                "OK abre · ↑ cierra · ↓ Cerrar todas · Atrás sale");
+        closeAllLabel = Ui.tr("Encerrar todos");
+        hintText = Ui.tr("OK abre · ↑ encerra · ↓ Encerrar todos · Voltar sai");
         measureTexts();
         retarget(true);
     }
@@ -422,7 +419,7 @@ final class RecentsView extends View implements Choreographer.FrameCallback {
         if (name == null) return;
         TextPaint tp = new TextPaint(name);
         for (App app : apps) {
-            app.mbShown = app.mb > 0 ? Ui.trf(Ui.tr("{mb} MB", "{mb} MB", "{mb} MB"), "mb", app.mb) : "";
+            app.mbShown = app.mb > 0 ? Ui.trf("{mb} MB", "mb", app.mb) : "";
             float room = (CARD_W - ICON - 40) * k - (app.mbShown.isEmpty() ? 0 : meta.measureText(app.mbShown) + 24 * k);
             app.labelShown = TextUtils.ellipsize(app.label, tp, room, TextUtils.TruncateAt.END).toString();
         }

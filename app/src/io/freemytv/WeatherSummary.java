@@ -40,31 +40,27 @@ final class WeatherSummary {
         boolean raining = f.precipitation >= 0.1 || wet(f, 0);
         if (raining) {
             for (int i = 1; i < n; i++) {
-                if (!wet(f, i)) return Ui.trf(Ui.tr("Chuva até por volta das {time}.", "Rain until about {time}.",
-                        "Lluvia hasta las {time} aproximadamente."), "time", HomeData.hour(f.hourAt[i]));
+                if (!wet(f, i)) return Ui.trf("Chuva até por volta das {time}.", "time", HomeData.hour(f.hourAt[i]));
             }
-            return Ui.tr("Chuva pelas próximas horas.", "Rain for the next few hours.", "Lluvia durante las próximas horas.");
+            return Ui.tr("Chuva pelas próximas horas.");
         }
         for (int i = 1; i < n; i++) {
             if (!wet(f, i)) continue;
             String time = HomeData.hour(f.hourAt[i]);
-            if (storm(f.hourCode[i])) return Ui.trf(Ui.tr("Tempestade possível a partir das {time}.",
-                    "Thunderstorms possible from {time}.", "Tormentas posibles desde las {time}."), "time", time);
-            return Ui.trf(Ui.tr("Chuva provável a partir das {time}.", "Rain likely from {time}.",
-                    "Lluvia probable desde las {time}."), "time", time);
+            if (storm(f.hourCode[i])) return Ui.trf("Tempestade possível a partir das {time}.", "time", time);
+            return Ui.trf("Chuva provável a partir das {time}.", "time", time);
         }
         int most = 0;
         for (int i = 0; i < n; i++) most = Math.max(most, f.hourChance[i]);
-        if (most < 20) return Ui.tr("Sem chuva nas próximas 12 horas.", "No rain in the next 12 hours.",
-                "Sin lluvia en las próximas 12 horas.");
-        return Ui.trf(Ui.tr("Pouca chance de chuva ({p}).", "Low chance of rain ({p}).", "Poca probabilidad de lluvia ({p})."),
+        if (most < 20) return Ui.tr("Sem chuva nas próximas 12 horas.");
+        return Ui.trf("Pouca chance de chuva ({p}).",
                 "p", most + "%");
     }
 
     private static String wind(Forecast f) {
         double gusts = f.dayCount > 0 && !Double.isNaN(f.dayGusts[0]) ? Math.max(f.dayGusts[0], f.gusts) : f.gusts;
         if (Double.isNaN(gusts) || gusts < STRONG_GUSTS) return "";
-        return Ui.trf(Ui.tr("Rajadas de vento de até {v}.", "Wind gusts up to {v}.", "Rachas de viento de hasta {v}."),
+        return Ui.trf("Rajadas de vento de até {v}.",
                 "v", Forecast.speed(gusts));
     }
 
@@ -72,7 +68,7 @@ final class WeatherSummary {
     private static String sun(Forecast f, long now) {
         if (f.dayCount == 0 || Double.isNaN(f.dayUv[0]) || f.dayUv[0] < HIGH_UV) return "";
         if (f.sunset[0] != 0 && now > f.sunset[0] - 3 * 3600_000L) return "";
-        return Ui.tr("UV muito alto: use protetor solar.", "Very high UV: wear sunscreen.", "UV muy alto: usa protector solar.");
+        return Ui.tr("UV muito alto: use protetor solar.");
     }
 
     /** Today's high still a few degrees above now: when it comes. */
@@ -82,21 +78,18 @@ final class WeatherSummary {
         int peak = -1;
         for (int i = 0; i < f.hourCount && f.hourAt[i] < end; i++) if (peak < 0 || f.hourTemp[i] > f.hourTemp[peak]) peak = i;
         if (peak <= 0) return "";
-        return Ui.trf(Ui.tr("Máxima de {max} por volta das {time}.", "High of {max} around {time}.",
-                "Máxima de {max} hacia las {time}."), "max", HomeData.degrees(f.dayMax[0]), "time", HomeData.hour(f.hourAt[peak]));
+        return Ui.trf("Máxima de {max} por volta das {time}.", "max", HomeData.degrees(f.dayMax[0]), "time", HomeData.hour(f.hourAt[peak]));
     }
 
     /** In the evening (after sunset): tomorrow in a few words. */
     private static String tomorrow(Forecast f, long now) {
         if (f.dayCount < 2 || f.sunset[0] == 0 || now < f.sunset[0]) return "";
-        return Ui.trf(Ui.tr("Amanhã: {condition}, {max}/{min}.", "Tomorrow: {condition}, {max}/{min}.",
-                "Mañana: {condition}, {max}/{min}."), "condition", midSentence(HomeData.condition(f.dayCode[1], true)),
+        return Ui.trf("Amanhã: {condition}, {max}/{min}.", "condition", midSentence(HomeData.condition(f.dayCode[1], true)),
                 "max", HomeData.degrees(f.dayMax[1]), "min", HomeData.degrees(f.dayMin[1]));
     }
 
-    /** A condition inside a sentence: lowercase where the language writes it so (German keeps its capital nouns). */
+    /** A condition inside a sentence: lowercase (as all of the app's languages write it there). */
     private static String midSentence(String condition) {
-        boolean lower = Ui.en || Ui.es || Ui.language.equals("pt");
-        return lower ? condition.toLowerCase(Ui.locale()) : condition;
+        return condition.toLowerCase(Ui.locale());
     }
 }

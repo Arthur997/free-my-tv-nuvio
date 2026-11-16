@@ -39,15 +39,10 @@ final class Ui {
     static final boolean LEGACY = Build.VERSION.SDK_INT < 31;
     /** The light drawing paths: Android 8 to 11 always, or More Settings > Performance mode. */
     static volatile boolean LITE = LEGACY;
-    /**
-     * The language in use: "en" or one with a catalogue in assets/i18n (pt, es, de, fr, zh-CN…), picked in the settings
-     * or, with "auto", the TV's own (English when there is no catalogue for it).
-     */
-    static volatile String language = "en";
+    /** The language in use (one of LANGUAGES), picked in the settings or, with "auto", the TV's own (else English). */
+    static volatile String language = "pt";
     /** Bumped when the language changes: text cached by the screens is made again. */
     static volatile int generation;
-    /** English or Spanish in use (the fork's own texts are written in Portuguese, English and Spanish: tr(pt, en, es)). */
-    static volatile boolean en = true, es;
     static Typeface thin, light, displayMedium, displaySemibold, regular, medium, semibold;
     private static boolean loaded;
     private static final Rect BOUNDS = new Rect();
@@ -93,54 +88,46 @@ final class Ui {
     // MARK: - Text in the viewer's language
 
     /*
-     * Each language is a catalogue, assets/i18n/<lang>.json, keyed by the English text in the code: Ui.tr("Live TV").
-     * A key "context|Text" is "Text" where a language needs another word (falls back to the plain "Text", then to the
-     * English). Text built at runtime is a pattern with named placeholders: Ui.trf("{n} min ago", "n", 12).
-     * tools/translate.py keeps the catalogues in step with the code. The active catalogue is one HashMap, swapped
-     * whole when the language changes, so a lookup is a get() that allocates nothing.
+     * The code is written in Brazilian Portuguese, and that text is the key: Ui.tr("TV ao vivo"). Every other language is
+     * a catalogue, assets/i18n/<lang>.json, mapping the Portuguese to that language. A key "context|Text" is "Text" where
+     * a language needs another word for it (the context is dropped on screen). Text built at runtime is a pattern with
+     * named placeholders: Ui.trf("há {n} min", "n", 12). A text a language lacks shows in English, then in Portuguese.
+     * tools/translate.py lists and fills what each catalogue lacks. The active catalogues are HashMaps, swapped whole when
+     * the language changes, so a lookup is a get() that allocates nothing.
      */
-    private static volatile Map<String, String> catalogue = Collections.emptyMap();
-    private static volatile Locale locale = Locale.US;
-    private static volatile PluralRules plurals = PluralRules.forLocale(Locale.US);
-    private static volatile String[] languages;
+    /** The languages, in the order the settings list them: the source first. */
+    static final String[] LANGUAGES = {"pt", "en", "es", "fr", "it"};
+    private static final String SOURCE = "pt", FALLBACK = "en";
+    private static volatile Map<String, String> catalogue = Collections.emptyMap(), fallback = Collections.emptyMap();
+    private static volatile Locale locale = new Locale("pt", "BR");
+    private static volatile PluralRules plurals = PluralRules.forLocale(locale);
     private static final Map<String, String> CONTEXT_FREE = new ConcurrentHashMap<>();
     /** The usual country for each language's dates and numbers, when the TV itself is in another language. */
-    private static final String[][] REGIONS = {
-        {"pt", "BR"}, {"es", "ES"}, {"de", "DE"}, {"fr", "FR"}, {"it", "IT"}, {"nl", "NL"}, {"pl", "PL"}, {"sv", "SE"},
-        {"da", "DK"}, {"nb", "NO"}, {"fi", "FI"}, {"cs", "CZ"}, {"ro", "RO"}, {"tr", "TR"}, {"ru", "RU"}, {"uk", "UA"},
-        {"el", "GR"}, {"ja", "JP"}, {"ko", "KR"}, {"hi", "IN"}, {"id", "ID"}, {"vi", "VN"},
-    };
+    private static final String[][] REGIONS = {{"pt", "BR"}, {"en", "US"}, {"es", "ES"}, {"fr", "FR"}, {"it", "IT"}};
 
-    /** The text for this English key in the current language (the English itself when there is none). */
-    static String tr(String english) {
-        String s = catalogue.get(english);
+    /** The text for this Portuguese key in the current language. */
+    static String tr(String pt) {
+        String s = catalogue.get(pt);
         if (s != null) return s;
-        if (english.indexOf('|') < 0) return english;
-        String plain = CONTEXT_FREE.get(english);
+        s = fallback.get(pt);
+        return s != null ? s : withoutContext(pt);
+    }
+
+    /** "context|Text" is "Text" ("plural|one:…|other:…" is its forms, "format|HH:mm" its pattern). */
+    private static String withoutContext(String key) {
+        int bar = key.indexOf('|');
+        if (bar < 0) return key;
+        String plain = CONTEXT_FREE.get(key);
         if (plain == null) {
-            plain = english.substring(english.indexOf('|') + 1);
-            CONTEXT_FREE.put(english, plain);
+            plain = key.substring(bar + 1);
+            CONTEXT_FREE.put(key, plain);
         }
-        s = catalogue.get(plain);
-        return s != null ? s : plain;
+        return plain;
     }
 
-    /**
-     * The fork's own texts, written in Portuguese and English: the Portuguese in Portuguese, the catalogue's (by the
-     * English) in every other language, the English when the catalogue doesn't have it.
-     */
-    static String tr(String pt, String english) {
-        return language.equals("pt") ? pt : tr(english);
-    }
-
-    /** As tr(pt, english), with the fork's own Spanish too. */
-    static String tr(String pt, String english, String spanish) {
-        return language.equals("pt") ? pt : language.equals("es") ? spanish : tr(english);
-    }
-
-    /** A pattern with named placeholders, filled from name/value pairs: trf("{n} min ago", "n", 12). */
-    static String trf(String english, Object... nameValue) {
-        String t = tr(english);
+    /** A pattern with named placeholders, filled from name/value pairs: trf("há {n} min", "n", 12). */
+    static String trf(String pt, Object... nameValue) {
+        String t = tr(pt);
         int open = t.indexOf('{');
         if (open < 0) return t;
         StringBuilder b = new StringBuilder(t.length() + 24);
@@ -166,10 +153,10 @@ final class Ui {
     }
 
     /**
-     * A count with its word in the right plural form: plural("plural|one:{n} season|other:{n} seasons", 3). Each
-     * catalogue gives one form per plural category its language uses (Unicode CLDR: zero, one, two, few, many, other),
-     * so Russian has "one:{n} сезон|few:{n} сезона|many:{n} сезонов" and Japanese just "other:{n}シーズン". The
-     * category for n comes from ICU's rules for the current locale; a missing one falls back to "other", then to the last.
+     * A count with its word in the right plural form: plural("plural|one:{n} temporada|other:{n} temporadas", 3). Each
+     * catalogue gives one form per plural category its language uses (Unicode CLDR: zero, one, two, few, many, other).
+     * The category for n comes from ICU's rules for the current locale; a missing one falls back to "other", then to the
+     * last form. The forms of a text a catalogue lacks follow the Portuguese rules (or the English ones).
      */
     static String plural(String key, long n) {
         String forms = tr(key), category = plurals.select(n), chosen = null, other = null, last = forms;
@@ -194,28 +181,7 @@ final class Ui {
         return locale;
     }
 
-    /** "en" and every language with a catalogue, sorted by code. */
-    static String[] languages() {
-        String[] l = languages;
-        if (l != null) return l;
-        List<String> found = new ArrayList<>();
-        found.add("en");
-        Context c = Prefs.context();
-        try {
-            String[] files = c == null ? null : c.getAssets().list("i18n");
-            for (String f : files == null ? new String[0] : files) {
-                if (f.endsWith(".json") && !f.equals("en.json")) found.add(f.substring(0, f.length() - 5));
-            }
-        } catch (IOException e) {
-            AppLog.w("i18n: " + e.getMessage());
-        }
-        Collections.sort(found);
-        l = found.toArray(new String[0]);
-        if (c != null) languages = l;
-        return l;
-    }
-
-    /** The language's own name, capitalized: "Português", "Deutsch", "Français", "日本語". */
+    /** The language's own name, capitalized: "Português", "English", "Français". */
     static String languageName(String code) {
         Locale l = Locale.forLanguageTag(code);
         String name = l.getDisplayLanguage(l);
@@ -226,63 +192,43 @@ final class Ui {
     /** After the language changes in the settings (and once Prefs can read them). */
     static synchronized void applyLanguage() {
         String lang = resolve(Prefs.language());
-        Map<String, String> cat = Collections.emptyMap();
-        if (!lang.equals("en")) {
+        Map<String, String> cat = Collections.emptyMap(), back = Collections.emptyMap();
+        if (!lang.equals(SOURCE)) {
             cat = load(lang);
             if (cat == null) {
-                lang = "en";
+                lang = FALLBACK;
+                cat = load(FALLBACK);
+            }
+            if (cat == null) {
+                lang = SOURCE;
                 cat = Collections.emptyMap();
+            }
+            if (!lang.equals(FALLBACK) && !lang.equals(SOURCE)) {
+                Map<String, String> english = load(FALLBACK);
+                if (english != null) back = english;
             }
         }
         catalogue = cat;
+        fallback = back;
         locale = localeOf(lang);
         plurals = PluralRules.forLocale(locale);
         language = lang;
-        en = lang.equals("en");
-        es = lang.equals("es");
         DATE_PATTERNS.clear();
         generation++;
     }
 
-    /** The catalogue for a setting ("auto", "fr", "pt-BR"…), or for the TV's language with "auto"; else "en". */
+    /** The language for a setting ("auto", "fr", "pt-BR"…), or for the TV's language with "auto"; else English. */
     private static String resolve(String setting) {
-        if (!setting.equals("auto")) {
-            String code = match(setting.replace('_', '-'));
-            if (code != null) return code;
-        }
-        Locale tv = Locale.getDefault();
-        String lang = base(tv.getLanguage());
-        // Simplified Chinese only where it is the written form (not Taiwan, Hong Kong or Macau).
-        if (lang.equals("zh") && ("Hant".equals(tv.getScript()) || "TW".equals(tv.getCountry())
-                || "HK".equals(tv.getCountry()) || "MO".equals(tv.getCountry()))) return "en";
-        String code = match(lang);
-        return code != null ? code : "en";
-    }
-
-    private static String match(String tag) {
-        String[] all = languages();
-        for (String code : all) if (code.equalsIgnoreCase(tag)) return code;
-        int dash = tag.indexOf('-');
-        String lang = base(dash < 0 ? tag : tag.substring(0, dash));
-        for (String code : all) {
-            int d = code.indexOf('-');
-            if ((d < 0 ? code : code.substring(0, d)).equalsIgnoreCase(lang)) return code;
-        }
-        return null;
-    }
-
-    /** Java's old codes for Indonesian and Hebrew, and Norwegian, as the catalogues name them. */
-    private static String base(String lang) {
-        lang = lang.toLowerCase(Locale.ROOT);
-        return lang.equals("in") ? "id" : lang.equals("iw") ? "he" : lang.equals("no") || lang.equals("nn") ? "nb" : lang;
+        String picked = setting.equals("auto") ? Locale.getDefault().getLanguage() : setting.replace('_', '-');
+        int dash = picked.indexOf('-');
+        String lang = (dash < 0 ? picked : picked.substring(0, dash)).toLowerCase(Locale.ROOT);
+        for (String code : LANGUAGES) if (code.equals(lang)) return code;
+        return FALLBACK;
     }
 
     private static Locale localeOf(String lang) {
-        if (lang.equals("en")) return Locale.US;
-        if (lang.equals("pt")) return new Locale("pt", "BR");
-        if (lang.indexOf('-') > 0) return Locale.forLanguageTag(lang);
         Locale tv = Locale.getDefault();
-        if (lang.equals(base(tv.getLanguage()))) return tv;   // the TV's own Spanish (es-MX, es-AR…), German (de-AT)…
+        if (lang.equals(tv.getLanguage()) && !tv.getCountry().isEmpty()) return tv;   // the TV's own es-MX, fr-CA, pt-PT…
         for (String[] r : REGIONS) if (r[0].equals(lang)) return new Locale(lang, r[1]);
         return new Locale(lang);
     }
@@ -377,8 +323,8 @@ final class Ui {
                 new SimpleDateFormat(text, loc);
             } catch (IllegalArgumentException e) {
                 AppLog.w("i18n " + language + ": invalid date pattern for " + key);
-                text = key.substring("format|".length());
-                loc = Locale.US;
+                text = key.substring("format|".length());   // the Portuguese pattern
+                loc = new Locale("pt", "BR");
             }
             pattern = new DatePattern(text, loc);
             DATE_PATTERNS.put(key, pattern);
@@ -438,12 +384,12 @@ final class Ui {
 
     /** "21:47" (in English, "9:47", like the iPhone in the US). */
     static String clock(long now) {
-        return Ui.datePattern("format|h:mm").format(now);
+        return Ui.datePattern("format|HH:mm").format(now);
     }
 
     /** "5:21" (sunrise and sunset; in English, "5:21 AM"). */
     static String time(long at) {
-        return once("time", at, () -> Ui.datePattern("format|h:mm a").format(at));
+        return once("time", at, () -> Ui.datePattern("format|H:mm").format(at));
     }
 
     private static final HashMap<String, String> FORMATTED = new HashMap<>();
@@ -472,7 +418,7 @@ final class Ui {
 
     /** "domingo, 18 de outubro" (lowercase, like the iPhone in Portuguese); "Sunday, October 18" in English; "Sonntag, 18. Oktober". */
     static String date(long now) {
-        return Ui.datePattern("format|EEEE, MMMM d").format(now);
+        return Ui.datePattern("format|EEEE, d 'de' MMMM").format(now);
     }
 
     /**

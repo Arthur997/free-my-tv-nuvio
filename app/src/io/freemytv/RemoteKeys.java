@@ -126,8 +126,7 @@ final class RemoteKeys {
             Intent intent = launchIntent(c.getPackageManager(), target);
             if (intent == null) {
                 AppLog.w("remote key: " + target + " is not installed");
-                android.widget.Toast.makeText(c, Ui.tr("O app deste botão não está instalado.",
-                        "The app for this button isn't installed.", "La app de este botón no está instalada."),
+                android.widget.Toast.makeText(c, Ui.tr("O app deste botão não está instalado."),
                         android.widget.Toast.LENGTH_SHORT).show();
                 return false;
             }

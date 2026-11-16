@@ -13,8 +13,8 @@ final class FootballText {
     /** "Hoje", "Amanhã", "Ontem" or "qua. 18/11": the day alone (where the time is already shown). */
     static String date(long at) {
         long day = day(at), today = day(System.currentTimeMillis());
-        return day == today ? Ui.tr("Hoje", "Today", "Hoy") : day == today + 1 ? Ui.tr("Amanhã", "Tomorrow", "Mañana")
-                : day == today - 1 ? Ui.tr("Ontem", "Yesterday", "Ayer") : Ui.datePattern("format|EEE d/M").format(at);
+        return day == today ? Ui.tr("Hoje") : day == today + 1 ? Ui.tr("Amanhã")
+                : day == today - 1 ? Ui.tr("Ontem") : Ui.datePattern("format|EEE d/M").format(at);
     }
 
     /** The day number in the app's clock (for today / tomorrow). */
@@ -25,10 +25,10 @@ final class FootballText {
 
     /** "AO VIVO · 67'", "Intervalo", "Encerrado" or "Próximo jogo". */
     static String state(Football.Match m) {
-        if (m.live()) return m.clock.isEmpty() ? Ui.tr("Ao vivo", "Live", "En vivo")
-                : m.clock.endsWith("'") ? Ui.tr("Ao vivo", "Live", "En vivo") + "  " + m.clock : m.clock;
-        if (m.over()) return Ui.tr("Encerrado", "Full time", "Finalizado");
-        return Ui.tr("Próximo jogo", "Next match", "Próximo partido");
+        if (m.live()) return m.clock.isEmpty() ? Ui.tr("Ao vivo")
+                : m.clock.endsWith("'") ? Ui.tr("Ao vivo") + "  " + m.clock : m.clock;
+        if (m.over()) return Ui.tr("Encerrado");
+        return Ui.tr("Próximo jogo");
     }
 
     /** "2 × 1"; before kickoff, the time instead. */
@@ -40,9 +40,9 @@ final class FootballText {
     /** "V", "E" or "D" in Portuguese (W, D, L in English). */
     static String outcome(String code) {
         switch (code) {
-            case "W": return Ui.tr("V", "W", "G");
-            case "D": return Ui.tr("E", "D", "E");
-            case "L": return Ui.tr("D", "L", "P");
+            case "W": return Ui.tr("futebol|V");
+            case "D": return Ui.tr("futebol|E");
+            case "L": return Ui.tr("futebol|D");
             default: return "";
         }
     }

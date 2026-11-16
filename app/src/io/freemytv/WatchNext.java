@@ -262,8 +262,9 @@ final class WatchNext {
             List<String> parts = new ArrayList<>();
             parts.add(app);
             if (number != null && !number.isEmpty()) {
-                parts.add((season != null && !season.isEmpty() ? Ui.tr("T", "S", "T") + season + " " : "")
-                        + Ui.tr("E", "E", "E") + number);
+                parts.add(season != null && !season.isEmpty()
+                        ? Ui.trf("T{season} E{episode}", "season", season, "episode", number)
+                        : Ui.trf("E{episode}", "episode", number));
             } else if (episode != null && !episode.isEmpty()) {
                 parts.add(episode);
             }
@@ -271,7 +272,7 @@ final class WatchNext {
             if (duration > 0 && left > 60_000) {
                 long minutes = left / 60_000;
                 String time = minutes >= 60 ? (minutes / 60) + " h " + (minutes % 60) + " min" : minutes + " min";
-                parts.add(Ui.tr("faltam " + time, time + " left", "quedan " + time));
+                parts.add(Ui.trf("faltam {time}", "time", time));
             }
             p.meta = String.join(" · ", parts);
             return p;

@@ -147,7 +147,7 @@ final class HomeApps {
         for (String pkg : shelfPackages(c)) {
             if (items.size() >= MAX_SHELF) break;
             if (pkg.equals(LIVE_TV_KEY)) {
-                if (liveTv(c) != null) items.add(special(c, LIVE_TV, "live", Ui.tr("TV ao vivo", "Live TV"), "live_tv"));
+                if (liveTv(c) != null) items.add(special(c, LIVE_TV, "live", Ui.tr("TV ao vivo"), "live_tv"));
                 continue;
             }
             if (pkg.startsWith(INPUT_KEY) && inputs == null) inputs = inputs(c, true);
@@ -187,9 +187,9 @@ final class HomeApps {
     private static Item shelfShortcut(Context c, String key, List<Item> inputs) {
         Item it = null;
         if (key.equals(HOME_SETTINGS_KEY)) {
-            it = shortcut(SETTINGS, key, Ui.tr("Home Settings"), "settings");
+            it = shortcut(SETTINGS, key, Ui.tr("Ajustes do Início"), "settings");
         } else if (key.equals(TV_SETTINGS_KEY)) {
-            it = shortcut(ANDROID_SETTINGS, key, Ui.tr("TV Settings"), "tv_settings");
+            it = shortcut(ANDROID_SETTINGS, key, Ui.tr("Ajustes da TV"), "tv_settings");
         } else if (inputs != null) {
             for (Item in : inputs) {
                 if (!key.equals(INPUT_KEY + in.inputId)) continue;
@@ -240,12 +240,12 @@ final class HomeApps {
         PackageManager pm = c.getPackageManager();
         List<String[]> out = new ArrayList<>();
         Set<String> seen = new HashSet<>();
-        if (liveTv(c) != null && seen.add(LIVE_TV_KEY)) out.add(new String[] {LIVE_TV_KEY, Ui.tr("TV ao vivo", "Live TV")});
+        if (liveTv(c) != null && seen.add(LIVE_TV_KEY)) out.add(new String[] {LIVE_TV_KEY, Ui.tr("TV ao vivo")});
         for (Item in : inputs(c, true)) {
             if (seen.add(INPUT_KEY + in.inputId)) out.add(new String[] {INPUT_KEY + in.inputId, in.label});
         }
-        out.add(new String[] {HOME_SETTINGS_KEY, Ui.tr("Home Settings")});
-        out.add(new String[] {TV_SETTINGS_KEY, Ui.tr("TV Settings")});
+        out.add(new String[] {HOME_SETTINGS_KEY, Ui.tr("Ajustes do Início")});
+        out.add(new String[] {TV_SETTINGS_KEY, Ui.tr("Ajustes da TV")});
         for (String[] d : SHELF) if (launchIntent(pm, d[2]) != null && seen.add(d[2])) out.add(new String[] {d[2], d[1]});
         List<String[]> more = new ArrayList<>();
         for (String[] app : launchable(c)) {
@@ -261,10 +261,10 @@ final class HomeApps {
     static List<Item> shortcuts(Context c) {
         List<Item> items = new ArrayList<>();
         if (liveTv(c) != null) {
-            items.add(shortcut(LIVE_TV, "live", Ui.tr("Live TV"), "tv"));
+            items.add(shortcut(LIVE_TV, "live", Ui.tr("TV ao Vivo"), "tv"));
         }
         items.addAll(inputs(c));
-        items.add(shortcut(ALL_APPS, "all", Ui.tr("All Apps"), "apps"));
+        items.add(shortcut(ALL_APPS, "all", Ui.tr("Todos os Apps"), "apps"));
         return items;
     }
 
@@ -284,14 +284,14 @@ final class HomeApps {
 
     /** Free My TV settings, in the corner of the home screen. */
     static Item settings() {
-        return shortcut(SETTINGS, "settings", Ui.tr("Settings"), "settings");
+        return shortcut(SETTINGS, "settings", Ui.tr("Ajustes"), "settings");
     }
 
     /** Shortcuts in the bottom drawer (All Apps is the page below it). */
     static List<Item> drawerShortcuts() {
         List<Item> items = new ArrayList<>();
-        items.add(shortcut(SETTINGS, "settings", Ui.tr("Home Settings"), "settings"));
-        items.add(shortcut(ANDROID_SETTINGS, "tv-settings", Ui.tr("TV Settings"), "tv_settings"));
+        items.add(shortcut(SETTINGS, "settings", Ui.tr("Ajustes do Início"), "settings"));
+        items.add(shortcut(ANDROID_SETTINGS, "tv-settings", Ui.tr("Ajustes da TV"), "tv_settings"));
         return items;
     }
 
@@ -321,7 +321,7 @@ final class HomeApps {
     /** For the bottom drawer: live TV and every HDMI input (the ones with no device are shown dimmed). */
     static List<Item> allInputs(Context c) {
         List<Item> items = new ArrayList<>();
-        if (liveTv(c) != null) items.add(shortcut(LIVE_TV, "live", Ui.tr("Live TV"), "tv"));
+        if (liveTv(c) != null) items.add(shortcut(LIVE_TV, "live", Ui.tr("TV ao Vivo"), "tv"));
         items.addAll(inputs(c, true));
         return items;
     }
@@ -432,7 +432,7 @@ final class HomeApps {
             TILES.keySet().removeIf(k -> k.contains(".") && !seen.contains(k));   // the art of apps no longer there
         }
         // First, so it's easy to find: the gear at the top right opens the TV's settings instead.
-        items.add(0, special(c, SETTINGS, "freemytv-settings", Ui.tr("Ajustes do Free My TV", "Free My TV Settings"), "sparkles"));
+        items.add(0, special(c, SETTINGS, "freemytv-settings", Ui.tr("Ajustes do Free My TV"), "sparkles"));
         return items;
     }
 

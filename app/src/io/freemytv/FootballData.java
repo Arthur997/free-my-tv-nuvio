@@ -161,9 +161,9 @@ final class FootballData {
         if (!Prefs.footballAlerts()) return;
         String score = scoreLine(now);
         if (now.homeScore > Math.max(0, before.homeScore) || (before.homeScore < 0 && now.homeScore > 0)) {
-            notice(Ui.trf(Ui.tr("Gol do {team}! {score}", "{team} scores! {score}", "¡Gol de {team}! {score}"), "team", now.home.label(), "score", score));
+            notice(Ui.trf("Gol do {team}! {score}", "team", now.home.label(), "score", score));
         } else if (now.awayScore > Math.max(0, before.awayScore) || (before.awayScore < 0 && now.awayScore > 0)) {
-            notice(Ui.trf(Ui.tr("Gol do {team}! {score}", "{team} scores! {score}", "¡Gol de {team}! {score}"), "team", now.away.label(), "score", score));
+            notice(Ui.trf("Gol do {team}! {score}", "team", now.away.label(), "score", score));
         }
     }
 
@@ -178,7 +178,7 @@ final class FootballData {
         remindedFor = m.id;
         cache.edit().putString("remindedFor", remindedFor).apply();
         long minutes = Math.max(1, Math.round(left / 60_000.0));
-        String text = Ui.trf(Ui.tr("{team} joga em {n} min", "{team} plays in {n} min", "{team} juega en {n} min"),
+        String text = Ui.trf("{team} joga em {n} min",
                 "team", o.team.label(), "n", minutes);
         if (!m.broadcast.isEmpty()) text += "  ·  " + m.broadcast;
         notice(text);

@@ -185,8 +185,8 @@ final class ControlCenter {
         Football.Match m = sportsMatch();
         if (m == null) {
             String team = Prefs.footballTeamName();
-            return new String[] {team.isEmpty() ? Ui.tr("Futebol", "Football", "Fútbol") : team,
-                    Ui.tr("Buscando o jogo…", "Looking for the match…", "Buscando el partido…")};
+            return new String[] {team.isEmpty() ? Ui.tr("Futebol") : team,
+                    Ui.tr("Buscando o jogo…")};
         }
         boolean started = m.homeScore >= 0 && m.awayScore >= 0;
         String line = started ? m.home.label() + "  " + m.homeScore + " × " + m.awayScore + "  " + m.away.label()
@@ -265,8 +265,8 @@ final class ControlCenter {
             cpu.start(activity, percent -> cpuPercent = percent);
             handler.postDelayed(liveRead, LIVE_MS);
         }
-        host.view().announceForAccessibility(showsInputs() ? Ui.tr("Entradas HDMI", "HDMI Inputs")
-                : Ui.tr("Central de controle", "Control Center", "Centro de control"));
+        host.view().announceForAccessibility(showsInputs() ? Ui.tr("Entradas HDMI")
+                : Ui.tr("Central de controle"));
     }
 
     /** Closed: nothing it started waits on it any more (the speed test and the timer go on). */
@@ -324,8 +324,8 @@ final class ControlCenter {
                 HomeApps.Item it = inputs.get(kind - INPUT);
                 symbol = it.symbol;
                 t = it.label;
-                d = it.kind == HomeApps.LIVE_TV ? Ui.tr("Canais da TV", "The TV's channels", "Canales de la TV")
-                        : it.connected ? Ui.tr("Com sinal", "Signal", "Con señal") : Ui.tr("Sem sinal", "No signal", "Sin señal");
+                d = it.kind == HomeApps.LIVE_TV ? Ui.tr("Canais da TV")
+                        : it.connected ? Ui.tr("Com sinal") : Ui.tr("Sem sinal");
             } else switch (kind) {
                 case SPORTS: {
                     String[] text = sportsText();
@@ -337,8 +337,8 @@ final class ControlCenter {
                 }
                 case NO_INPUTS:
                     symbol = "hdmi";
-                    t = Ui.tr("Nenhuma entrada", "No inputs", "Ninguna entrada");
-                    d = Ui.tr("A TV não informou entradas HDMI", "The TV reported no HDMI inputs", "La TV no informó entradas HDMI");
+                    t = Ui.tr("Nenhuma entrada");
+                    d = Ui.tr("A TV não informou entradas HDMI");
                     break;
                 case WIFI: {
                     String[] net = networkStatus();
@@ -350,37 +350,37 @@ final class ControlCenter {
                 case BLUETOOTH:
                     symbol = "bluetooth";
                     t = "Bluetooth";
-                    d = Ui.tr("Controles e acessórios", "Remotes and accessories", "Controles y accesorios");
+                    d = Ui.tr("Controles e acessórios");
                     break;
                 case SPEED:
                     symbol = "speed";
-                    t = Ui.tr("Teste de velocidade", "Speed test", "Prueba de velocidad");
+                    t = Ui.tr("Teste de velocidade");
                     d = speedText();
                     break;
                 case SLEEP:
                     symbol = "bedtime";
-                    t = Ui.tr("Desligar a TV (min)", "Sleep timer (min)", "Apagar la TV (min)");
+                    t = Ui.tr("Desligar a TV (min)");
                     d = sleepText();
                     break;
                 case MEMORY:
                     symbol = "clean";
-                    t = Ui.tr("Liberar memória", "Free memory", "Liberar memoria");
+                    t = Ui.tr("Liberar memória");
                     d = "";   // memoryText, which fits it to the tile
                     break;
                 case RECENTS:
                     symbol = "recents";
-                    t = Ui.tr("Apps recentes", "Recent apps", "Apps recientes");
-                    d = Ui.tr("Ver e encerrar", "See and close", "Ver y cerrar");
+                    t = Ui.tr("Apps recentes");
+                    d = Ui.tr("Ver e encerrar");
                     break;
                 case APP_SETTINGS:
                     symbol = "settings";
                     t = "Free My TV";
-                    d = Ui.tr("Ajustes do Início", "Home Settings", "Ajustes del Inicio");
+                    d = Ui.tr("Ajustes do Início");
                     break;
                 default:
                     symbol = "tv_settings";
-                    t = Ui.tr("Ajustes da TV", "TV Settings", "Ajustes de la TV");
-                    d = Ui.tr("Rede, imagem e som", "Network, picture and sound", "Red, imagen y sonido");
+                    t = Ui.tr("Ajustes da TV");
+                    d = Ui.tr("Rede, imagem e som");
                     break;
             }
             float room = rects[i].width() - 2 * TEXT_X * k;
@@ -409,19 +409,19 @@ final class ControlCenter {
         android.net.ConnectivityManager cm = activity.getSystemService(android.net.ConnectivityManager.class);
         android.net.Network net = cm == null ? null : cm.getActiveNetwork();
         android.net.NetworkCapabilities caps = net == null ? null : cm.getNetworkCapabilities(net);
-        if (caps == null) return new String[] {"wifi_off", "Wi-Fi", Ui.tr("Sem conexão", "Not connected", "Sin conexión")};
+        if (caps == null) return new String[] {"wifi_off", "Wi-Fi", Ui.tr("Sem conexão")};
         boolean online = caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED);
-        String connected = Ui.tr("Conectado", "Connected", "Conectado"), offline = Ui.tr("Sem internet", "No internet", "Sin internet");
+        String connected = Ui.tr("Conectado"), offline = Ui.tr("Sem internet");
         if (caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET)) {
-            return new String[] {"ethernet", Ui.tr("Cabo de rede", "Ethernet", "Cable de red"), online ? connected : offline};
+            return new String[] {"ethernet", Ui.tr("Cabo de rede"), online ? connected : offline};
         }
         if (!online) return new String[] {"wifi", "Wi-Fi", offline};
         String d = connected;
         if (Build.VERSION.SDK_INT >= 29) {
             int rssi = caps.getSignalStrength();   // dBm for Wi-Fi; unspecified on some TVs
             if (rssi > -127 && rssi < 0) {
-                d = rssi >= -60 ? Ui.tr("Sinal ótimo", "Excellent signal", "Señal excelente")
-                        : rssi >= -70 ? Ui.tr("Sinal bom", "Good signal", "Señal buena") : Ui.tr("Sinal fraco", "Weak signal", "Señal débil");
+                d = rssi >= -60 ? Ui.tr("Sinal ótimo")
+                        : rssi >= -70 ? Ui.tr("Sinal bom") : Ui.tr("Sinal fraco");
             }
         }
         return new String[] {"wifi", "Wi-Fi", d};
@@ -430,20 +430,17 @@ final class ControlCenter {
     private static String speedText() {
         SpeedTest st = SpeedTest.get();
         switch (st.phase) {
-            case SpeedTest.PING: return Ui.tr("Medindo o ping…", "Measuring ping…", "Midiendo el ping…");
+            case SpeedTest.PING: return Ui.tr("Medindo o ping…");
             case SpeedTest.DOWNLOAD:
-                return Ui.trf(Ui.tr("Ping {ping} ms · medindo o download…", "Ping {ping} ms · measuring download…",
-                        "Ping {ping} ms · midiendo la descarga…"), "ping", number(st.pingMs));
+                return Ui.trf("Ping {ping} ms · medindo o download…", "ping", number(st.pingMs));
             case SpeedTest.UPLOAD:
-                return Ui.trf(Ui.tr("↓ {down} Mbps · medindo o upload…", "↓ {down} Mbps · measuring upload…",
-                        "↓ {down} Mbps · midiendo la subida…"), "down", number(st.downMbps));
+                return Ui.trf("↓ {down} Mbps · medindo o upload…", "down", number(st.downMbps));
             case SpeedTest.DONE:
                 return Ui.trf("↓ {down}  ↑ {up} Mbps · ping {ping} ms", "down", number(st.downMbps), "up", number(st.upMbps),
                         "ping", number(st.pingMs));
             case SpeedTest.FAILED:
-                return Ui.tr("Não deu para medir. OK tenta de novo.", "Couldn't measure. OK to try again.",
-                        "No se pudo medir. OK para intentar de nuevo.");
-            default: return Ui.tr("Download, upload e ping", "Download, upload and ping", "Descarga, subida y ping");
+                return Ui.tr("Não deu para medir. OK tenta de novo.");
+            default: return Ui.tr("Download, upload e ping");
         }
     }
 
@@ -455,8 +452,8 @@ final class ControlCenter {
 
     private String sleepText() {
         long at = SleepTimer.endsAt(activity);
-        if (at == 0) return Ui.tr("Sem timer", "No timer", "Sin temporizador");
-        return Ui.trf(Ui.tr("Desliga às {time}", "Off at {time}", "Se apaga a las {time}"), "time", Ui.clock(at));
+        if (at == 0) return Ui.tr("Sem timer");
+        return Ui.trf("Desliga às {time}", "time", Ui.clock(at));
     }
 
     /**
@@ -470,10 +467,10 @@ final class ControlCenter {
         am.getMemoryInfo(mi);
         String free = gigabytes(mi.availMem), text;
         if (cpuPercent < 0) {
-            text = Ui.trf(Ui.tr("{free} livres de {total}", "{free} free of {total}", "{free} libres de {total}"),
+            text = Ui.trf("{free} livres de {total}",
                     "free", free, "total", gigabytes(Math.round(mi.totalMem / 1073741824.0) * 1073741824L));
         } else {
-            text = Ui.trf(Ui.tr("CPU {cpu}% · {free} livres", "CPU {cpu}% · {free} free", "CPU {cpu}% · {free} libres"),
+            text = Ui.trf("CPU {cpu}% · {free} livres",
                     "cpu", cpuPercent, "free", free);
             if (detail.measureText(text) > room) text = Ui.trf("CPU {cpu}% · {free}", "cpu", cpuPercent, "free", free);
         }
@@ -561,7 +558,7 @@ final class ControlCenter {
             if (HomeApps.open(activity, it, host.view(), Math.round(r.left), Math.round(r.top), Math.round(r.width()), Math.round(r.height()))) {
                 host.close(true);
             } else {
-                host.toast(Ui.trf(Ui.tr("Não deu para abrir {app}.", "Couldn't open {app}.", "No se pudo abrir {app}."), "app", it.label));
+                host.toast(Ui.trf("Não deu para abrir {app}.", "app", it.label));
             }
             return;
         }
@@ -574,7 +571,7 @@ final class ControlCenter {
                 return;
             case MEMORY:
                 HomeMode.requestFreeMemory(activity);
-                host.toast(Ui.tr("Liberando memória…", "Freeing memory…", "Liberando memoria…"));
+                host.toast(Ui.tr("Liberando memória…"));
                 return;
             default:
                 break;
@@ -591,7 +588,7 @@ final class ControlCenter {
             default: opened = HomeApps.open(activity, HomeApps.action(HomeApps.ANDROID_SETTINGS, "settings", "", ""), from, x, y, w, h); break;
         }
         if (opened) host.close(true);
-        else host.toast(Ui.trf(Ui.tr("Não deu para abrir {app}.", "Couldn't open {app}.", "No se pudo abrir {app}."), "app", titles[index]));
+        else host.toast(Ui.trf("Não deu para abrir {app}.", "app", titles[index]));
     }
 
     /** A speed test moved on: the tile shows it. */
