@@ -2323,7 +2323,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             // An input or shortcut in the drawer: only to open it or put it on the shelf.
             it = drawerItems.get(drawerIndex);
             menuAnchor.set(drawerRects[drawerIndex]);
-            menuAnchor.offset(drawerLayer.getX(), drawerLayer.getY());   // the drawer's rects are in its own layer
+            // The drawer's rects are laid out in screen coordinates; its layer only slides by its translation.
+            menuAnchor.offset(drawerLayer.getTranslationX(), drawerLayer.getTranslationY());
             return HomeApps.shelfKey(it) != null ? it : null;
         } else {
             return null;

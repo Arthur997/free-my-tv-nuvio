@@ -152,6 +152,15 @@ public class SettingsActivity extends Activity {
         if (dialog.getWindow() != null) {
             dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
         }
+        // The keyboard's ✓ saves: going down from the field can land on Cancel, the button nearer its middle.
+        input.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+        input.setOnEditorActionListener((v, action, event) -> {
+            boolean enter = event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER && event.getAction() == KeyEvent.ACTION_DOWN;
+            if (action != android.view.inputmethod.EditorInfo.IME_ACTION_DONE && !enter) return false;
+            save.accept(input.getText().toString());
+            dialog.dismiss();
+            return true;
+        });
         dialog.show();
         input.requestFocus();
     }
@@ -208,7 +217,7 @@ public class SettingsActivity extends Activity {
 
         /** A page: its title (none on the main menu), the rows, the hint below, and how to read its rows again. */
         private static final class Page {
-            final String title;
+            String title;   // set again when the language changes on its own page (Appearance)
             final List<Row> rows = new ArrayList<>();
             java.util.function.Supplier<String> hint = () -> "", hint2 = () -> "";
             Runnable rebuild;   // lists that change (the shelf): rows read again after a change
@@ -484,7 +493,10 @@ public class SettingsActivity extends Activity {
         private Page appearancePage() {
             Page p = new Page(Ui.tr("Aparência"));
             p.rows.add(choice(() -> Ui.tr("Idioma"), this::languageNames, () -> languageIndex(),
-                    at -> Prefs.setLanguage(languageChoices()[at])));
+                    at -> {
+                        Prefs.setLanguage(languageChoices()[at]);
+                        p.title = Ui.tr("Aparência");   // the page on screen speaks the new language too
+                    }));
             p.rows.add(choice(() -> Ui.tr("Tema"),
                     () -> list(Ui.tr("Automático"), Ui.tr("Claro"), Ui.tr("Escuro")),
                     () -> Math.max(0, java.util.Arrays.asList(THEMES).indexOf(Prefs.theme())), at -> Prefs.setTheme(THEMES[at])));
@@ -1373,6 +1385,7 @@ public class SettingsActivity extends Activity {
         /** The server's devices it can offer, each on or off (up to HomeAssistant.MAX), read in the background. */
         private void openHaDevices() {
             Page p = new Page(Ui.tr("Dispositivos"));
+            p.symbol = "home";
             p.rebuild = () -> fillHaDevices(p);
             fillHaDevices(p);
             p.hint = () -> Ui.trf("OK põe ou tira da gaveta (até {n}).", "n", HomeAssistant.MAX);

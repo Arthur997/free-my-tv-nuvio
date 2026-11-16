@@ -1115,10 +1115,11 @@ final class HomeApps {
         if (TILES.containsKey(key)) return TILES.get(key);
         Bitmap b = darkTile();
         Canvas canvas = new Canvas(b);
-        Symbols.draw(c, canvas, symbol, TILE_W / 2f, TILE_H * 0.42f, TILE_H * 0.3f, 0xF2FFFFFF);
+        Symbols.draw(c, canvas, symbol, TILE_W / 2f, TILE_H * 0.4f, TILE_H * 0.28f, 0xF2FFFFFF);
         TextPaint text = new TextPaint(Paint.ANTI_ALIAS_FLAG);
-        text.setColor(0xD9FFFFFF);
-        text.setTextSize(TILE_H * 0.12f);
+        text.setTypeface(Ui.medium);   // the app's font (null before Ui.init: the system's)
+        text.setColor(0xE6FFFFFF);
+        text.setTextSize(TILE_H * 0.155f);
         text.setTextAlign(Paint.Align.CENTER);
         String name = TextUtils.ellipsize(label, text, TILE_W * 0.86f, TextUtils.TruncateAt.END).toString();
         canvas.drawText(name, TILE_W / 2f, TILE_H * 0.82f, text);
