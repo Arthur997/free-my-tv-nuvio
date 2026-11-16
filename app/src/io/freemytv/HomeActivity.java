@@ -30,6 +30,48 @@ public class HomeActivity extends Activity {
         home = new HomeView(this);
         setContentView(home);
         getWindow().setBackgroundDrawable(null);
+        // At power-on "Live TV": the first time the home screen comes up after a full start, in Free My TV mode.
+        if (PowerOn.firstHomeOfStart(this) && PowerOn.LIVE.equals(Prefs.powerOn())) {
+            org.json.JSONObject s = HomeMode.state(this);
+            liveWaits = HomeMode.FREE.equals(s.optString("mode")) && !s.optBoolean("homeReverted");
+            if (liveWaits) {
+                AppLog.w("at power-on: Live TV in 10 s, unless a key comes first");
+                home.postDelayed(powerOnLive, LIVE_DELAY_MS);
+            }
+        }
+    }
+
+    /**
+     * liveWaits: Live TV at power-on is still to come in this start. liveDark: the screen went off while it waited (a TV
+     * that starts in standby after a power cut): the wait starts again when the screen comes on with the home screen in
+     * front. A key, or Home, before that cancels it.
+     */
+    private boolean resumed, liveWaits, liveDark;
+    /** The TV's own apps settle first (and a key pressed by then means the person wants something else). */
+    private static final long LIVE_DELAY_MS = 10_000;
+
+    private final Runnable powerOnLive = () -> {
+        if (!liveWaits) return;
+        if (!resumed) {
+            if (liveDark) {
+                AppLog.w("at power-on: the screen is off, Live TV once it comes on");
+                return;
+            }
+            liveWaits = false;
+            AppLog.w("at power-on: another screen is in front, no Live TV");
+            return;
+        }
+        liveWaits = false;
+        AppLog.w("at power-on: Live TV");
+        HomeApps.Item live = HomeApps.action(HomeApps.LIVE_TV, "live", Ui.tr("TV ao vivo"), "tv");
+        if (!HomeApps.open(this, live, home, 0, 0, home.getWidth(), home.getHeight())) AppLog.w("at power-on: Live TV didn't open");
+    };
+
+    private void cancelLive(String why) {
+        if (!liveWaits) return;
+        liveWaits = liveDark = false;
+        if (home != null) home.removeCallbacks(powerOnLive);
+        AppLog.w("at power-on: " + why + ", no Live TV");
     }
 
     /** How long the crash screen waits for the main process to give the home screen back before saying it couldn't. */
@@ -73,7 +115,13 @@ public class HomeActivity extends Activity {
             recreate();   // a new language or city: draw everything again
             return;
         }
+        resumed = true;
         if (home != null) home.resume();
+        if (liveDark && home != null) {   // the screen came on with the home screen in front
+            liveDark = false;
+            home.removeCallbacks(powerOnLive);
+            home.postDelayed(powerOnLive, LIVE_DELAY_MS);
+        }
         Updater.maybeCheck(this);
     }
 
@@ -83,6 +131,11 @@ public class HomeActivity extends Activity {
     }
 
     @Override protected void onPause() {
+        resumed = false;
+        if (liveWaits) {   // the screen going off, not another screen coming to the front
+            android.os.PowerManager power = getSystemService(android.os.PowerManager.class);
+            liveDark = power != null && !power.isInteractive();
+        }
         if (home != null) home.pause();
         super.onPause();
     }
@@ -93,6 +146,7 @@ public class HomeActivity extends Activity {
      */
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        cancelLive("Home came first");
         if (home == null) return;
         if (intent.getBooleanExtra(OPEN_CONTROL, false)) home.toggleControl();
         else home.reset(true);
@@ -113,7 +167,10 @@ public class HomeActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
-        if (home != null) home.destroy();
+        if (home != null) {
+            home.removeCallbacks(powerOnLive);
+            home.destroy();
+        }
         super.onDestroy();
     }
 
@@ -130,6 +187,7 @@ public class HomeActivity extends Activity {
 
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         if (crashText != null && onCrashScreenKey(event)) return true;
+        cancelLive("a key came first (" + KeyEvent.keyCodeToString(event.getKeyCode()) + ")");
         if (RemoteKeys.onKey(this, event)) return true;
         if (home != null && home.onKey(event)) return true;
         return super.dispatchKeyEvent(event);

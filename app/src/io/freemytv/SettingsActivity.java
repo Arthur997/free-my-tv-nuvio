@@ -386,7 +386,7 @@ public class SettingsActivity extends Activity {
             p.rows.add(helped(opens(() -> Ui.tr("Apps e controle"), () -> open(appsPage())),
                     () -> Ui.tr("Liga e desliga apps da TV, limpa a TV e escolhe o que cada botão do controle abre.")));
             p.rows.add(helped(opens(() -> Ui.tr("Sistema"), () -> open(systemPage())),
-                    () -> Ui.tr("Desempenho, atualizações do app, o estado da troca e os ajustes da própria TV.")));
+                    () -> Ui.tr("Desempenho, atualizações do app, o estado da troca, o que abre ao ligar a TV e os ajustes dela.")));
             return p;
         }
 
@@ -434,6 +434,10 @@ public class SettingsActivity extends Activity {
                     () -> Ui.tr("O que a última troca fez, os avisos e a memória e o tempo do Início em cada modo.")));
             p.rows.add(helped(opens(() -> Ui.tr("Ajustes da TV"), () -> HomeApps.openSettings(activity, Settings.ACTION_SETTINGS)),
                     () -> Ui.tr("Abre as configurações da própria TV (rede, imagem, som, contas).")));
+            p.rows.add(helped(choice(() -> Ui.tr("Ao ligar a TV"), () -> list(Ui.tr("Início"), Ui.tr("TV ao vivo")),
+                    () -> PowerOn.LIVE.equals(Prefs.powerOn()) ? 1 : 0,
+                    at -> Prefs.setPowerOn(at == 1 ? PowerOn.LIVE : PowerOn.HOME)),
+                    () -> Ui.tr("O que aparece quando a TV termina de ligar. TV ao vivo abre 10 segundos depois, se nenhum botão for apertado antes. Sair do modo de espera não muda nada.")));
             return p;
         }
 

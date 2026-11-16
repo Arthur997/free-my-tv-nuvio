@@ -211,6 +211,10 @@ final class Prefs {
     }
 
     /** Updates from GitHub (Updater) on their own: on unless turned off in More Settings > Updates. */
+    /** At power-on (PowerOn): the home screen (HOME, the default) or Live TV (LIVE). */
+    static String powerOn() { return sp().getString("powerOn", PowerOn.HOME); }
+    static void setPowerOn(String v) { put("powerOn", v); }
+
     static boolean autoUpdate() { return sp().getBoolean("autoUpdate", true); }
 
     static void setAutoUpdate(boolean on) { put("autoUpdate", on); }
