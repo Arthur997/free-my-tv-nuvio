@@ -121,22 +121,33 @@ public class SettingsActivity extends Activity {
      * can paste). The current key is never shown; saving an empty field goes back to config.properties' key.
      */
     void askTmdbKey() {
+        askText(Ui.tr("Chave do TMDB"), Ui.tr("Crie uma de graça em themoviedb.org → Settings → API e cole aqui. Dica: o app Google TV no "
+                + "celular serve de teclado (e cola)."), Ui.tr("API Key ou Read Access Token"), "", Prefs.typedTmdbKey(), this::saveTmdbKey);
+    }
+
+    /**
+     * A text field with the system keyboard (the Google TV app on a phone types into it, and can paste). `current` fills
+     * it (a secret is never shown: ""); `erasable` adds Erase, which saves "".
+     */
+    void askText(String title, String message, String hint, String current, boolean erasable,
+                 java.util.function.Consumer<String> save) {
         android.widget.EditText input = new android.widget.EditText(this);
         input.setSingleLine(true);
         input.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
-        input.setHint(Ui.tr("API Key ou Read Access Token"));
+        input.setHint(hint);
+        input.setText(current);
+        input.setSelection(current.length());
         android.widget.FrameLayout box = new android.widget.FrameLayout(this);
         int pad = Math.round(24 * getResources().getDisplayMetrics().density);
         box.setPadding(pad, 0, pad, 0);
         box.addView(input);
         android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle(Ui.tr("Chave do TMDB"))
-                .setMessage(Ui.tr("Crie uma de graça em themoviedb.org → Settings → API e cole aqui. Dica: o app Google TV no "
-                        + "celular serve de teclado (e cola)."))
+                .setTitle(title)
+                .setMessage(message)
                 .setView(box)
-                .setPositiveButton(Ui.tr("Salvar"), (d, w) -> saveTmdbKey(input.getText().toString()))
+                .setPositiveButton(Ui.tr("Salvar"), (d, w) -> save.accept(input.getText().toString()))
                 .setNegativeButton(Ui.tr("Cancelar"), null);
-        if (Prefs.typedTmdbKey()) builder.setNeutralButton(Ui.tr("Apagar"), (d, w) -> saveTmdbKey(""));
+        if (erasable) builder.setNeutralButton(Ui.tr("Apagar"), (d, w) -> save.accept(""));
         android.app.AlertDialog dialog = builder.create();
         if (dialog.getWindow() != null) {
             dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
@@ -418,6 +429,9 @@ public class SettingsActivity extends Activity {
                         HomeMode.requestNowPlaying(getContext(), on);   // the TV's permission changes in the main process
                     }, null),
                     () -> Ui.tr("O que um app está tocando (título, artista, app) aparece no topo do Início e na tela de descanso. Só no modo Free My TV: a TV permite ler o que os apps tocam, nunca as notificações.")));
+            p.rows.add(helped(withValue(opens(() -> "Home Assistant", () -> open(homeAssistantPage())),
+                    () -> Prefs.homeAssistant() ? Ui.tr("Ligado") : Ui.tr("Desligado")),
+                    () -> Ui.tr("Botões da sua casa (luzes, tomadas, cenas) na gaveta do Início, do seu próprio servidor Home Assistant.")));
             p.rows.add(helped(opens(() -> Ui.tr("Tela de descanso"), () -> open(screensaverPage())),
                     () -> Ui.tr("O que a TV mostra parada: as fotos do Google ou a tela de descanso do Free My TV.")));
             return p;
@@ -1304,6 +1318,128 @@ public class SettingsActivity extends Activity {
             int best = 0;
             for (int i = 1; i < values.length; i++) if (Math.abs(values[i] - value) < Math.abs(values[best] - value)) best = i;
             return best;
+        }
+
+        // MARK: - Home Assistant: the server, its token and the devices, all set here on the TV
+
+        private List<String[]> haDevices;   // the server's devices as last read ({id, name}); null = not read
+        private String haStatus = "", haUrlError = "";
+
+        private Page homeAssistantPage() {
+            Page p = new Page("Home Assistant");
+            p.symbol = "home";
+            p.rows.add(onOff(() -> "Home Assistant", Prefs::homeAssistant, Prefs::setHomeAssistant, null));
+            p.rows.add(new Row(() -> Ui.tr("Endereço do servidor"),
+                    () -> !haUrlError.isEmpty() ? haUrlError : Prefs.haUrl().isEmpty() ? Ui.tr("Configurar") : Prefs.haUrl(),
+                    this::askHaUrl, null, null));
+            p.rows.add(new Row(() -> Ui.tr("Token de acesso"),
+                    () -> Prefs.haToken().isEmpty() ? Ui.tr("Nenhum: OK para inserir") : Ui.tr("Configurado"), this::askHaToken, null, null));
+            p.rows.add(new Row(() -> Ui.tr("Dispositivos"), () -> {
+                int n = HomeAssistant.controls().size();
+                return n == 0 ? Ui.tr("Escolher") : Ui.plural("plural|one:{n} escolhido|other:{n} escolhidos", n);
+            }, this::openHaDevices, null, () -> Prefs.haUrl().isEmpty() || Prefs.haToken().isEmpty()));
+            describe(p,
+                    () -> Ui.tr("Liga os botões da casa na gaveta do Início (↓ na prateleira), ao lado das entradas e atalhos."),
+                    () -> Ui.tr("O endereço do seu Home Assistant na rede, como http://192.168.0.10:8123."),
+                    () -> Ui.tr("Um token de acesso de longa duração: no Home Assistant, Perfil → Segurança → Criar token. Fica só nesta TV e não aparece de novo."),
+                    () -> Ui.trf("Até {n} luzes, tomadas, ventiladores, persianas, cenas ou scripts. Fechaduras, alarmes e portões nunca aparecem.",
+                            "n", HomeAssistant.MAX));
+            p.hint = () -> Ui.tr("OK abre as opções; ← e → mudam direto.");
+            return p;
+        }
+
+        private void askHaUrl() {
+            activity.askText(Ui.tr("Endereço do servidor"), Ui.tr("O endereço do seu Home Assistant, com a porta: http://192.168.0.10:8123."),
+                    "http://192.168.0.10:8123", Prefs.haUrl(), !Prefs.haUrl().isEmpty(), typed -> {
+                        String url = HomeAssistant.normalize(typed);
+                        haUrlError = !typed.trim().isEmpty() && url.isEmpty() ? Ui.tr("Endereço inválido") : "";
+                        if (haUrlError.isEmpty()) {
+                            Prefs.setHaUrl(url);
+                            haDevices = null;   // another server: its list is read again
+                        }
+                        invalidate();
+                    });
+        }
+
+        private void askHaToken() {
+            activity.askText(Ui.tr("Token de acesso"), Ui.tr("No Home Assistant: Perfil → Segurança → Tokens de acesso de longa duração → Criar token. Cole aqui (o app Google TV no celular serve de teclado e cola)."),
+                    Ui.tr("Token de acesso"), "", !Prefs.haToken().isEmpty(), typed -> {
+                        Prefs.setHaToken(typed.replaceAll("\\s+", ""));
+                        haDevices = null;
+                        invalidate();
+                    });
+        }
+
+        /** The server's devices it can offer, each on or off (up to HomeAssistant.MAX), read in the background. */
+        private void openHaDevices() {
+            Page p = new Page(Ui.tr("Dispositivos"));
+            p.rebuild = () -> fillHaDevices(p);
+            fillHaDevices(p);
+            p.hint = () -> Ui.trf("OK põe ou tira da gaveta (até {n}).", "n", HomeAssistant.MAX);
+            open(p);
+            if (haDevices == null) readHaDevices(p);
+        }
+
+        private void fillHaDevices(Page p) {
+            p.rows.clear();
+            if (haDevices == null || haDevices.isEmpty()) {
+                String status = haDevices == null ? (haStatus.isEmpty() ? Ui.tr("Lendo o servidor…") : haStatus)
+                        : Ui.tr("O servidor não tem dispositivos que dê para mostrar.");
+                p.rows.add(new Row(() -> status, () -> "", () -> {}, null, () -> true));
+                return;
+            }
+            List<String> chosen = new ArrayList<>(java.util.Arrays.asList(Prefs.haEntities().split(",")));
+            chosen.remove("");
+            for (String[] d : haDevices) {
+                Row r = new Row(() -> d[1], () -> d[0].substring(0, d[0].indexOf('.')), () -> toggleHaDevice(p, d), null, null);
+                r.check = chosen.contains(d[0]);
+                p.rows.add(r);
+            }
+        }
+
+        private void toggleHaDevice(Page p, String[] device) {
+            List<String> chosen = new ArrayList<>(java.util.Arrays.asList(Prefs.haEntities().split(",")));
+            chosen.remove("");
+            if (chosen.contains(device[0])) chosen.remove(device[0]);
+            else if (chosen.size() < HomeAssistant.MAX) chosen.add(device[0]);
+            else return;
+            java.util.Map<String, String> names = Prefs.haNames();
+            names.keySet().retainAll(chosen);
+            names.put(device[0], device[1]);
+            if (!chosen.contains(device[0])) names.remove(device[0]);
+            Prefs.setHaNames(names);
+            Prefs.setHaEntities(TextUtils.join(",", chosen));
+            fillHaDevices(p);
+            invalidate();
+        }
+
+        private void readHaDevices(Page p) {
+            haStatus = "";
+            new Thread(() -> {
+                List<String[]> found = null;
+                String error = "";
+                try {
+                    found = HomeAssistant.available();
+                } catch (java.io.IOException e) {
+                    AppLog.w("home assistant devices: " + e.getMessage());
+                    String why = String.valueOf(e.getMessage());
+                    error = why.contains("401") ? Ui.tr("O servidor recusou o token.")
+                            : why.contains("https") ? Ui.tr("Fora da rede de casa, o endereço precisa ser https.")
+                            : Ui.tr("Não deu para falar com o servidor. Confira o endereço.");
+                }
+                List<String[]> result = found;
+                String status = error;
+                handler.post(() -> {
+                    haDevices = result;
+                    haStatus = status;
+                    if (page == p) {
+                        fillHaDevices(p);
+                        focus = Math.min(focus, p.rows.size() - 1);
+                        snapPops();
+                    }
+                    invalidate();
+                });
+            }).start();
         }
 
         /** Which screensaver Free My TV mode keeps, and a look at Free My TV's. */

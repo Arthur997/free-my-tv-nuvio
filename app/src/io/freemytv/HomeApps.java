@@ -62,6 +62,8 @@ final class HomeApps {
     static final int INPUTS = 7;
     /** The Control Center button: the home screen opens its panel, nothing opens. */
     static final int CONTROL = 10;
+    /** A Home Assistant device in the drawer (HomeAssistant): OK calls its service, nothing opens. */
+    static final int HOME_ASSISTANT = 11;
     /** Image size of each card (16:9; on screen it shows up to ~330 px wide). */
     static final int TILE_W = 384, TILE_H = 216;
 
@@ -70,6 +72,7 @@ final class HomeApps {
         String key, label, pkg, inputId, number;
         String uri;         // a title inside the app (Nuvio), instead of the app's home
         String symbol;      // icon for the shortcuts and special cards
+        String entity;      // a Home Assistant device's id ("light.living_room")
         Bitmap tile;        // 16:9 card (apps and specials)
         Bitmap logo;        // colored logo with no background (shelf); null = use the card
         Bitmap logoDark;    // version for a light background (YouTube's white icon), if any
@@ -301,6 +304,14 @@ final class HomeApps {
         items.add(shortcut(SETTINGS, "settings", Ui.tr("Ajustes do Início"), "settings"));
         items.add(shortcut(ANDROID_SETTINGS, "tv-settings", Ui.tr("Ajustes da TV"), "tv_settings"));
         return items;
+    }
+
+    /** A Home Assistant device's drawer button: lit while it's on (`connected`), dimmed while off or not read. */
+    static Item homeAssistant(HomeAssistant.Control ctl, String symbol) {
+        Item it = shortcut(HOME_ASSISTANT, "ha:" + ctl.entity, ctl.name, symbol);
+        it.entity = ctl.entity;
+        it.connected = ctl.on();
+        return it;
     }
 
     /** A streaming service's app (the "Watch" button of the featured pick). */

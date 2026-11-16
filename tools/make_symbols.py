@@ -28,6 +28,8 @@ MAP = {
     "uv": ("light_mode", 1), "air_quality": ("aq", 0), "pressure": ("compress", 0), "visibility": ("visibility", 1),
     "thermostat": ("thermostat", 1), "location": ("location_on", 1), "navigation": ("navigation", 1),
     "umbrella": ("umbrella", 1), "calendar": ("calendar_month", 1),
+    # Home Assistant's buttons in the drawer (HomeAssistant.symbol).
+    "lightbulb": ("lightbulb", 1), "mode_fan": ("mode_fan", 1), "blinds": ("blinds", 1), "toggle_on": ("toggle_on", 1),
 }
 
 

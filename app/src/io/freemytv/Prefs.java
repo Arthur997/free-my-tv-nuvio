@@ -377,6 +377,34 @@ final class Prefs {
 
     static void setShelfSize(int n) { put("shelfSize", n); }
 
+    // MARK: - Home Assistant (HomeAssistant): off by default; the token is never shown again once typed
+
+    static boolean homeAssistant() { return app != null && sp().getBoolean("homeAssistant", false); }
+    static void setHomeAssistant(boolean on) { put("homeAssistant", on); }
+    static String haUrl() { return sp().getString("haUrl", ""); }
+    static void setHaUrl(String url) { put("haUrl", url); }
+    static String haToken() { return sp().getString("haToken", ""); }
+    static void setHaToken(String token) { put("haToken", token); }
+    /** The chosen devices' ids, comma separated, in order. */
+    static String haEntities() { return sp().getString("haEntities", ""); }
+    static void setHaEntities(String ids) { put("haEntities", ids); }
+
+    /** The chosen devices' names as the server gave them in the settings ({id: name}), for before the first read. */
+    static java.util.Map<String, String> haNames() {
+        java.util.Map<String, String> out = new java.util.HashMap<>();
+        try {
+            org.json.JSONObject o = new org.json.JSONObject(sp().getString("haNames", "{}"));
+            for (java.util.Iterator<String> k = o.keys(); k.hasNext(); ) {
+                String id = k.next();
+                out.put(id, o.optString(id));
+            }
+        } catch (org.json.JSONException ignored) {
+        }
+        return out;
+    }
+
+    static void setHaNames(java.util.Map<String, String> names) { put("haNames", new org.json.JSONObject(names).toString()); }
+
     /** Now playing (NowPlaying): what an app plays, on the home screen and the screensaver. Off by default. */
     static boolean nowPlaying() { return app != null && sp().getBoolean("nowPlaying", false); }
     static void setNowPlaying(boolean on) { put("nowPlaying", on); }
