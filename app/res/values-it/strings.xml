@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="remote_key_service">Fa aprire ai tasti del telecomando (Netflix, Prime Video, YouTube, Globoplay, TCL tv+, Disney+, ≡, 123, ⓘ) ciò che hai scelto in Free My TV, da qualsiasi app. Legge solo quei tasti.</string>
+    <string name="pairing_assist">Legge il codice di 6 cifre della schermata di abbinamento del Debug wireless, così Free My TV si abbina da solo a questa TV. Legge solo l\'app Impostazioni della TV e si disattiva dopo l\'abbinamento.</string>
+    <string name="pairing_label">Free My TV: abbinamento</string>
+</resources>

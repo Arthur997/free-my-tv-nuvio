@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="remote_key_service">Les boutons de la télécommande (Netflix, Prime Video, YouTube, Globoplay, TCL tv+, Disney+, ≡, 123, ⓘ) ouvrent ce que vous avez choisi dans Free My TV, depuis n\'importe quelle appli. Il lit seulement ces boutons.</string>
+    <string name="pairing_assist">Lit le code à 6 chiffres de l\'écran d\'association du Débogage sans fil, pour que Free My TV s\'associe seul à cette TV. Il lit seulement l\'appli Paramètres de la TV et se désactive une fois associé.</string>
+    <string name="pairing_label">Free My TV : association</string>
+</resources>

@@ -184,19 +184,22 @@ HDMI (Chromecast with Google TV, Google TV Streamer, onn 4K, NVIDIA Shield). Set
   size, so both draw pixel for pixel.
 - `HomeMode` runs every switch as a background job (`ModeJob`) in the main process; the UI is in the `:home`
   process. `Watchdog` goes back to the stock home screen after 3 crashes in 5 minutes.
-- On-screen text: `Ui.tr("English")`, translated from `app/assets/i18n/<lang>.json` (keyed by the English; one
-  HashMap lookup, English when a language lacks it). Text built at runtime is a pattern: `Ui.trf("{n} min ago", "n", 12)`,
-  never concatenated words. A key `"context|Text"` is the same English where a language may need another word
-  (`"unit|Automatic"`, `"format|h:mm"` holds a SimpleDateFormat pattern). A count with a word is
-  `Ui.plural("plural|one:{n} season|other:{n} seasons", n)`: each catalogue gives one form per CLDR plural category of
-  its language (`one`/`few`/`many`/`other` in Russian, Ukrainian, Polish; only `other` in Japanese, Chinese…), and
-  ICU's rules pick one. Portuguese, Spanish, German and Russian are hand translations: the reference, edited by hand,
-  never replaced with machine ones. Dates and numbers use `Ui.locale()`. Text
-  drawn every frame is cached and made again when `Ui.generation` changes. After changing text, run
-  `python3 tools/translate.py`: it rebuilds `en.json` from the code and lists what each language lacks; translate those
-  in every catalogue (or `--fill` with `ANTHROPIC_API_KEY`, which sends only the strings), and keep placeholders as they
-  are. Run `python3 tools/translate.py --check` to validate all catalogues without writing files.
-  No right-to-left languages yet (the layout isn't mirrored); CJK and Devanagari use the system font.
+- On-screen text is written in Brazilian Portuguese, and that text is the key: `Ui.tr("TV ao vivo")`. The other
+  languages (`Ui.LANGUAGES`: pt, en, es, fr, it; a TV in any other language gets English) are
+  `app/assets/i18n/<lang>.json`, mapping the Portuguese to that language (one HashMap lookup; English, then the
+  Portuguese, when a language lacks it). Text built at runtime is a pattern: `Ui.trf("há {n} min", "n", 12)`, never
+  concatenated words or fragments. A key `"context|Texto"` is the same Portuguese where another language may need
+  another word (`"night|Poucas nuvens"`, `"futebol|E"`; the context isn't shown); `"format|HH:mm"` holds a
+  SimpleDateFormat pattern. A count with a word is `Ui.plural("plural|one:{n} temporada|other:{n} temporadas", n)`:
+  each catalogue gives one form per CLDR plural category of its language, and ICU's rules pick one. Dates and numbers
+  use `Ui.locale()`. Text drawn every frame is cached and made again when `Ui.generation` changes.
+  After adding or changing text, run `python3 tools/translate.py`: it lists what each catalogue lacks (a changed
+  Portuguese text is a new key: its old translations are dropped) and `--missing <lang>` prints those as JSON with the
+  English for reference; translate them into every catalogue (or `--fill` with `ANTHROPIC_API_KEY`), keeping
+  placeholders as they are. `--check` validates everything (exit 1 on any gap). The cleanup's reasons in
+  `app/assets/debloat.json` carry each language inside the entry (`why`), since a newer copy reaches older versions.
+  A new language: `--new <code>`, add it to `Ui.LANGUAGES` (and `REGIONS`), then translate.
+  No right-to-left languages yet (the layout isn't mirrored).
   Comments in English, short, only where the why isn't obvious.
 - Settings come from `config.properties` through the generated `out/gen/io/freemytv/Config.java` (never edit that).
   What the person changes on the TV (`Prefs`: Home Settings, Shelf, Remote Buttons) wins over those first values.

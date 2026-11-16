@@ -2,4 +2,5 @@
 <resources>
     <string name="pairing_assist">Lee el código de 6 números de la pantalla de emparejamiento de la Depuración inalámbrica, para que Free My TV se empareje con esta TV solo. Solo lee la app Configuración de la TV y se apaga después de emparejar.</string>
     <string name="pairing_label">Free My TV: emparejamiento</string>
+    <string name="remote_key_service">Hace que los botones del control (Netflix, Prime Video, YouTube, Globoplay, TCL tv+, Disney+, ≡, 123, ⓘ) abran lo que elegiste en Free My TV, desde cualquier app. Solo lee esos botones.</string>
 </resources>
