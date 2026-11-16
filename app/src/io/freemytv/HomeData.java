@@ -116,8 +116,13 @@ final class HomeData {
         return i == EURO ? EURO_PAIR : COINS[i] + quote();
     }
 
-    /** Binance.com refuses the US (HTTP 451); Binance.US answers the same call in dollars. */
-    private static final String[] PRICE_HOSTS = {"https://api.binance.com", "https://api.binance.us"};
+    /**
+     * Binance.com refuses the US (HTTP 451); Binance.US answers the same call in dollars. data-api.binance.vision is
+     * Binance's own address for public market data, with Binance.com's pairs on another domain and certificate chain: it
+     * answers where a network blocks or intercepts api.binance.com ("Trust anchor for certification path not found").
+     */
+    private static final String VISION = "https://data-api.binance.vision", US = "https://api.binance.us";
+    private static final String[] PRICE_HOSTS = {"https://api.binance.com", VISION, US};
 
     private static String pricesPath() {
         java.util.Set<String> pairs = new java.util.LinkedHashSet<>();
@@ -136,13 +141,17 @@ final class HomeData {
      */
     private static String getPrices() throws IOException {
         IOException failed = null;
-        for (int i = 0; i < PRICE_HOSTS.length; i++) {
+        for (String host : PRICE_HOSTS) {
+            // A refusal of the US goes straight to Binance.US: its other address refuses the same.
+            if (host.equals(VISION) && failed != null && "HTTP 451".equals(failed.getMessage())) continue;
             try {
-                return get(PRICE_HOSTS[i] + pricesPath());
+                return get(host + pricesPath());
             } catch (IOException e) {
-                if (failed == null) failed = e;
-                // A pair Binance doesn't list (HTTP 400) isn't a refusal: the caller falls back to dollars instead.
-                if (i == 0 && "HTTP 400".equals(e.getMessage())) break;
+                // A pair Binance doesn't list (HTTP 400) isn't a refusal: the caller falls back to dollars instead. Only
+                // Binance.com's two addresses tell that: Binance.US lists dollar pairs alone.
+                boolean unlisted = "HTTP 400".equals(e.getMessage()) && !host.equals(US);
+                if (failed == null || unlisted) failed = e;
+                if (unlisted) break;
             }
         }
         throw failed;
