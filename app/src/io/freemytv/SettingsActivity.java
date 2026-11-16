@@ -258,6 +258,8 @@ public class SettingsActivity extends Activity {
         private final Handler handler = new Handler(Looper.getMainLooper());
         private final List<Spring> pop = new ArrayList<>();   // each row's focus, by its index in the page
         private final Spring scroll = new Spring(0.24f, 1f, 0);   // the first row shown (fractional while it moves)
+        /** Where the left side's block starts: it glides when the focused row's text is longer or shorter (-1: not set). */
+        private final Spring leftTop = new Spring(0.3f, 1f, -1);
         private final java.util.ArrayDeque<Place> back = new java.util.ArrayDeque<>();
         private final List<String> appPkgs = new ArrayList<>(), appLabels = new ArrayList<>();
         private final List<String[]> shelfRows = new ArrayList<>();
@@ -1838,7 +1840,7 @@ public class SettingsActivity extends Activity {
         @Override public void doFrame(long frameTimeNanos) {
             framePosted = false;
             if (!running) return;
-            boolean moving = busy() || !scroll.settled();
+            boolean moving = busy() || !scroll.settled() || !leftTop.settled();
             for (Spring s : pop) moving |= !s.settled();
             if (moving) invalidate();
         }
@@ -1858,6 +1860,9 @@ public class SettingsActivity extends Activity {
                     lightTheme ? 0xFFE2E2E7 : 0xFF0B0B0D, android.graphics.Shader.TileMode.CLAMP));
             shade.setShader(new android.graphics.RadialGradient(w * 0.5f, h * 0.42f, Math.max(w, h) * 0.75f, 0x00000000,
                     lightTheme ? 0x0F000000 : 0x33000000, android.graphics.Shader.TileMode.CLAMP));
+            // Near-black spans few levels: undithered, the gradient showed as wide flat bands.
+            backdrop.setDither(true);
+            shade.setDither(true);
             scene.setSize(w, h);
             glass.refract(lightTheme ? 0xFFF5F5F7 : 0xFF1C1C1E, lightTheme ? 0xFFE2E2E7 : 0xFF0B0B0D);
             glassShadow.setMaskFilter(new BlurMaskFilter(DockGlass.SHADOW_BLUR * k, BlurMaskFilter.Blur.NORMAL));
@@ -1960,17 +1965,30 @@ public class SettingsActivity extends Activity {
             c.drawRect(0, 0, w, h, backdrop);
             c.drawRect(0, 0, w, h, shade);
 
-            // On the left: the page's symbol, then what the focused row does (or the page's steps).
+            // On the left: the page's symbol, then what the focused row does (or the page's steps), as one block
+            // centered on the screen's height.
             float cx = 500 * k;
             boolean onPage = screen == PAGE && page != null;
-            Symbols.draw(getContext(), c, onPage ? page.symbol : "sparkles", cx, 330 * k, 150 * k, fg(0xEBFFFFFF));
-            float ty = 548 * k;
-            if (!onPage || page == main) {
-                c.drawText("Free My TV", cx, ty, title);
-                ty += 58 * k;
+            boolean named = !onPage || page == main;
+            String about = leftText();
+            StaticLayout text = aboutLayout(about);
+            float symbol = SYMBOL * k, titleCap = Ui.cap(title);
+            float textHeight = text == null ? 0 : text.getHeight() - text.getLineBaseline(0) + Ui.cap(aboutPaint);
+            float block = symbol + (named ? (TITLE_GAP * k + titleCap + (text == null ? 0 : TITLE_STEP * k))
+                    : (text == null ? 0 : TEXT_GAP * k)) + textHeight;
+            leftTop.target = (h - block) / 2;
+            if (leftTop.value < 0) leftTop.snap(leftTop.target);
+            leftTop.step(dt);
+            float symbolTop = leftTop.value;
+            Symbols.draw(getContext(), c, onPage ? page.symbol : "sparkles", cx, symbolTop + symbol / 2, symbol, fg(0xEBFFFFFF));
+            float ty = symbolTop + symbol + TEXT_GAP * k;   // the text's first capitals
+            if (named) {
+                float baseline = symbolTop + symbol + TITLE_GAP * k + titleCap;
+                c.drawText("Free My TV", cx, baseline, title);
+                ty = baseline + TITLE_STEP * k;
                 c.drawText(versionText(), cx, 1000 * k, version);
             }
-            drawAbout(c, leftText(), cx, ty);
+            drawAbout(c, text, cx, ty);
 
             if (screen == HOME_CHOICE) drawChoice(c);
             else if (screen == STATUS) drawStatus(c);
@@ -1989,20 +2007,28 @@ public class SettingsActivity extends Activity {
 
         private final java.util.HashMap<String, StaticLayout> aboutLayouts = new java.util.HashMap<>();
 
-        /** A description on the left, centered under the symbol, wrapped (each text laid out once). */
-        private void drawAbout(Canvas c, String text, float cx, float top) {
-            if (text.isEmpty()) return;
-            int width = Math.round(780 * k);
+        /** The left side: the symbol's size, the gap under it (to the title, or straight to the text), a title's step. */
+        private static final float SYMBOL = 150, TITLE_GAP = 106, TEXT_GAP = 96, TITLE_STEP = 58, ABOUT_W = 780;
+
+        /** A description wrapped and centered (each text laid out once); null for none. */
+        private StaticLayout aboutLayout(String text) {
+            if (text.isEmpty()) return null;
             StaticLayout layout = aboutLayouts.get(text);
             if (layout == null) {
                 if (aboutLayouts.size() > 40) aboutLayouts.clear();
-                layout = StaticLayout.Builder.obtain(text, 0, text.length(), aboutPaint, width)
+                layout = StaticLayout.Builder.obtain(text, 0, text.length(), aboutPaint, Math.round(ABOUT_W * k))
                         .setAlignment(android.text.Layout.Alignment.ALIGN_CENTER).setLineSpacing(0, 1.18f)
                         .setMaxLines(11).setEllipsize(TextUtils.TruncateAt.END).build();
                 aboutLayouts.put(text, layout);
             }
+            return layout;
+        }
+
+        /** The description with its first line's capitals starting at `top`, centered on cx. */
+        private void drawAbout(Canvas c, StaticLayout layout, float cx, float top) {
+            if (layout == null) return;
             c.save();
-            c.translate(cx - width / 2f, top - layout.getLineBaseline(0) + Ui.cap(aboutPaint));
+            c.translate(cx - layout.getWidth() / 2f, top - layout.getLineBaseline(0) + Ui.cap(aboutPaint));
             layout.draw(c);
             c.restore();
         }

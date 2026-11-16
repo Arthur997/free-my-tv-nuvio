@@ -3910,8 +3910,23 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             if (under >= 0) c.restoreToCount(under);
         }
         if (preview > 0.01f) drawPreview(c, p, cell, r, big, preview);
+        if (suggestion(p)) drawSuggestionMark(c, cell, s, 1 - preview);
         focusRing.ring(c, cell, r, f, k, ringInk());
         if (save >= 0) c.restoreToCount(save);
+    }
+
+    /**
+     * In Continue Watching, a card that's a suggestion (filling the row, nothing to resume) has a small sparkle in a dark
+     * glass dot at its top right: told apart at a glance, without a word that reads like an ad.
+     */
+    private void drawSuggestionMark(Canvas c, RectF card, float scale, float alpha) {
+        if (alpha <= 0.01f) return;
+        float radius = 19 * k * scale, inset = 14 * k * scale;
+        float cx = card.right - inset - radius, cy = card.top + inset + radius;
+        fill.setShader(null);
+        fill.setColor(Ui.alpha(0xFF000000, 0.38f * alpha));
+        c.drawCircle(cx, cy, radius, fill);
+        Symbols.draw(getContext(), c, "sparkles", cx, cy, radius * 1.15f, Ui.alpha(0xFFFFFFFF, 0.9f * alpha));
     }
 
     /** How much a focused card grows (the shelf's tiles grow 20%: they are much smaller). */
