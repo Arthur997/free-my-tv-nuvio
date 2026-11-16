@@ -412,6 +412,12 @@ public class SettingsActivity extends Activity {
             p.rows.add(helped(opens(() -> Ui.tr("Clima, cotações e futebol"),
                     () -> open(weatherPage())),
                     () -> Ui.tr("Os cartões da gaveta: o clima da sua cidade e, ao lado, cotações ou o seu time.")));
+            p.rows.add(helped(onOff(() -> Ui.tr("Tocando agora"), Prefs::nowPlaying, on -> {
+                        if (on == Prefs.nowPlaying()) return;
+                        Prefs.setNowPlaying(on);
+                        HomeMode.requestNowPlaying(getContext(), on);   // the TV's permission changes in the main process
+                    }, null),
+                    () -> Ui.tr("O que um app está tocando (título, artista, app) aparece no topo do Início e na tela de descanso. Só no modo Free My TV: a TV permite ler o que os apps tocam, nunca as notificações.")));
             p.rows.add(helped(opens(() -> Ui.tr("Tela de descanso"), () -> open(screensaverPage())),
                     () -> Ui.tr("O que a TV mostra parada: as fotos do Google ou a tela de descanso do Free My TV.")));
             return p;

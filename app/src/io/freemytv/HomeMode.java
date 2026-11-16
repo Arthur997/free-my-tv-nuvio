@@ -535,6 +535,7 @@ final class HomeMode {
             record(adb, new HashSet<>(failed));
             restoreScreensaver(adb, s);
             restoreAnimations(c, adb);
+            nowPlayingOff(adb);
             try {
                 remoteService(c, adb, false);
             } catch (IOException e) {
@@ -639,6 +640,7 @@ final class HomeMode {
                 record(adb, stillOff);
                 // The screensaver first: if that fails, the revert isn't marked done and the next try does it again.
                 restoreScreensaver(adb, s);
+                nowPlayingOff(adb);
                 s.put("homeReverted", true).put("disabled", kept);
                 save(app, s);
                 notice(app, Ui.tr("O Início do Free My TV caiu 3 vezes seguidas; voltei para o Início original."));
@@ -777,6 +779,43 @@ final class HomeMode {
             } else if (updated) {
                 notice(app, Ui.tr("A TV foi atualizada; o Free My TV continua igual."));
             }
+        }
+    }
+
+    private static final String NOW_PLAYING = PKG + "/" + PKG + ".NowPlaying";
+
+    /**
+     * Now playing reads what apps play through our notification listener, which could read every notification (ours never
+     * does): it's allowed only while the option is on, in Free My TV mode, and taken back when it goes off, by Original
+     * and by the watchdog's revert.
+     */
+    static void requestNowPlaying(Context c, boolean on) {
+        ModeJob.schedule(c, ModeJob.PLAYING, on ? "on" : "off", 0);
+    }
+
+    static void nowPlayingNow(Context app, boolean on) {
+        synchronized (RUN) {   // after a switch or a revert, never in the middle of one
+            JSONObject s = state(app);
+            if (on && (!FREE.equals(s.optString("mode")) || s.optBoolean("homeReverted"))) return;
+            try (Adb adb = Adb.connect(app, 10_000, null)) {
+                nowPlaying(adb, on);
+            } catch (IOException e) {
+                AppLog.w("now playing: " + e.getMessage());
+            }
+        }
+    }
+
+    private static void nowPlaying(Adb adb, boolean on) throws IOException {
+        String out = adb.shell("cmd notification " + (on ? "allow_listener " : "disallow_listener ") + NOW_PLAYING).trim();
+        AppLog.w("now playing " + (on ? "on" : "off") + (out.isEmpty() ? "" : ": " + out));
+    }
+
+    /** Original and the revert: the listener goes back to not allowed (harmless when it never was). */
+    private static void nowPlayingOff(Adb adb) {
+        try {
+            nowPlaying(adb, false);
+        } catch (IOException e) {
+            AppLog.w("now playing: " + e.getMessage());
         }
     }
 

@@ -221,6 +221,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final Spring[] widgetFocus = {Spring.focus(0), Spring.focus(0), Spring.focus(0)};
     private int cardFocused = CARD_NONE;   // the focused widget (W_*), or CARD_NONE
     private final FootballData football;
+    /** What an app is playing (Now playing, off by default): it takes the top line's place while it plays. */
+    private final NowPlaying.Watch playing;
 
     // "All Apps" sheet
     private List<HomeApps.Item> others = new ArrayList<>();
@@ -335,6 +337,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             checkNight(true);
             updatePicks();      // five new ones every hour
             loadWatching();
+            playing.start();   // allowed since the screen showed (a no-op once watching)
             wake();
             handler.postDelayed(this, 15_000);
         }
@@ -346,6 +349,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         data = HomeData.get(a);
         recs = Recs.get(a);
         football = FootballData.get(a);
+        playing = new NowPlaying.Watch(a, this::onPlaying);
         click = new Click(a);
         ui = a.getSharedPreferences("home-ui", Context.MODE_PRIVATE);
         watching = WatchNext.fromJson(ui.getString("watching", "[]"));   // the last list, at once; the new one follows
@@ -420,6 +424,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         football.refreshIfStale();
         data.refreshIfStale();
         recs.refreshIfStale();
+        playing.start();
         if (tvInputs != null) tvInputs.registerCallback(inputCallback, handler);
         handler.postDelayed(tick, 15_000);
         checkNotices();
@@ -474,6 +479,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         data.removeListener(this);
         recs.removeListener(this);
         football.removeListener(this);
+        playing.stop();
+        handler.removeCallbacks(bars);
         if (tvInputs != null) tvInputs.unregisterCallback(inputCallback);
         if (controlOpen) hideControl();   // its live reading (CpuMonitor) stops with it
     }
@@ -629,6 +636,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lTab = Ui.text(Ui.medium, 30 * k, L_DIM);
         lTopRight = Ui.numbers(Ui.medium, 30 * k, L_DIM);
         topMinute = topWeatherAt = -1;   // measured again with this size
+        fitPlaying();
         lTabOn = Ui.text(Ui.semibold, 30 * k, L_INK);
         // On the photos (over their dark bottom): white in either look, with a soft shadow for the bright ones.
         onPhotoTitle = Ui.text(Ui.displaySemibold, 40 * k, WHITE);
@@ -3631,8 +3639,69 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             float cw = lCardMeta.measureText(cardCounter);
             c.drawText(cardCounter, cardRects[3].right - cw, cardRects[3].top - 18 * k, lCardMeta);
         }
-        if (showClock) drawTopClock(c);
+        if (playingLine != null) drawPlaying(c);
+        else if (showClock) drawTopClock(c);
         else if (HomeData.coinCount() > 0) drawQuotes(c);
+    }
+
+    // What's playing, cut to fit the top line: once per change, never while drawing.
+    private String playingLine, shownTitle;
+    private float playingWidth, playingCap;
+    private final RectF barRect = new RectF();
+    // The bars bounce for a few seconds when the title changes, then stand still: bouncing all along would redraw the top
+    // layer 10 times a second for nothing.
+    private static final long BAR_FRAME_MS = 100, BARS_BOUNCE_MS = 3000;
+    private long barsUntil;
+    private final Runnable bars = new Runnable() {
+        @Override public void run() {
+            if (!running || playingLine == null) return;
+            heroDirty = true;
+            wake();
+            if (SystemClock.uptimeMillis() < barsUntil) handler.postDelayed(this, BAR_FRAME_MS);
+        }
+    };
+
+    /** What's playing changed (or stopped). */
+    private void onPlaying() {
+        fitPlaying();
+        heroDirty = true;
+        wake();
+        // Only a new title bounces the bars and is said to TalkBack (not a subtitle some players rewrite every second).
+        String title = playing.title, now = playing.text;
+        if (title != null && now != null && running && playingLine != null && !title.equals(shownTitle)) {
+            shownTitle = title;
+            handler.removeCallbacks(bars);
+            barsUntil = SystemClock.uptimeMillis() + BARS_BOUNCE_MS;
+            handler.post(bars);
+            announceForAccessibility(Ui.trf("Tocando agora: {what}", "what", now.replace(" · ", ", ")));
+        }
+    }
+
+    private void fitPlaying() {
+        String now = playing.text;
+        if (now == null || lTopRight == null) {
+            playingLine = null;
+            return;
+        }
+        playingLine = TextUtils.ellipsize(now, new TextPaint(lTopRight), 700 * k, TextUtils.TruncateAt.END).toString();
+        playingWidth = lTopRight.measureText(playingLine);
+        playingCap = Ui.cap(lTopRight);
+    }
+
+    /** "▮▮▮ Title · Artist · App" at the right end of the tab bar, where the clock or the prices are. */
+    private void drawPlaying(Canvas c) {
+        applyTone();
+        Paint text = lTopRight;
+        float fade = 1;   // the corner buttons' names show in this row: fade out while one has focus
+        for (int i = 3; i < TOP_ITEMS; i++) fade = Math.min(fade, 1 - Ui.clamp(topFocus[i].value));
+        if (fade <= 0.01f) return;
+        int color = text.getColor();
+        text.setColor(Ui.alpha(color, fade));
+        float base = (L_TABBAR_TOP + L_TABBAR_H / 2) * k + Ui.halfCap(text), gap = playingCap * 0.6f;
+        float x = CONTENT_R * k - playingWidth - gap - NowPlaying.barsWidth(playingCap);
+        NowPlaying.drawBars(c, x, base, playingCap, text, SystemClock.uptimeMillis() < barsUntil, barRect);
+        c.drawText(playingLine, x + NowPlaying.barsWidth(playingCap) + gap, base, text);
+        text.setColor(color);
     }
 
     /**

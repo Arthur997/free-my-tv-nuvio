@@ -377,6 +377,10 @@ final class Prefs {
 
     static void setShelfSize(int n) { put("shelfSize", n); }
 
+    /** Now playing (NowPlaying): what an app plays, on the home screen and the screensaver. Off by default. */
+    static boolean nowPlaying() { return app != null && sp().getBoolean("nowPlaying", false); }
+    static void setNowPlaying(boolean on) { put("nowPlaying", on); }
+
     /** Shelf order: off (the default), the order picked in Settings > Shelf; on, the app opened last goes first. */
     static boolean shelfRecentFirst() { return sp().getBoolean("shelfRecentFirst", false); }
     static void setShelfRecentFirst(boolean on) { put("shelfRecentFirst", on); }

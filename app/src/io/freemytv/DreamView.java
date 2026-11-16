@@ -9,6 +9,7 @@ import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.RadialGradient;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.RuntimeShader;
 import android.graphics.Shader;
 import android.os.Handler;
@@ -106,6 +107,9 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         @Override public void onFootballNotice(String text) {}
     };
     private final Recs recs;
+    /** What an app is playing (Now playing, off by default), under the prices; the bars stand still here. */
+    private final NowPlaying.Watch playing;
+    private final RectF barRect = new RectF();
     private final Handler handler = new Handler(Looper.getMainLooper());
     private ExecutorService worker = Ui.background("dream");
     private final Recording content = Recording.create("clock");     // without photos: the clock over the aurora
@@ -142,6 +146,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             if (Prefs.footballInDream()) football.refreshIfStale();
             recs.refreshIfStale();
             recs.prefetchAll();
+            playing.start();   // allowed since it started (a no-op once watching)
             dirty = true;
             chromeDirty = true;
             prepareNext();
@@ -154,6 +159,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         data = HomeData.get(c);
         football = FootballData.get(c);
         recs = Recs.get(c);
+        playing = new NowPlaying.Watch(c, this::onData);
         Shaders.dream(scene.palette);
         scene.setMotion(0.4f, 0.32f);
         scene.applyPalette();
@@ -180,6 +186,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         data.addListener(this);
         recs.addListener(this);
         football.addListener(footballListener);
+        playing.start();
         if (Prefs.footballInDream()) football.refreshIfStale();
         data.refreshIfStale();
         recs.refreshIfStale();
@@ -200,6 +207,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         data.removeListener(this);
         recs.removeListener(this);
         football.removeListener(footballListener);
+        playing.stop();
         // The photos stay in GPU memory until the garbage collector runs: release them now (after the last frame).
         final java.util.Set<Bitmap> gone = new java.util.HashSet<>();
         for (Slide s : new Slide[] {current, incoming, prepared}) {
@@ -564,10 +572,25 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             if (!stale.isEmpty() && n > 0) c.drawText(stale, right - total - 24 * k - cornerStale.measureText(stale), base, cornerStale);
             String score = liveScore();
             if (!score.isEmpty()) c.drawText(score, right - cornerQuote.measureText(score), base + (n > 0 ? 44 : 0) * k, cornerQuote);
+            drawPlaying(c, right, base + ((n > 0 ? 44 : 0) + (score.isEmpty() ? 0 : 44)) * k, cornerQuote, false);
         } finally {
             chrome.endRecording();
         }
         chromeDirty = false;
+    }
+
+    /**
+     * "▮▮▮ Title · Artist · App" while an app plays: right-aligned at x (the corner), or centered on it. Cut to the
+     * screen's width; recorded with the rest of its layer, so it costs nothing per frame.
+     */
+    private void drawPlaying(Canvas c, float x, float base, Paint p, boolean centered) {
+        String now = playing.text;
+        if (now == null) return;
+        String line = TextUtils.ellipsize(now, new TextPaint(p), 900 * k, TextUtils.TruncateAt.END).toString();
+        float cap = Ui.cap(p), gap = cap * 0.6f, width = NowPlaying.barsWidth(cap) + gap + p.measureText(line);
+        float left = centered ? x - width / 2 : x - width;
+        NowPlaying.drawBars(c, left, base, cap, p, false, barRect);
+        c.drawText(line, left + NowPlaying.barsWidth(cap) + gap, base, p);
     }
 
     /** "FLA 2 × 1 PAL  ·  67'" while the followed team plays (and the screensaver may show it), else "". */
@@ -800,6 +823,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         // The team's live score under the weather.
         String score = liveScore();
         if (!score.isEmpty()) c.drawText(score, cx - weatherDim.measureText(score) / 2, clockBase + 132 * k, weatherDim);
+        drawPlaying(c, cx, clockBase + (score.isEmpty() ? 132 : 188) * k, weatherDim, true);
 
         // Prices near the bottom edge: small white logo + value, all four on one line.
         float cap = Ui.cap(quotePaint), spacing = 56 * k, gap = 10 * k;

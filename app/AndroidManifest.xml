@@ -230,6 +230,18 @@
 
         <!-- The remote's app buttons from inside any app (Settings > Remote Buttons). Its own process: the system waits for it on
              every key, so the home screen must never be able to slow it down. -->
+        <!-- Lets the home screen and the screensaver read what apps are playing (their media sessions), only while Now
+             playing is on; it unbinds itself at once, so no process stays up for it. -->
+        <service
+            android:name=".NowPlaying"
+            android:exported="true"
+            android:label="Free My TV"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <!-- Reads Wireless debugging's pairing code in the TV's Settings and pairs; off once paired. -->
         <service
             android:name=".PairingAssist"
