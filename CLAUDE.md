@@ -184,23 +184,9 @@ HDMI (Chromecast with Google TV, Google TV Streamer, onn 4K, NVIDIA Shield). Set
   size, so both draw pixel for pixel.
 - `HomeMode` runs every switch as a background job (`ModeJob`) in the main process; the UI is in the `:home`
   process. `Watchdog` goes back to the stock home screen after 3 crashes in 5 minutes.
-- On-screen text is written in Brazilian Portuguese, and that text is the key: `Ui.tr("TV ao vivo")`. The other
-  languages (`Ui.LANGUAGES`: pt, en, es, fr, it; a TV in any other language gets English) are
-  `app/assets/i18n/<lang>.json`, mapping the Portuguese to that language (one HashMap lookup; English, then the
-  Portuguese, when a language lacks it). Text built at runtime is a pattern: `Ui.trf("há {n} min", "n", 12)`, never
-  concatenated words or fragments. A key `"context|Texto"` is the same Portuguese where another language may need
-  another word (`"night|Poucas nuvens"`, `"futebol|E"`; the context isn't shown); `"format|HH:mm"` holds a
-  SimpleDateFormat pattern. A count with a word is `Ui.plural("plural|one:{n} temporada|other:{n} temporadas", n)`:
-  each catalogue gives one form per CLDR plural category of its language, and ICU's rules pick one. Dates and numbers
-  use `Ui.locale()`. Text drawn every frame is cached and made again when `Ui.generation` changes.
-  After adding or changing text, run `python3 tools/translate.py`: it lists what each catalogue lacks (a changed
-  Portuguese text is a new key: its old translations are dropped) and `--missing <lang>` prints those as JSON with the
-  English for reference; translate them into every catalogue (or `--fill` with `ANTHROPIC_API_KEY`), keeping
-  placeholders as they are. `--check` validates everything (exit 1 on any gap). The cleanup's reasons in
-  `app/assets/debloat.json` carry each language inside the entry (`why`), since a newer copy reaches older versions.
-  A new language: `--new <code>`, add it to `Ui.LANGUAGES` (and `REGIONS`), then translate.
-  No right-to-left languages yet (the layout isn't mirrored).
-  Comments in English, short, only where the why isn't obvious.
+- On-screen text: written in Brazilian Portuguese, translated from `app/assets/i18n/<lang>.json` (see *Texts and
+  translations* below). Dates and numbers use `Ui.locale()`. Text drawn every frame is cached and made again when
+  `Ui.generation` changes. Comments in English, short, only where the why isn't obvious.
 - Settings come from `config.properties` through the generated `out/gen/io/freemytv/Config.java` (never edit that).
   What the person changes on the TV (`Prefs`: Home Settings, Shelf, Remote Buttons) wins over those first values.
 - The remote's app buttons (`RemoteKeys`, `RemoteKeyService`) use each brand's key codes: they run only on TCL,
@@ -237,6 +223,58 @@ HDMI (Chromecast with Google TV, Google TV Streamer, onn 4K, NVIDIA Shield). Set
   `tools/webapp.py` is what both builds share. Preview: `python3 webos/build.py --preview` (or `tizen/build.py`), then
   open `out/webos/index.html` in a browser (a stand-in lists sample apps).
 
+## Texts and translations
+
+The app speaks five languages (`Ui.LANGUAGES`): Brazilian Portuguese, English, Spanish, French and Italian. A TV set
+to any other language gets English. Portuguese is the source: the text in the code is Portuguese, and it is the key.
+The other four are catalogues, `app/assets/i18n/{en,es,fr,it}.json`, each `{"Portuguese text": "translation"}`. A
+text a catalogue lacks shows in English, then in Portuguese, so a gap never breaks a screen, but it must not ship.
+
+**Writing text in the code**
+
+- Every text the viewer sees goes through `Ui`, with the Portuguese as a string literal (the tool can't read
+  variables or concatenations):
+  - plain: `Ui.tr("Pôr na prateleira")`
+  - with values: `Ui.trf("{app} está na prateleira.", "app", it.label)`: named placeholders, never words or
+    fragments joined with `+` (`Ui.tr("há ") + n + " min"` can't be translated: other languages order words
+    differently)
+  - a count: `Ui.plural("plural|one:{n} app aberto|other:{n} apps abertos", n)`
+  - a date or time pattern: `Ui.datePattern("format|HH:mm")` (each language gives its SimpleDateFormat pattern)
+- The same Portuguese with two meanings gets a context in front, which isn't shown: `"night|Poucas nuvens"`,
+  `"futebol|E"` (empate, not the letter of an episode). Add one when `translate.py` would otherwise give two meanings
+  one key.
+- Brands and product names stay as they are (Free My TV, Netflix, YouTube, TMDB, HDMI, Google TV, Nuvio).
+- Text that comes as data, not code: the cleanup's reasons in `app/assets/debloat.json` carry all five languages in
+  each entry (`"why": {"pt", "en", "es", "fr", "it"}`), since a newer copy reaches older versions from GitHub. The
+  names the TV itself shows (accessibility services, app name) are Android resources, `app/res/values-{pt,es,fr,it}/`
+  (`values/` is English).
+
+**After adding or changing text** (every change, before the commit)
+
+1. `python3 tools/translate.py`: lists what each catalogue lacks and drops translations the code no longer uses.
+   Changing a Portuguese text changes its key: its old translations go and it shows up as missing everywhere, which
+   is the point (nothing stays outdated unnoticed).
+2. `python3 tools/translate.py --missing <lang>` for en, es, fr and it: prints the missing texts as JSON
+   `{Portuguese: English or null}`. Translate each from the Portuguese (the English only clarifies the meaning) and
+   add it to that catalogue. Keep every `{placeholder}` as written; a plural gives one form per CLDR category of the
+   language (`one:…|other:…`, each with `{n}`); a `format|` key gives a SimpleDateFormat pattern. Short: the text is
+   drawn in fixed places on a TV. Or `--fill` with `ANTHROPIC_API_KEY` set, which sends only the texts to the API.
+3. `python3 tools/translate.py --check` must print `OK`: all four catalogues complete, placeholders and plural forms
+   matching, `Ui.LANGUAGES` and the files in step, and every debloat.json reason in all five languages.
+4. `./build.sh` must end with `Built FreeMyTV.apk`.
+
+Glossary, to keep the same words across screens: prateleira = shelf / estante / étagère / scaffale; Início = home
+screen / inicio / Accueil / Home; Todos os Apps = All Apps / Todas las apps / Toutes les applis / Tutte le app;
+protetor de tela = screensaver / protector de pantalla / économiseur d'écran / salvaschermo; desligar/ligar um app =
+turn off/on / desactivar/activar / désactiver/activer / disattivare/attivare; encerrar um app = close / cerrar /
+fermer / chiudere.
+
+**A new language:** `python3 tools/translate.py --new <code>`, add the code to `Ui.LANGUAGES` and its country to
+`REGIONS` (in `Ui.java`), translate everything as in step 2, add it to each debloat.json reason and a
+`app/res/values-<code>/strings.xml`, then `--check`. No right-to-left languages yet (the layout isn't mirrored).
+
+The LG and Samsung web app (`web/`) has its own texts, `tr(pt, en, es)` in the code, and isn't covered by this.
+
 ## Always
 
 - Google TV's setup app (`setupwraith`) goes off before the stock home screen and comes back after it, everywhere
@@ -252,3 +290,5 @@ HDMI (Chromecast with Google TV, Google TV Streamer, onn 4K, NVIDIA Shield). Set
   *Original* can bring it back.
 - Don't change the TV's picture, sound, network or account settings.
 - Keep the way back working: the *Original* mode and the watchdog.
+- No text ships untranslated: a change that adds or edits text carries its en, es, fr and it translations, and
+  `python3 tools/translate.py --check` passes (see *Texts and translations*).
