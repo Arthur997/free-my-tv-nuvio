@@ -101,6 +101,11 @@ public class NowPlaying extends NotificationListenerService {
             }
         }
 
+        /** Looked at again on the screen's tick: a pause that ran past PAUSED_FOR leaves the line with no event. */
+        void refresh() {
+            if (on) update();
+        }
+
         void stop() {
             if (!on) return;
             on = false;
@@ -122,24 +127,68 @@ public class NowPlaying extends NotificationListenerService {
         }
 
         private void update() {
-            String now = null, nowTitle = null;
+            MediaController pick = null;
+            boolean pickPlaying = false;
             for (MediaController mc : controllers) {   // most recent first
                 PlaybackState s = mc.getPlaybackState();
-                int state = s == null ? PlaybackState.STATE_NONE : s.getState();
-                // A stream that buffers is still playing: the line doesn't blink back.
-                if (state == PlaybackState.STATE_PLAYING || state == PlaybackState.STATE_BUFFERING
-                        || state == PlaybackState.STATE_CONNECTING) {
-                    now = describe(mc);
-                    MediaMetadata m = mc.getMetadata();
-                    CharSequence t = m == null ? null : m.getDescription().getTitle();
-                    nowTitle = now == null ? null : TextUtils.isEmpty(t) ? mc.getPackageName() : t.toString().trim();
+                if (isPlaying(s)) {
+                    pick = mc;
+                    pickPlaying = true;
                     break;
                 }
+                if (pick == null && recentlyPaused(s)) pick = mc;   // its play button can bring it back
             }
-            if (Objects.equals(now, text)) return;
+            String now = pick == null ? null : describe(pick), nowTitle = null;
+            if (now != null) {
+                MediaMetadata m = pick.getMetadata();
+                CharSequence t = m == null ? null : m.getDescription().getTitle();
+                nowTitle = TextUtils.isEmpty(t) ? pick.getPackageName() : t.toString().trim();
+            }
+            long actions = pick == null || pick.getPlaybackState() == null ? 0 : pick.getPlaybackState().getActions();
+            boolean next = (actions & PlaybackState.ACTION_SKIP_TO_NEXT) != 0;
+            boolean previous = (actions & PlaybackState.ACTION_SKIP_TO_PREVIOUS) != 0;
+            active = now == null ? null : pick;
+            if (Objects.equals(now, text) && pickPlaying == playing && next == canNext && previous == canPrevious) return;
             title = nowTitle;
             text = now;
+            playing = now != null && pickPlaying;
+            canNext = next;
+            canPrevious = previous;
             changed.run();
+        }
+
+        /** A stream that buffers is still playing: the line doesn't blink. */
+        private static boolean isPlaying(PlaybackState s) {
+            int state = s == null ? PlaybackState.STATE_NONE : s.getState();
+            return state == PlaybackState.STATE_PLAYING || state == PlaybackState.STATE_BUFFERING
+                    || state == PlaybackState.STATE_CONNECTING;
+        }
+
+        /** Paused within PAUSED_FOR: a player paused for hours (some keep their session) no longer takes the line. */
+        private static boolean recentlyPaused(PlaybackState s) {
+            return s != null && s.getState() == PlaybackState.STATE_PAUSED
+                    && SystemClock.elapsedRealtime() - s.getLastPositionUpdateTime() < PAUSED_FOR;
+        }
+
+        private static final long PAUSED_FOR = 10 * 60_000L;
+        private MediaController active;
+        /** Playing now (false: paused, with text still shown), and which skips the player takes. */
+        volatile boolean playing, canNext, canPrevious;
+
+        /** The remote's play/pause on the player shown. */
+        void playPause() {
+            MediaController mc = active;
+            if (mc == null) return;
+            if (playing) mc.getTransportControls().pause();
+            else mc.getTransportControls().play();
+        }
+
+        void next() {
+            if (active != null && canNext) active.getTransportControls().skipToNext();
+        }
+
+        void previous() {
+            if (active != null && canPrevious) active.getTransportControls().skipToPrevious();
         }
 
         /** "Title · Artist · App": the parts the app gives, then its name; null when there's none of them. */

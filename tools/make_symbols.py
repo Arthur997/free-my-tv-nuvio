@@ -30,6 +30,8 @@ MAP = {
     "umbrella": ("umbrella", 1), "calendar": ("calendar_month", 1),
     # Home Assistant's buttons in the drawer (HomeAssistant.symbol).
     "lightbulb": ("lightbulb", 1), "mode_fan": ("mode_fan", 1), "blinds": ("blinds", 1), "toggle_on": ("toggle_on", 1),
+    # Now playing's controls (HomeView.drawMedia).
+    "pause": ("pause", 1), "skip_next": ("skip_next", 1), "skip_previous": ("skip_previous", 1),
 }
 
 

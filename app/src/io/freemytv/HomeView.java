@@ -149,7 +149,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private int cardOffset;
     private String cardCounter = "";
     // The top row: the three tabs, then the icon-only buttons (Search, Live TV, HDMI Inputs, TV Settings).
-    private static final int BUTTONS = 2, TOP_ITEMS = 3 + BUTTONS;
+    // The top row: the three tabs, the round buttons at the top right, then Now playing's previous, play/pause and
+    // next (on the tabs' line, only while something plays).
+    private static final int BUTTONS = 2, MEDIA = 3 + BUTTONS, TOP_ITEMS = MEDIA + 3;
     private final Spring[] topFocus = new Spring[TOP_ITEMS];
     private final RectF[] topRects = new RectF[TOP_ITEMS];
     private final Spring[] cardFocus = new Spring[SLOTS];
@@ -342,6 +344,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 HomeAssistant.refresh(HomeView.this::showHomeStates);
             }
             playing.start();   // allowed since the screen showed (a no-op once watching)
+            playing.refresh();
             wake();
             handler.postDelayed(this, 15_000);
         }
@@ -1311,7 +1314,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         Paint text = lQuote;
         // The corner buttons' names appear in this row: the quotes fade out while one of them has focus.
         float fade = 1;
-        for (int i = 3; i < TOP_ITEMS; i++) fade = Math.min(fade, 1 - Ui.clamp(topFocus[i].value));
+        for (int i = 3; i < MEDIA; i++) fade = Math.min(fade, 1 - Ui.clamp(topFocus[i].value));
         if (fade <= 0.01f) return;
         int textColor = text.getColor();
         text.setColor(Ui.alpha(textColor, fade));
@@ -3271,6 +3274,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 selectTab(topIndex);
                 return;
             }
+            if (topIndex >= MEDIA) {
+                pressMedia(topIndex - MEDIA);
+                return;
+            }
             it = lightButtons.get(topIndex - 3);
             r = topRects[topIndex];
         } else if (zone == Z_CARDS) {
@@ -3512,6 +3519,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             topRects[3 + i].set(right - b, cy - b / 2, right, cy + b / 2);
             right -= b + L_BUTTON_GAP * k;
         }
+        layoutMedia();
         float g = L_CARD_GAP * k, left = MARGIN * k, width = (CONTENT_R - MARGIN) * k;
         float above = (L_TABBAR_TOP + L_TABBAR_H) * k, below = L_PLATTER_TOP * k;
         // Big card H tall, small ones (H − g) / 2, all 16:9, filling the width: 16/9·H + 2g + 2·16/9·(H − g) / 2.
@@ -3684,33 +3692,50 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private String playingLine, shownTitle;
     private float playingWidth, playingCap;
     private final RectF barRect = new RectF();
-    // The bars bounce for a few seconds when the title changes, then stand still: bouncing all along would redraw the top
-    // layer 10 times a second for nothing.
-    private static final long BAR_FRAME_MS = 100, BARS_BOUNCE_MS = 3000;
+    // While something plays, the bars move like a level meter, 12 frames a second (only the top layer is redrawn). In
+    // performance mode they move for a few seconds after a new title, then stand still: on a weak TV that redraw costs.
+    private static final long BAR_FRAME_MS = 83, BARS_BOUNCE_MS = 3000;
+    private static final float MEDIA_BUTTON = 52, MEDIA_GAP = 12, MEDIA_TEXT_GAP = 24;
     private long barsUntil;
     private final Runnable bars = new Runnable() {
         @Override public void run() {
-            if (!running || playingLine == null) return;
+            if (!running || playingLine == null || !barsMoving()) return;
             heroDirty = true;
             wake();
-            if (SystemClock.uptimeMillis() < barsUntil) handler.postDelayed(this, BAR_FRAME_MS);
+            handler.postDelayed(this, BAR_FRAME_MS);
         }
     };
 
-    /** What's playing changed (or stopped). */
+    private boolean barsMoving() {
+        return playing.playing && (!Prefs.performance() || SystemClock.uptimeMillis() < barsUntil);
+    }
+
+    /** Now playing's buttons are on screen (something plays, or was paused a moment ago, and the option is on). */
+    private boolean mediaShown() {
+        return playingLine != null;
+    }
+
+    /** What's playing changed (or stopped, or paused). */
     private void onPlaying() {
         fitPlaying();
+        layoutMedia();
         heroDirty = true;
+        // The line went away under the focus: back to the selected tab.
+        if (!mediaShown() && zone == Z_TOP && topIndex >= MEDIA) {
+            topIndex = tab;
+            retarget(false);
+        }
         wake();
-        // Only a new title bounces the bars and is said to TalkBack (not a subtitle some players rewrite every second).
         String title = playing.title, now = playing.text;
-        if (title != null && now != null && running && playingLine != null && !title.equals(shownTitle)) {
+        boolean newTitle = title != null && now != null && running && playingLine != null && !title.equals(shownTitle);
+        if (newTitle) {
             shownTitle = title;
-            handler.removeCallbacks(bars);
             barsUntil = SystemClock.uptimeMillis() + BARS_BOUNCE_MS;
-            handler.post(bars);
+            // Said to TalkBack once per title (not a subtitle some players rewrite every second).
             announceForAccessibility(Ui.trf("Tocando agora: {what}", "what", now.replace(" · ", ", ")));
         }
+        handler.removeCallbacks(bars);
+        if (running && barsMoving()) handler.post(bars);
     }
 
     private void fitPlaying() {
@@ -3719,25 +3744,62 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             playingLine = null;
             return;
         }
-        playingLine = TextUtils.ellipsize(now, new TextPaint(lTopRight), 700 * k, TextUtils.TruncateAt.END).toString();
+        playingLine = TextUtils.ellipsize(now, new TextPaint(lTopRight), 560 * k, TextUtils.TruncateAt.END).toString();
         playingWidth = lTopRight.measureText(playingLine);
         playingCap = Ui.cap(lTopRight);
     }
 
-    /** "▮▮▮ Title · Artist · App" at the right end of the tab bar, where the clock or the prices are. */
+    /** The three round buttons at the right end of the tabs' line (empty while nothing plays). */
+    private void layoutMedia() {
+        float b = MEDIA_BUTTON * k, cy = (L_TABBAR_TOP + L_TABBAR_H / 2) * k, right = CONTENT_R * k;
+        for (int i = 2; i >= 0; i--) {
+            if (mediaShown()) topRects[MEDIA + i].set(right - b, cy - b / 2, right, cy + b / 2);
+            else topRects[MEDIA + i].setEmpty();
+            right -= b + MEDIA_GAP * k;
+        }
+    }
+
+    /** OK on previous (0), play/pause (1) or next (2): the player's own controls, like its remote buttons. */
+    private void pressMedia(int which) {
+        if (which == 0) playing.previous();
+        else if (which == 1) playing.playPause();
+        else playing.next();
+    }
+
+    /**
+     * "▮▮▮ Title · Artist · App", then previous, play/pause and next as small glass circles like the corner buttons
+     * (white when focused), at the right end of the tabs' line, where the clock or the prices are.
+     */
     private void drawPlaying(Canvas c) {
         applyTone();
         Paint text = lTopRight;
         float fade = 1;   // the corner buttons' names show in this row: fade out while one has focus
-        for (int i = 3; i < TOP_ITEMS; i++) fade = Math.min(fade, 1 - Ui.clamp(topFocus[i].value));
+        for (int i = 3; i < MEDIA; i++) fade = Math.min(fade, 1 - Ui.clamp(topFocus[i].value));
         if (fade <= 0.01f) return;
         int color = text.getColor();
-        text.setColor(Ui.alpha(color, fade));
+        text.setColor(Ui.alpha(color, fade * (playing.playing ? 1 : 0.6f)));
         float base = (L_TABBAR_TOP + L_TABBAR_H / 2) * k + Ui.halfCap(text), gap = playingCap * 0.6f;
-        float x = CONTENT_R * k - playingWidth - gap - NowPlaying.barsWidth(playingCap);
-        NowPlaying.drawBars(c, x, base, playingCap, text, SystemClock.uptimeMillis() < barsUntil, barRect);
+        float x = topRects[MEDIA].left - MEDIA_TEXT_GAP * k - playingWidth - gap - NowPlaying.barsWidth(playingCap);
+        NowPlaying.drawBars(c, x, base, playingCap, text, playing.playing, barRect);
         c.drawText(playingLine, x + NowPlaying.barsWidth(playingCap) + gap, base, text);
         text.setColor(color);
+        String[] symbols = {"skip_previous", playing.playing ? "pause" : "play", "skip_next"};
+        boolean[] usable = {playing.canPrevious, true, playing.canNext};
+        for (int i = 0; i < 3; i++) drawMediaButton(c, topRects[MEDIA + i], symbols[i], usable[i], fade, topFocus[MEDIA + i].value);
+    }
+
+    /** One of Now playing's buttons: the corner buttons' glass and focus, smaller; one the player can't take is faint. */
+    private void drawMediaButton(Canvas c, RectF r, String symbol, boolean usable, float fade, float focus) {
+        float f = Ui.clamp(focus), s = 1 + 0.1f * f, rad = r.width() / 2 * s;
+        cell.set(r.centerX() - rad, r.centerY() - rad, r.centerX() + rad, r.centerY() + rad);
+        dockLiquid(c, cell, rad, (1 - f) * fade);
+        if (f > 0.01f) {
+            fill.setShader(null);
+            fill.setColor(Ui.alpha(0xFFFFFFFF, f * fade));
+            c.drawCircle(cell.centerX(), cell.centerY(), rad, fill);
+        }
+        int ink = blend(tone(L_INK, 0xEBFFFFFF), L_INK, f);
+        Symbols.draw(getContext(), c, symbol, cell.centerX(), cell.centerY(), 26 * k * s, Ui.alpha(ink, (usable ? 1 : 0.35f) * fade));
     }
 
     /**
@@ -3772,7 +3834,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         applyTone();
         Paint text = lTopRight;   // the tabs' font and size, on their line
         float fade = 1;   // the corner buttons' names show in this row: fade out while one has focus
-        for (int i = 3; i < TOP_ITEMS; i++) fade = Math.min(fade, 1 - Ui.clamp(topFocus[i].value));
+        for (int i = 3; i < MEDIA; i++) fade = Math.min(fade, 1 - Ui.clamp(topFocus[i].value));
         if (fade <= 0.01f) return;
         long now = System.currentTimeMillis();
         if (now / 60_000 != topMinute || Clock.generation != topZone) {
@@ -4145,7 +4207,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 break;
             case Z_TOP:
                 if (dx != 0) {
-                    int next = Math.max(0, Math.min(TOP_ITEMS - 1, topIndex + dx));
+                    int next = nextTop(topIndex, dx);
                     if (next == topIndex) return true;
                     topIndex = next;
                     if (topIndex < 3) selectTab(topIndex);   // like Apple TV tabs: focusing a tab selects it
@@ -4156,8 +4218,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                         zone = Z_CARDS;
                         cardIndex = nearestCard(topRects[topIndex].centerX(), false);
                     }
-                } else if (topIndex < 3 && !lightButtons.isEmpty()) {
-                    topIndex = 3;   // ↑ from a tab: the buttons at the top right (the tab stays selected)
+                } else if ((topIndex < 3 || topIndex >= MEDIA) && !lightButtons.isEmpty()) {
+                    topIndex = 3;   // ↑ from a tab or a media button: the buttons at the top right (the tab stays)
                 } else {
                     return true;
                 }
@@ -4168,6 +4230,17 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         retarget(false);
         click.move();
         return true;
+    }
+
+    /**
+     * ← → along the top row, in the order it's seen: the tabs, Now playing's buttons on the same line (while something
+     * plays), then the round buttons at the top right.
+     */
+    private int nextTop(int from, int dx) {
+        int[] order = mediaShown() ? new int[] {0, 1, 2, MEDIA, MEDIA + 1, MEDIA + 2, 3, 4} : new int[] {0, 1, 2, 3, 4};
+        int at = 0;
+        for (int i = 0; i < order.length; i++) if (order[i] == from) at = i;
+        return order[Math.max(0, Math.min(order.length - 1, at + dx))];
     }
 
     /**
