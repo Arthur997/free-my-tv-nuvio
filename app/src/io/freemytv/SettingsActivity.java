@@ -2279,8 +2279,14 @@ public class SettingsActivity extends Activity {
                     Symbols.draw(getContext(), c, "check", rowRect.right - 30 * k - cw / 2, rowRect.centerY(), 26 * k, blend(fg(0xFFFFFFFF), INK, f));
                 }
             }
-            c.drawText(Ui.tr("A troca leva uns segundos e a tela pisca nas medições."), LIST_X * k + 30 * k,
-                    (LIST_TOP + 20 + 2 * (CHOICE_H + ROW_GAP) + 40) * k, hint);
+            float hintY = (LIST_TOP + 20 + 2 * (CHOICE_H + ROW_GAP) + 40) * k;
+            if (FireTv.IS) {
+                // Fire OS keeps its own launcher and holds our start for 5 s after Home (FireTv): said before the switch.
+                drawHint(c, Ui.tr("No Fire TV, o Home mostra o Início da Amazon por uns 5 s antes do Free My TV, e algumas funções podem não funcionar direito."),
+                        LIST_X * k + 30 * k, hintY);
+            } else {
+                c.drawText(Ui.tr("A troca leva uns segundos e a tela pisca nas medições."), LIST_X * k + 30 * k, hintY, hint);
+            }
         }
 
         private static int blend(int a, int b, float f) {

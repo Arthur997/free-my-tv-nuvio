@@ -35,7 +35,7 @@ public class ControlActivity extends Activity {
         super.onCreate(savedInstanceState);
         if (HomeActivity.inFront && !RecentsActivity.showing) {
             // Over the home screen: its own panel, under its button in the corner, instead of this one in the middle.
-            startActivity(new Intent(this, HomeActivity.class).putExtra(HomeActivity.OPEN_CONTROL, true)
+            startActivity(new Intent(this, FireTv.HOME).putExtra(HomeActivity.OPEN_CONTROL, true)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION));
             finish();
             overridePendingTransition(0, 0);

@@ -8,6 +8,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- After the TV boots (and after a TV update), checks that Free My TV mode is still as you left it. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Fire TV only, granted once from a computer (FireTvMode): Fire OS blocks the app's own ADB. -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
     <!-- Holding OK on an app > Uninstall: opens Android's own confirmation (it never uninstalls by itself). -->
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <!-- "Continue watching": reads the Watch Next lists the TV's apps keep in Android's TV provider. -->
@@ -124,6 +126,22 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <!-- Fire TV: the same home screen, opened over Amazon's launcher by the accessibility service (FireTv). No
+             resumeWhilePausing, which leaves window focus on Amazon's paused launcher on Fire OS. -->
+        <activity
+            android:name=".FireHomeActivity"
+            android:process=":home"
+            android:exported="true"
+            android:label="Free My TV"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:stateNotNeeded="true"
+            android:clearTaskOnLaunch="true"
+            android:excludeFromRecents="true"
+            android:screenOrientation="landscape"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|fontScale|locale|layoutDirection"
+            android:theme="@style/FreeMyTV.Home" />
 
         <!-- Recent apps (Control Center, or the remote button picked in Remote Buttons): over whatever is on screen. -->
         <activity

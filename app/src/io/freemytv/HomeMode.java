@@ -158,9 +158,13 @@ final class HomeMode {
     /** Factory and service menus, on any brand ("com.tcl.factory.view", "com.cvte.tv.fac.aging", "mediatek.factorymenu.ui"). */
     private static final Pattern FACTORY = Pattern.compile("(.*\\.)?(factory|factorymenu|facmenu|fac|hkcfac|testpq)(\\..*)?");
 
-    /** Checked before every disable: never the protected list, Android's own pieces or a factory menu. */
+    /**
+     * Checked before every disable: never the protected list, Android's own pieces or a factory menu, and on Fire TV
+     * nothing of Amazon's (as upstream's #167).
+     */
     static boolean mayTurnOff(String pkg) {
-        return !PROTECTED.contains(pkg) && !CORE.matcher(pkg).matches() && !FACTORY.matcher(pkg).matches();
+        return !PROTECTED.contains(pkg) && !(FireTv.IS && pkg.startsWith("com.amazon."))
+                && !CORE.matcher(pkg).matches() && !FACTORY.matcher(pkg).matches();
     }
 
     /**
@@ -237,15 +241,19 @@ final class HomeMode {
 
     /**
      * The remote's app buttons (RemoteKeys) need an accessibility service that only filters those keys. It is on only
-     * on TCL, Vestel, KTC and Sony TVs (and Formovie projectors) in Free My TV mode, and goes off with Original. Android turns it off when this app is updated, so the
+     * on TCL, Vestel, KTC and Sony TVs (and Formovie projectors) in Free My TV mode, and goes off with Original (on Fire TV it also takes Home: FireTv). Android turns it off when this app is updated, so the
      * boot check and an update turn it back on. A force-stop takes it out of the enabled ones too, and some TVs do that
      * when a big app opens (TCL's framework.custom with YouTube): a watch in the TV's shell (REMOTE_WATCH) puts it back.
      */
     static void ensureRemoteService(Context c, long delayMs) {
-        if (RemoteKeys.supported()) ModeJob.schedule(c, ModeJob.REMOTE, null, delayMs);
+        if (RemoteKeys.supported() || FireTv.IS) ModeJob.schedule(c, ModeJob.REMOTE, null, delayMs);
     }
 
     static void ensureRemoteServiceNow(Context app) {
+        if (FireTv.IS) {
+            FireTvMode.ensureService(app);
+            return;
+        }
         if (!RemoteKeys.supported() || !FREE.equals(state(app).optString("mode"))) return;
         try (Adb adb = Adb.connect(app, 10_000, null)) {
             remoteService(app, adb, true);
@@ -321,11 +329,38 @@ final class HomeMode {
             "done",
             "");
 
-    /** Adds ours to the enabled accessibility services (keeping the others, like TalkBack), or takes it out. */
+    /** The TV's secure settings: through the TV's shell (Adb), or written by this app itself where it may (FireTvMode). */
+    interface SecureSettings {
+        /** The value, or "" when there's none. */
+        String get(String key) throws IOException;
+
+        /** Writes the value; null deletes it. */
+        void put(String key, String value) throws IOException;
+    }
+
+    /** Secure settings through the TV's shell. The values are checked before (component names, 0 or 1). */
+    private static SecureSettings shellSettings(Adb adb) {
+        return new SecureSettings() {
+            @Override public String get(String key) throws IOException {
+                String value = adb.shell("settings get secure " + key).trim();
+                return value.equals("null") ? "" : value;
+            }
+
+            @Override public void put(String key, String value) throws IOException {
+                adb.shell(value == null ? "settings delete secure " + key : "settings put secure " + key + " '" + value + "'");
+            }
+        };
+    }
+
+    /** The service, with the watch in the TV's shell that puts it back after a force-stop (REMOTE_WATCH). */
     private static void remoteService(Context c, Adb adb, boolean on) throws IOException {
         adb.shell(on ? startShellScript(REMOTE_WATCH_FILES, REMOTE_WATCH, "") : stopShellScript(REMOTE_WATCH_FILES));
-        String current = adb.shell("settings get secure enabled_accessibility_services").trim();
-        if (current.equals("null")) current = "";
+        remoteService(c, shellSettings(adb), on);
+    }
+
+    /** Adds ours to the enabled accessibility services (keeping the others, like TalkBack), or takes it out. */
+    static void remoteService(Context c, SecureSettings tv, boolean on) throws IOException {
+        String current = tv.get("enabled_accessibility_services");
         List<String> others = new ArrayList<>();
         for (String one : current.split(":")) {
             if (one.isEmpty() || one.equals(REMOTE_SERVICE) || one.equals(REMOTE_SERVICE_SHORT)) continue;
@@ -344,18 +379,17 @@ final class HomeMode {
         if (on) {
             // Only the first time: when it's put back (after an update or a force-stop), accessibility is on already.
             if (!s.has("accessibilityWasOff")) {
-                try { s.put("accessibilityWasOff", !"1".equals(adb.shell("settings get secure accessibility_enabled").trim())); }
+                try { s.put("accessibilityWasOff", !"1".equals(tv.get("accessibility_enabled"))); }
                 catch (JSONException ignored) {}
                 save(c, s);
             }
             list.add(REMOTE_SERVICE);
         }
-        adb.shell(list.isEmpty() ? "settings delete secure enabled_accessibility_services"
-                : "settings put secure enabled_accessibility_services '" + String.join(":", list) + "'");
+        tv.put("enabled_accessibility_services", list.isEmpty() ? null : String.join(":", list));
         if (on) {
-            adb.shell("settings put secure accessibility_enabled 1");
+            tv.put("accessibility_enabled", "1");
         } else {
-            if (list.isEmpty() && s.optBoolean("accessibilityWasOff")) adb.shell("settings put secure accessibility_enabled 0");
+            if (list.isEmpty() && s.optBoolean("accessibilityWasOff")) tv.put("accessibility_enabled", "0");
             s.remove("accessibilityWasOff");
             save(c, s);
         }
@@ -366,7 +400,9 @@ final class HomeMode {
 
     static void applyNow(Context c, String mode) {
         synchronized (RUN) {
-            if (FREE.equals(mode)) applyFree(c); else applyOriginal(c);
+            if (FireTv.IS) FireTvMode.apply(c, FREE.equals(mode));
+            else if (FREE.equals(mode)) applyFree(c);
+            else applyOriginal(c);
         }
     }
 
@@ -611,6 +647,10 @@ final class HomeMode {
      */
     static void revertHomeNow(Context app, boolean retry) {
         synchronized (RUN) {
+            if (FireTv.IS) {
+                FireTvMode.revertHome(app);
+                return;
+            }
             JSONObject s = state(app);
             try (Adb adb = Adb.connect(app, 10_000, null)) {
                 boolean ours = homeHolder(adb).contains(PKG);
@@ -673,7 +713,8 @@ final class HomeMode {
                 s.remove("busy");
                 save(app, s);
             } catch (JSONException ignored) {}
-            if (!FREE.equals(s.optString("mode"))) return;
+            // Fire TV turns nothing off: its only piece, the service, is put back by the boot check (ensureRemoteService).
+            if (!FREE.equals(s.optString("mode")) || FireTv.IS) return;
             List<String> fixed = new ArrayList<>();
             try (Adb adb = Adb.connect(app, 10_000, null)) {
                 Set<String> present = packages(adb, "");

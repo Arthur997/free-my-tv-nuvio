@@ -32,10 +32,12 @@ public class RemoteKeyService extends AccessibilityService {
     }
 
     @Override protected boolean onKeyEvent(KeyEvent event) {
-        return RemoteKeys.onKey(this, event);
+        return FireTv.onKey(this, event) || RemoteKeys.onKey(this, event);
     }
 
-    @Override public void onAccessibilityEvent(AccessibilityEvent event) {}
+    @Override public void onAccessibilityEvent(AccessibilityEvent event) {
+        FireTv.onWindow(this, event);
+    }
 
     @Override public void onInterrupt() {}
 }

@@ -37,6 +37,8 @@ before you do it, and let them do the taps on the TV.
    TCL's `TclAppBoot` blocks background jobs by default, so the switch (and the watchdog) never run. The log shows
    `forbid bind service ... ModeJob`. Some TCL firmware has neither (a 2024 MediaTek Google TV, Android 14, has no
    `TclAppBoot`): both names answer `Unknown operation string`, and nothing needs allowing.
+   On Fire TV, also `adb shell pm grant io.freemytv android.permission.WRITE_SECURE_SETTINGS`: Fire OS blocks the
+   app's own ADB, so it switches by writing that one setting itself (`FireTvMode`).
    On a Mac, `adb connect` can fail with `No route to host` while the TV answers (`nc -z <IP> 5555` connects): macOS's
    Local Network privacy blocks the adb server that adb starts in the background. Start it from the same terminal
    instead (`adb kill-server; adb nodaemon server &`), or allow the terminal app under System Settings → Privacy &
@@ -205,6 +207,16 @@ HDMI (Chromecast with Google TV, Google TV Streamer, onn 4K, NVIDIA Shield). Set
   the key to the TV. Sony ships its own Apple TV build, `com.apple.atve.sony.appletv`.
   Xiaomi projectors made by Formovie (Fengmi; L1, MediaTek, Google TV 14 tested) send the same `KEYCODE_STEM_1` for
   Netflix (`RemoteKeys.STEM_NETFLIX`); their YouTube button goes to MediaTek's `GlobalKeyReceiver` and stays with the system.
+- Fire TV (`FireTv`, `FireTvMode`; Fire TV Stick 3rd gen, Fire OS 7.7, Android 9 tested): Fire OS ignores the
+  default home (`set-home-activity` answers Success, Home still opens `com.amazon.tv.launcher`), and it blocks ADB from
+  the device itself (127.0.0.1:5555 accepts and never answers), so `HomeMode`'s switch can't run there. Free My TV mode
+  turns nothing off (`mayTurnOff` refuses every `com.amazon.*` there): it only puts `RemoteKeyService` in the enabled
+  accessibility services through `WRITE_SECURE_SETTINGS`, granted once from a computer. The service takes Home (a
+  short press opens `FireHomeActivity`, a long one Amazon's quick menu, `SHOW_HUD`): letting it through and covering
+  Amazon's home after costs 5 s (Android holds back starts after Home). When Amazon's home comes up anyway (a start,
+  Back from an app, Alexa), ours opens over it. `FireHomeActivity` has no `resumeWhilePausing`, which leaves the focus
+  on Amazon's launcher (upstream #167). The screensaver stays Amazon's. Injected keys (`adb shell input keyevent`) skip
+  the service: test Home on the remote.
 - After any change, `./build.sh` must end with `Built FreeMyTV.apk`.
 - LG and Samsung (`web/`): plain ES5 JavaScript and CSS without variables, grid or backdrop-filter, since older TVs
   (webOS 3 and 4, Tizen 3) run a Chromium from 2015 to 2017; only transform and opacity animate. `web/tv.js` is the

@@ -149,10 +149,12 @@ public class HomeActivity extends Activity {
         cancelLive("Home came first");
         if (home == null) return;
         if (intent.getBooleanExtra(OPEN_CONTROL, false)) home.toggleControl();
-        else home.reset(true);
+        else if (!intent.getBooleanExtra(RESURFACE, false)) home.reset(true);
     }
 
     static final String OPEN_CONTROL = "io.freemytv.OPEN_CONTROL";
+    /** Brought back over Fire TV's own home screen, not by Home (FireTv): stays as it was. */
+    static final String RESURFACE = "io.freemytv.RESURFACE";
     /** The home screen is on screen (resumed, or only covered by a translucent window): set on resume, cleared on stop. */
     static volatile boolean inFront;
 
