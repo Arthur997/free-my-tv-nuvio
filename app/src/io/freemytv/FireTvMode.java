@@ -20,8 +20,9 @@ import org.json.JSONObject;
 final class FireTvMode {
     private FireTvMode() {}
 
-    /** Run once from a computer, over USB or the network. */
-    static final String GRANT = "adb shell pm grant " + HomeMode.PKG + " " + Manifest.permission.WRITE_SECURE_SETTINGS;
+    /** Run once from a computer, over USB or the network. READ_LOGS lets FireTv see Home in time (FireCover). */
+    static final String GRANT = "adb shell \"pm grant " + HomeMode.PKG + " " + Manifest.permission.WRITE_SECURE_SETTINGS
+            + "; pm grant " + HomeMode.PKG + " " + Manifest.permission.READ_LOGS + "\"";
 
     static boolean allowed(Context c) {
         return c.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) == PackageManager.PERMISSION_GRANTED;

@@ -386,7 +386,7 @@
  "Nenhuma: OK para inserir": "Ninguna: OK para agregar",
  "Neste modelo de TV, trocar a tela inicial impediu uma TV de ligar. Aqui o Free My TV fica como app: abra pelos seus apps.": "En este modelo de TV, cambiar la pantalla de inicio impidió que un TV encendiera. Aquí Free My TV queda como app: ábrelo desde tus apps.",
  "Neve": "Nieve",
- "No Fire TV, o Home mostra o Início da Amazon por uns 5 s antes do Free My TV, e algumas funções podem não funcionar direito.": "En Fire TV, Home muestra el inicio de Amazon unos 5 s antes de Free My TV, y algunas funciones pueden no andar bien.",
+ "No Fire TV, depois do Home o controle leva uns 5 s para responder no Free My TV, e algumas funções podem não funcionar direito.": "En Fire TV, tras Home el control tarda unos 5 s en responder en Free My TV, y algunas funciones pueden no andar bien.",
  "No Fire TV, o computador precisa liberar o Free My TV uma vez. Com o Fire TV conectado ao computador pelo ADB, rode: {command}": "En Fire TV, una computadora tiene que autorizar Free My TV una vez. Con el Fire TV conectado a la computadora por ADB, ejecuta: {command}",
  "No Home Assistant: Perfil → Segurança → Tokens de acesso de longa duração → Criar token. Cole aqui (o app Google TV no celular serve de teclado e cola).": "En Home Assistant: Perfil → Seguridad → Tokens de acceso de larga duración → Crear token. Pégalo aquí (la app Google TV del celular sirve de teclado y pega).",
  "No app {app}": "En {app}",

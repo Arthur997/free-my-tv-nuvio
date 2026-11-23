@@ -2281,8 +2281,8 @@ public class SettingsActivity extends Activity {
             }
             float hintY = (LIST_TOP + 20 + 2 * (CHOICE_H + ROW_GAP) + 40) * k;
             if (FireTv.IS) {
-                // Fire OS keeps its own launcher and holds our start for 5 s after Home (FireTv): said before the switch.
-                drawHint(c, Ui.tr("No Fire TV, o Home mostra o Início da Amazon por uns 5 s antes do Free My TV, e algumas funções podem não funcionar direito."),
+                // Fire OS holds our start for 5 s after Home; a picture covers it, the keys wait (FireTv, FireCover).
+                drawHint(c, Ui.tr("No Fire TV, depois do Home o controle leva uns 5 s para responder no Free My TV, e algumas funções podem não funcionar direito."),
                         LIST_X * k + 30 * k, hintY);
             } else {
                 c.drawText(Ui.tr("A troca leva uns segundos e a tela pisca nas medições."), LIST_X * k + 30 * k, hintY, hint);

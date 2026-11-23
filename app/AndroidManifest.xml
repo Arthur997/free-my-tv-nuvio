@@ -8,8 +8,10 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- After the TV boots (and after a TV update), checks that Free My TV mode is still as you left it. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <!-- Fire TV only, granted once from a computer (FireTvMode): Fire OS blocks the app's own ADB. -->
+    <!-- Fire TV only, granted once from a computer (FireTvMode): Fire OS blocks the app's own ADB. The log tells
+         Home in time to cover Amazon's home (FireTv). -->
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
+    <uses-permission android:name="android.permission.READ_LOGS" />
     <!-- Holding OK on an app > Uninstall: opens Android's own confirmation (it never uninstalls by itself). -->
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <!-- "Continue watching": reads the Watch Next lists the TV's apps keep in Android's TV provider. -->
